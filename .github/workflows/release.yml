@@ -50,7 +50,8 @@ jobs:
           path: WorkWidgetsServer
           # 固定到与本次发版测试过的服务端版本，服务端仓库更新协议后同步改这里；
           # 不固定的话服务端 main 的改动会让发版流水线里的同步测试随时挂掉。
-          ref: a7b227a637c090443ce0f17cc59d87b4ab7f9e89
+          # ci-desktop-sync 分支：服务端 Shared 与桌面端对齐的快照（暂不含桌面端未落地的 WidgetProfile）。
+          ref: 244a1350b6ca32a16df989d7b3a82fd28264cafd
 
       - name: 🧪 集控同步测试
         shell: pwsh
