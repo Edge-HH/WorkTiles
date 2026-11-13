@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
-using Pancake.Services;
+using WorkWidgets.Services;
 
 // 旧配置补全可见颜色层；显式清除和独立透明度必须跨保存保持，不得关闭模糊。
 var legacySurface = JsonSerializer.Deserialize<BoardSettingsState>("{\"ToolbarGlass\":true,\"TileBackground\":{\"Glass\":true}}")!;
@@ -94,7 +94,7 @@ for (int offset = 0; offset < pcm.Length; offset += 480)
 Check(audibleRuns == 3, "PCM has exactly three distinct beeps");
 BoardSettingsState settings = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(new BoardSettingsState { NoiseAlertVolume = .35 }))!;
 Check(Math.Abs(settings.NoiseAlertVolume - .35) < .001, "提示音音量应持久化");
-Check(GitHubUpdateService.IsInstallable("Pancake-win-x64-2.0.1.zip"), "便携版 Release 应被更新器识别");
+Check(GitHubUpdateService.IsInstallable("WorkWidgets-win-x64-2.0.1.zip"), "便携版 Release 应被更新器识别");
 Console.WriteLine("PASS: light theme content, immediate noise rearming, and three-beep PCM.");
 
 var defaults = JsonSerializer.Deserialize<BoardSettingsState>("{}")!;
@@ -145,7 +145,7 @@ Check(ToolbarAutoHidePolicy.ExitOffset(450, 20, 100, 100, 1000, 800) == (0d, -12
 Check(ToolbarAutoHidePolicy.ExitOffset(450, 680, 100, 100, 1000, 800) == (0d, 121d), "最近下边框时完整飞出窗口");
 Console.WriteLine("PASS: presentation settings persistence, idle boundaries, interaction guards and nearest-edge animation geometry.");
 
-string mediaRoot = Path.Combine(Path.GetTempPath(), "pancake-media-" + Guid.NewGuid().ToString("N"));
+string mediaRoot = Path.Combine(Path.GetTempPath(), "workwidgets-media-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(mediaRoot);
 try
 {
@@ -448,14 +448,14 @@ Check(LaunchArgs.Parse(["--view=editorial", "--view=display"]).View == LaunchArg
 Check(LaunchArgs.Parse(["--project=数学园地"]).Project == "数学园地", "--project=值 打开指定项目");
 Check(LaunchArgs.Parse(["--Project", "数学园地"]).Project == "数学园地", "--project 与值分开写同样支持");
 Check(LaunchArgs.Parse(["--project="]).Project is null, "空的 --project= 不产生项目参数");
-LaunchArgs combined = LaunchArgs.Parse(["--windowed", "--view=ink", "--project=D:\\课表\\数学.pch"]);
-Check(combined.Windowed is true && combined.View == LaunchArgs.ViewInk && combined.Project == "D:\\课表\\数学.pch",
+LaunchArgs combined = LaunchArgs.Parse(["--windowed", "--view=ink", "--project=D:\\课表\\数学.wwh"]);
+Check(combined.Windowed is true && combined.View == LaunchArgs.ViewInk && combined.Project == "D:\\课表\\数学.wwh",
     "多个启动参数可以组合使用");
 
 string secret = LockService.CreateTotpSecret();
 Check(secret.Length >= 32 && secret.All(c => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".Contains(c)), "密钥使用 Base32 标准字母表");
 Check(LockService.Base32Decode(secret).Length == 20, "160 位密钥解码为 20 字节");
-Check(LockService.TotpProvisioningUri(secret).StartsWith("otpauth://totp/Pancake?secret=" + secret), "otpauth 链接可直接导入验证器");
+Check(LockService.TotpProvisioningUri(secret).StartsWith("otpauth://totp/WorkWidgets?secret=" + secret), "otpauth 链接可直接导入验证器");
 foreach (byte[] data in new[] { Array.Empty<byte>(), new byte[] { 0 }, new byte[] { 255, 0, 128, 7 }, new byte[] { 1, 2, 3, 4, 5 } })
     Check(LockService.Base32Decode(LockService.Base32Encode(data)).SequenceEqual(data), "Base32 编解码往返无损");
 DateTimeOffset moment = DateTimeOffset.FromUnixTimeSeconds(1_700_000_000);
@@ -471,7 +471,7 @@ Check(!LockService.VerifyTotp("0", totpCode, moment), "非法 Base32 密钥不�
 Console.WriteLine("PASS: lock password hashing, enforcement conditions, Base32 round trips and TOTP time windows.");
 
 // 数据备份：范围打包、清单读取、跨目录还原与自动备份清理。
-string backupRoot = Path.Combine(Path.GetTempPath(), "pancake-backup-" + Guid.NewGuid().ToString("N"));
+string backupRoot = Path.Combine(Path.GetTempPath(), "workwidgets-backup-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(backupRoot);
 try
 {
@@ -501,7 +501,7 @@ try
     sourceStore.Save(library);
 
     BackupService exporter = new(sourceData);
-    string fullArchive = Path.Combine(backupRoot, "manual.pbk");
+    string fullArchive = Path.Combine(backupRoot, "manual.wwb");
     exporter.Create(fullArchive, BackupScopes.All, library);
     BackupInfo info = exporter.Read(fullArchive);
     Check(info.Manifest.Version == BackupService.ManifestVersion && info.Manifest.Scopes == BackupScopes.All, "清单记录版本与完整范围");
@@ -516,7 +516,7 @@ try
     Check(File.Exists(restoredLibrary.Settings.BoardBackground.ImagePath), "背景媒体落回本地资源目录并改写引用");
 
     // 只收作业范围时设置不随包走，还原后保留目标机器现有设置。
-    string jobsArchive = Path.Combine(backupRoot, "jobs.pbk");
+    string jobsArchive = Path.Combine(backupRoot, "jobs.wwb");
     exporter.Create(jobsArchive, BackupScopes.Jobs, library);
     Check(exporter.Read(jobsArchive).Manifest.Scopes == BackupScopes.Jobs, "按范围导出只收选中的类别");
     ProjectStore targetStore = new(targetData);
@@ -530,7 +530,7 @@ try
         "只含作业的备份还原后保留现有设置");
 
     bool refusedEmptyScope = false;
-    try { exporter.Create(Path.Combine(backupRoot, "empty.pbk"), BackupScopes.None, library); }
+    try { exporter.Create(Path.Combine(backupRoot, "empty.wwb"), BackupScopes.None, library); }
     catch (InvalidDataException) { refusedEmptyScope = true; }
     Check(refusedEmptyScope, "空备份范围被拒绝");
 
@@ -546,31 +546,39 @@ try
         });
     }
     bool rejected = false;
-    WriteArchive(Path.Combine(backupRoot, "escape.pbk"), "backgrounds/../evil.txt", "{\"Version\":1,\"Scopes\":1,\"CreatedAt\":\"2026-01-01T00:00:00\"}");
-    try { exporter.Read(Path.Combine(backupRoot, "escape.pbk")); } catch (InvalidDataException) { rejected = true; }
+    WriteArchive(Path.Combine(backupRoot, "escape.wwb"), "backgrounds/../evil.txt", "{\"Version\":1,\"Scopes\":1,\"CreatedAt\":\"2026-01-01T00:00:00\"}");
+    try { exporter.Read(Path.Combine(backupRoot, "escape.wwb")); } catch (InvalidDataException) { rejected = true; }
     Check(rejected, "备份里的路径穿越条目被拒绝");
     rejected = false;
-    WriteArchive(Path.Combine(backupRoot, "loose.pbk"), "evil.txt", "{\"Version\":1,\"Scopes\":1,\"CreatedAt\":\"2026-01-01T00:00:00\"}");
-    try { exporter.Read(Path.Combine(backupRoot, "loose.pbk")); } catch (InvalidDataException) { rejected = true; }
+    WriteArchive(Path.Combine(backupRoot, "loose.wwb"), "evil.txt", "{\"Version\":1,\"Scopes\":1,\"CreatedAt\":\"2026-01-01T00:00:00\"}");
+    try { exporter.Read(Path.Combine(backupRoot, "loose.wwb")); } catch (InvalidDataException) { rejected = true; }
     Check(rejected, "备份里的越界条目被拒绝");
     rejected = false;
-    WriteArchive(Path.Combine(backupRoot, "nomanifest.pbk"), "backgrounds/x.png", null);
-    try { exporter.Read(Path.Combine(backupRoot, "nomanifest.pbk")); } catch (InvalidDataException) { rejected = true; }
+    WriteArchive(Path.Combine(backupRoot, "nomanifest.wwb"), "backgrounds/x.png", null);
+    try { exporter.Read(Path.Combine(backupRoot, "nomanifest.wwb")); } catch (InvalidDataException) { rejected = true; }
     Check(rejected, "缺少清单的备份被拒绝");
     rejected = false;
-    WriteArchive(Path.Combine(backupRoot, "future.pbk"), "backgrounds/x.png", "{\"Version\":2,\"Scopes\":1,\"CreatedAt\":\"2026-01-01T00:00:00\"}");
-    try { exporter.Read(Path.Combine(backupRoot, "future.pbk")); } catch (InvalidDataException) { rejected = true; }
+    WriteArchive(Path.Combine(backupRoot, "future.wwb"), "backgrounds/x.png", "{\"Version\":2,\"Scopes\":1,\"CreatedAt\":\"2026-01-01T00:00:00\"}");
+    try { exporter.Read(Path.Combine(backupRoot, "future.wwb")); } catch (InvalidDataException) { rejected = true; }
     Check(rejected, "其他版本的备份被拒绝");
 
     string autoDirectory = Path.Combine(backupRoot, "auto");
     Directory.CreateDirectory(autoDirectory);
     foreach (int hours in new[] { 5, 4, 3, 2, 1 })
         File.WriteAllText(Path.Combine(autoDirectory, BackupService.AutoBackupFileName(DateTime.Now.AddHours(-hours))), "backup");
-    Check(Directory.EnumerateFiles(autoDirectory, "auto-*.pbk").Count() == 5, "自动备份按时间命名，字典序即时间序");
-    Check(BackupService.PruneAutoBackups(autoDirectory, 3) == 2 && Directory.EnumerateFiles(autoDirectory, "auto-*.pbk").Count() == 3,
+    Check(Directory.EnumerateFiles(autoDirectory, "auto-*.wwb").Count() == 5, "自动备份按时间命名，字典序即时间序");
+    Check(BackupService.PruneAutoBackups(autoDirectory, 3) == 2 && Directory.EnumerateFiles(autoDirectory, "auto-*.wwb").Count() == 3,
         "超出保留份数时删除最旧的备份");
-    Check(BackupService.PruneAutoBackups(autoDirectory, 0) == 0 && Directory.EnumerateFiles(autoDirectory, "auto-*.pbk").Count() == 3,
+    Check(BackupService.PruneAutoBackups(autoDirectory, 0) == 0 && Directory.EnumerateFiles(autoDirectory, "auto-*.wwb").Count() == 3,
         "非法保留份数不清理");
+    // 兼容更名前的 auto-*.pbk：与新 auto-*.wwb 一起按时间序清理。
+    string mixedDirectory = Path.Combine(backupRoot, "mixed");
+    Directory.CreateDirectory(mixedDirectory);
+    File.WriteAllText(Path.Combine(mixedDirectory, "auto-20260101000000.pbk"), "old");
+    File.WriteAllText(Path.Combine(mixedDirectory, "auto-20260102000000.wwb"), "new");
+    File.WriteAllText(Path.Combine(mixedDirectory, "auto-20260103000000.wwb"), "newer");
+    Check(BackupService.PruneAutoBackups(mixedDirectory, 2) == 1 && !File.Exists(Path.Combine(mixedDirectory, "auto-20260101000000.pbk")),
+        "旧 .pbk 自动备份未与新 .wwb 一起清理");
     Check(BackupService.NormalizeIntervalHours(0) == 1 && BackupService.NormalizeIntervalHours(5.5) == 5.5
         && BackupService.NormalizeIntervalHours(double.NaN) == 24 && BackupService.NormalizeIntervalHours(99999) == 24 * 365,
         "自动备份间隔归一化到可用范围");

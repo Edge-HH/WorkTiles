@@ -1,0 +1,12 @@
+<Solution>
+  <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
+    <Platform Name="x64" />
+  </Configurations>
+  <Project Path="src/WorkWidgets/WorkWidgets.csproj" DefaultStartup="true">
+    <!-- 项目只有 x64 配置；slnx 无隐式映射时 VS 会默认按 Any CPU 解析并报"未知的项目配置映射"。 -->
+    <Platform Solution="*|x64" Project="x64" />
+  </Project>
+  <Project Path="src/WorkWidgets.Shared/WorkWidgets.Shared.csproj" />
+</Solution>

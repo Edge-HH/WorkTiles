@@ -6,24 +6,27 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../src/Pancake/Services/BackgroundPlaylist.cs" Link="BackgroundPlaylist.cs" />
-    <Compile Include="../../src/Pancake/Services/MediaLibrary.cs" Link="MediaLibrary.cs" />
-    <Compile Include="../../src/Pancake/Services/WallpaperEngineLibrary.cs" Link="WallpaperEngineLibrary.cs" />
-    <Compile Include="../../src/Pancake/Services/ColorPalette.cs" Link="ColorPalette.cs" />
-    <Compile Include="../../src/Pancake/Services/XiaomiWeatherService.cs" Link="XiaomiWeatherService.cs" />
-    <Compile Include="../../src/Pancake/Services/DefaultContentColors.cs" Link="DefaultContentColors.cs" />
-    <Compile Include="../../src/Pancake/Services/NoiseAlertGate.cs" Link="NoiseAlertGate.cs" />
-    <Compile Include="../../src/Pancake/Services/NoiseAlertTone.cs" Link="NoiseAlertTone.cs" />
-    <Compile Include="../../src/Pancake/Services/ProjectState.cs" Link="ProjectState.cs" />
-    <Compile Include="../../src/Pancake/Services/PinyinIndex.cs" Link="PinyinIndex.cs" />
-    <Compile Include="../../src/Pancake/Services/AutofillService.cs" Link="AutofillService.cs" />
-    <Compile Include="../../src/Pancake/Services/ToolbarAutoHidePolicy.cs" Link="ToolbarAutoHidePolicy.cs" />
-    <Content Include="../../src/Pancake/Assets/Pinyin/pinyin.txt" Link="Assets/Pinyin/pinyin.txt" CopyToOutputDirectory="PreserveNewest" />
-    <Compile Include="../../src/Pancake/Services/WidgetLayout.cs" Link="WidgetLayout.cs" />
-    <Compile Include="../../src/Pancake/Services/GitHubUpdateService.cs" Link="GitHubUpdateService.cs" />
-    <Compile Include="../../src/Pancake/Services/LockService.cs" Link="LockService.cs" />
-    <Compile Include="../../src/Pancake/Services/LaunchArgs.cs" Link="LaunchArgs.cs" />
-    <Compile Include="../../src/Pancake/Services/ProjectStore.cs" Link="ProjectStore.cs" />
-    <Compile Include="../../src/Pancake/Services/BackupService.cs" Link="BackupService.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/BackgroundPlaylist.cs" Link="BackgroundPlaylist.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/MediaLibrary.cs" Link="MediaLibrary.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/WallpaperEngineLibrary.cs" Link="WallpaperEngineLibrary.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/ColorPalette.cs" Link="ColorPalette.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/XiaomiWeatherService.cs" Link="XiaomiWeatherService.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/DefaultContentColors.cs" Link="DefaultContentColors.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/NoiseAlertGate.cs" Link="NoiseAlertGate.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/NoiseAlertTone.cs" Link="NoiseAlertTone.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/ProjectState.cs" Link="ProjectState.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/PinyinIndex.cs" Link="PinyinIndex.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/AutofillService.cs" Link="AutofillService.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/ToolbarAutoHidePolicy.cs" Link="ToolbarAutoHidePolicy.cs" />
+    <Content Include="../../src/WorkWidgets/Assets/Pinyin/pinyin.txt" Link="Assets/Pinyin/pinyin.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Compile Include="../../src/WorkWidgets/Services/WidgetLayout.cs" Link="WidgetLayout.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/GitHubUpdateService.cs" Link="GitHubUpdateService.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/LockService.cs" Link="LockService.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/LaunchArgs.cs" Link="LaunchArgs.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/ProjectStore.cs" Link="ProjectStore.cs" />
+    <Compile Include="../../src/WorkWidgets/Services/BackupService.cs" Link="BackupService.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/WorkWidgets.Shared/WorkWidgets.Shared.csproj" />
   </ItemGroup>
 </Project>

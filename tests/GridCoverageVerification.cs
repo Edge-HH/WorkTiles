@@ -4,12 +4,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using Pancake.Models;
-using Pancake.Services;
+using WorkWidgets.Models;
+using WorkWidgets.Services;
 using Windows.Foundation;
 using Path = System.IO.Path;
 
-namespace Pancake;
+namespace WorkWidgets;
 
 public sealed partial class MainWindow
 {

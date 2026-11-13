@@ -2,12 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Pancake",
+      "name": "WorkWidgets",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build Pancake (Debug x64)",
-      "program": "${workspaceFolder}/src/Pancake/bin/Debug/net8.0-windows10.0.19041.0/win-x64/Pancake.exe",
-      "cwd": "${workspaceFolder}/src/Pancake",
+      "preLaunchTask": "build WorkWidgets (Debug x64)",
+      "program": "${workspaceFolder}/src/WorkWidgets/bin/Debug/net8.0-windows10.0.19041.0/win-x64/WorkWidgets.exe",
+      "cwd": "${workspaceFolder}/src/WorkWidgets",
       "args": [],
       "stopAtEntry": false,
       "console": "internalConsole",

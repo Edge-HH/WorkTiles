@@ -5,14 +5,14 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$outputDirectory = Join-Path $projectRoot 'src\Pancake\bin\Release\net8.0-windows10.0.19041.0\win-x64'
-$executablePath = Join-Path $outputDirectory 'Pancake.exe'
+$outputDirectory = Join-Path $projectRoot 'src\WorkWidgets\bin\Release\net8.0-windows10.0.19041.0\win-x64'
+$executablePath = Join-Path $outputDirectory 'WorkWidgets.exe'
 
 if (-not (Test-Path -LiteralPath $executablePath)) {
     throw 'Build Release x64 before running the layout persistence test.'
 }
 
-$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('Pancake-layout-persistence-' + [guid]::NewGuid().ToString('N'))
+$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('WorkWidgets-layout-persistence-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
 
 try {
@@ -31,7 +31,7 @@ try {
     "WeatherCityCode": "101010100",
     "GridSnappingEnabled": true,
     "AutoUpdateEnabled": false,
-    "UpdateRepository": "Edge-HH/Pancake"
+    "UpdateRepository": "Edge-HH/WorkWidgets"
   },
   "Subjects": [
     { "Name": "Math", "AccentHex": "#65D46E", "X": 48, "Y": 48, "Width": 384, "Height": 240, "Entries": [], "InkStrokes": [] },
@@ -45,7 +45,7 @@ try {
     $before = [System.IO.File]::ReadAllText($statePath) | ConvertFrom-Json
 
     $process = Start-Process `
-        -FilePath (Join-Path $testRoot 'Pancake.exe') `
+        -FilePath (Join-Path $testRoot 'WorkWidgets.exe') `
         -ArgumentList '--windowed', "--view=$View" `
         -WorkingDirectory $testRoot `
         -WindowStyle Hidden `
@@ -79,7 +79,7 @@ finally {
     $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
     $resolvedTempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     if ($resolvedTestRoot.StartsWith($resolvedTempRoot, [System.StringComparison]::OrdinalIgnoreCase) -and
-        (Split-Path -Leaf $resolvedTestRoot).StartsWith('Pancake-layout-persistence-')) {
+        (Split-Path -Leaf $resolvedTestRoot).StartsWith('WorkWidgets-layout-persistence-')) {
         Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force -ErrorAction SilentlyContinue
     }
 }

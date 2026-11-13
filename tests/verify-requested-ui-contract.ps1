@@ -1,19 +1,19 @@
 ﻿$ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$xaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.xaml'))
-$window = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.xaml.cs'))
-$settings = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Settings.cs'))
-$previews = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.SettingsPreviews.cs'))
-$layout = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Layout.cs'))
-$widgetLayout = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\WidgetLayout.cs'))
-$projects = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Projects.cs'))
-$tiles = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\SubjectTileControl.cs'))
-$state = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\ProjectState.cs'))
-$alert = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\NoiseAlertPlayer.cs'))
-$update = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\GitHubUpdateService.cs'))
-$theme = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Themes\ThemeResources.xaml'))
-$backdrop = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\PersistentMicaBackdrop.cs'))
+$xaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.xaml'))
+$window = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.xaml.cs'))
+$settings = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Settings.cs'))
+$previews = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.SettingsPreviews.cs'))
+$layout = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Layout.cs'))
+$widgetLayout = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\WidgetLayout.cs'))
+$projects = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Projects.cs'))
+$tiles = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\SubjectTileControl.cs'))
+$state = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\ProjectState.cs'))
+$alert = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\NoiseAlertPlayer.cs'))
+$update = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\GitHubUpdateService.cs'))
+$theme = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Themes\ThemeResources.xaml'))
+$backdrop = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\PersistentMicaBackdrop.cs'))
 $failures = [System.Collections.Generic.List[string]]::new()
 
 if ($xaml -match 'Text="今日作业"' -or $xaml -match 'x:Name="BoardModeHint"') {
@@ -41,7 +41,7 @@ if ($xaml -notmatch 'x:Name="AutoArrangeButton"' -or $window -notmatch 'AutoArra
 if ($window -notmatch '是否放弃本次更改') {
     $failures.Add('放弃修改前没有确认提示。')
 }
-$swatches = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\ColorSwatchButton.cs'))
+$swatches = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\ColorSwatchButton.cs'))
 if ($tiles -notmatch 'ColorSwatchButton' -or $projects -notmatch 'ColorSwatchButton' -or $swatches -notmatch 'ButtonBackgroundPointerOver') {
     $failures.Add('富文本、磁贴和画笔色卡没有固定悬停颜色。')
 }
@@ -114,7 +114,7 @@ if ($xaml -notmatch 'x:Name="SettingsContentHost"' -or
 }
 
 # 编辑模式的富文本 / 画笔悬浮岛、作业板缩放悬浮岛都挂在控制窗旁边，尺寸与样式跟随控制窗。
-$islands = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Islands.cs'))
+$islands = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Islands.cs'))
 if ($xaml -notmatch 'x:Name="RichTextIsland"' -or
     $xaml -notmatch 'x:Name="RichTextToolbarHost"' -or
     $xaml -notmatch 'x:Name="ZoomIsland"' -or
@@ -161,7 +161,7 @@ if ($islands -notmatch 'ApplyIslandControlShift' -or
     $islands -notmatch 'flyout\.Content = null') {
     $failures.Add('竖版悬浮岛没有按上编辑下缩放排布、没有挪动控制窗让位，或字体选择框没有收成图标浮窗。')
 }
-$icons = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\FluentIcon.cs'))
+$icons = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\FluentIcon.cs'))
 if ($icons -notmatch 'nameof\(ZoomIn\) => ZoomIn' -or $icons -notmatch 'nameof\(ZoomOut\) => ZoomOut') {
     $failures.Add('缩放悬浮岛缺少随字体分发的放大 / 缩小图标映射。')
 }

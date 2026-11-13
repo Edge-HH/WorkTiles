@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
-$fonts = Join-Path $projectRoot 'src/Pancake/Assets/Fonts'
-$source = Get-Content -Raw (Join-Path $projectRoot 'src/Pancake/Controls/FluentIcon.cs')
+$fonts = Join-Path $projectRoot 'src/WorkWidgets/Assets/Fonts'
+$source = Get-Content -Raw (Join-Path $projectRoot 'src/WorkWidgets/Controls/FluentIcon.cs')
 $mapping = Get-Content -Raw (Join-Path $fonts 'FluentSystemIcons-Resizable.json') | ConvertFrom-Json -AsHashtable
 Add-Type -AssemblyName PresentationCore
 $typeface = [System.Windows.Media.GlyphTypeface]::new([Uri]::new((Join-Path $fonts 'FluentSystemIcons-Resizable.ttf')))
@@ -12,7 +12,7 @@ foreach ($match in [regex]::Matches($source, 'const string (\w+) = "\\u([0-9A-F]
     $count++
 }
 if ($count -lt 20) { throw '图标检查没有覆盖实际映射。' }
-$xaml = Get-Content -Raw (Join-Path $projectRoot 'src/Pancake/MainWindow.xaml')
+$xaml = Get-Content -Raw (Join-Path $projectRoot 'src/WorkWidgets/MainWindow.xaml')
 foreach ($match in [regex]::Matches($xaml, 'Symbol="(\w+)"')) {
     if ($source -notmatch ('const string ' + $match.Groups[1].Value + ' =')) { throw 'XAML 引用了未知图标。' }
 }

@@ -1,6 +1,6 @@
 using System.IO.Compression;
 using System.Text.Json;
-using Pancake.Services;
+using WorkWidgets.Services;
 
 int checks = 0;
 void Check(bool value, string message) { if (!value) throw new Exception(message); checks++; }
@@ -10,7 +10,7 @@ void Reject(Action action, string message)
     try { action(); } catch (Exception ex) when (ex is InvalidDataException or IOException or JsonException or UnauthorizedAccessException or InvalidOperationException) { rejected = true; }
     Check(rejected, message);
 }
-string root = Path.Combine(Path.GetTempPath(), "Pancake-project-tests-" + Guid.NewGuid().ToString("N"));
+string root = Path.Combine(Path.GetTempPath(), "WorkWidgets-project-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 try
 {
@@ -42,32 +42,36 @@ try
     Check(reset.ClockInkStrokes.Count == 0, "重置作业未清空仅时钟模式的整屏笔迹");
     Check(first.Subjects[0].Entries.Count == 1, "新项目污染原项目");
     Check(ProjectStore.Create(library, false).Subjects.Count == 0, "清空布局不应保留磁贴");
-    string package = Path.Combine(root, "test.pch");
-    PchPackageService service = new(store); service.Save(first, package);
+    string package = Path.Combine(root, "test.wwh");
+    WwhPackageService service = new(store); service.Save(first, package);
     ProjectStore secondStore = new(Path.Combine(root, "other"));
-    ProjectDocument imported = new PchPackageService(secondStore).Import(package);
+    ProjectDocument imported = new WwhPackageService(secondStore).Import(package);
     Check(imported.Id != first.Id && imported.LinkedFile == package, "导入应产生本地 ID 并关联原文件");
     AttachmentState image = imported.Subjects[0].Entries[0].Attachments[0];
     Check(File.ReadAllBytes(image.Path).SequenceEqual(new byte[] { 1, 2, 3, 4 }) && image.Rotation == 90 && image.OffsetX == 7, "图片或变换未往返");
     Check(imported.Subjects[0].Entries[0].RtfContent == first.Subjects[0].Entries[0].RtfContent && imported.Subjects[0].InkStrokes[0].Points[1].Y == 150, "RTF 或笔迹未往返");
     Check(imported.ClockInkStrokes.Count == 1 && imported.ClockInkStrokes[0].Points[1].Y == 800 && imported.ClockInkStrokes[0].Color == "#FFE5B3B3", "仅时钟模式的整屏笔迹未随作业包往返");
     Check(imported.Subjects[0].Entries[0].FontFallbacks.Single().Family == "Unavailable Classroom Font", "缺失字体原始名称未随作业包往返");
-    imported.Name = "重命名"; new PchPackageService(secondStore).Save(imported, package);
+    imported.Name = "重命名"; new WwhPackageService(secondStore).Save(imported, package);
     Check(service.Import(package).Name == "重命名", "重复保存未更新包");
+    // 兼容更名前的 .pch 作业包：格式相同，旧扩展名仍可导入。
+    string legacyPackage = Path.Combine(root, "legacy.pch");
+    File.Copy(package, legacyPackage);
+    Check(new WwhPackageService(secondStore).Import(legacyPackage).Name == "重命名", "旧 .pch 作业包无法导入");
     byte[] before = File.ReadAllBytes(package);
     File.Delete(image.Path);
-    Reject(() => new PchPackageService(secondStore).Save(imported, package), "缺失附件应阻止保存");
+    Reject(() => new WwhPackageService(secondStore).Save(imported, package), "缺失附件应阻止保存");
     Check(File.ReadAllBytes(package).SequenceEqual(before), "失败保存损坏原包");
     Reject(() => service.Save(first, store.DirectoryPath), "不可写目标应报告失败");
     Check(File.ReadAllBytes(package).SequenceEqual(before), "失败写入污染其他文件");
     foreach (string bad in new[] { "../escape", "assets/../../escape", "assets/.. ", "assets/x:stream", "assets/abc/def", "assets/CON", "assets/x\\..\\z" })
-        Check(!PchPackageService.IsAssetPath(bad), "危险资源路径被接受：" + bad);
-    string malicious = Path.Combine(root, "bad.pch");
+        Check(!WwhPackageService.IsAssetPath(bad), "危险资源路径被接受：" + bad);
+    string malicious = Path.Combine(root, "bad.wwh");
     using (ZipArchive zip = ZipFile.Open(malicious, ZipArchiveMode.Create)) zip.CreateEntry("../escape");
     Reject(() => service.Import(malicious), "ZIP 越界路径被接受");
-    string broken = Path.Combine(root, "broken.pch"); File.WriteAllText(broken, "broken");
+    string broken = Path.Combine(root, "broken.wwh"); File.WriteAllText(broken, "broken");
     Reject(() => service.Import(broken), "损坏包被接受");
-    string incomplete = Path.Combine(root, "missing.pch");
+    string incomplete = Path.Combine(root, "missing.wwh");
     var noAssets = ProjectStore.Clone(first); noAssets.Subjects[0].Entries[0].Attachments[0].Path = "assets/" + new string('a', 32) + ".png";
     using (ZipArchive zip = ZipFile.Open(incomplete, ZipArchiveMode.Create))
     using (Stream s = zip.CreateEntry("project.json").Open()) JsonSerializer.Serialize(s, noAssets);

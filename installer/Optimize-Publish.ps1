@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $publish = (Resolve-Path -LiteralPath $PublishDirectory).Path.TrimEnd('\')
 $repository = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..')).TrimEnd('\')
 if ($publish -eq $repository -or $publish -eq [IO.Path]::GetPathRoot($publish).TrimEnd('\') -or
-    -not (Test-Path -LiteralPath (Join-Path $publish 'Pancake.exe')) -or (Test-Path -LiteralPath (Join-Path $publish 'data'))) {
+    -not (Test-Path -LiteralPath (Join-Path $publish 'WorkWidgets.exe')) -or (Test-Path -LiteralPath (Join-Path $publish 'data'))) {
     throw '仅能精简不含用户数据的独立发布目录。'
 }
 $before = (Get-ChildItem -LiteralPath $publish -Recurse -File | Measure-Object Length -Sum).Sum

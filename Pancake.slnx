@@ -1,9 +1,0 @@
-<Solution>
-  <Configurations>
-    <BuildType Name="Debug" />
-    <BuildType Name="Release" />
-    <Platform Name="x64" />
-  </Configurations>
-  <Project Path="src/Pancake/Pancake.csproj" DefaultStartup="true" />
-  <Project Path="src/Pancake.Shared/Pancake.Shared.csproj" />
-</Solution>

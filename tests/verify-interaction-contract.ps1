@@ -1,23 +1,23 @@
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$windowCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.xaml.cs'))
-$mediaCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Media.cs'))
-$mediaLibraryCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\MediaLibrary.cs'))
-$windowXaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.xaml'))
-$tileCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\SubjectTileControl.cs'))
-$attachmentImageCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\AttachmentImageControl.cs'))
-$dataCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\AppDataStore.cs'))
-$weatherCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\XiaomiWeatherService.cs'))
-$weatherCatalogCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\WeatherCityCatalog.cs'))
-$updateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\GitHubUpdateService.cs'))
-$autofillServiceCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\AutofillService.cs'))
-$autofillPopupCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\AutofillPopup.cs'))
-$autofillInputCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Controls\AutofillInputs.cs'))
-$projectCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Projects.cs'))
-$settingsCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\MainWindow.Settings.cs'))
-$stateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Services\ProjectState.cs'))
-$themeXaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\Pancake\Themes\ThemeResources.xaml'))
+$windowCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.xaml.cs'))
+$mediaCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Media.cs'))
+$mediaLibraryCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\MediaLibrary.cs'))
+$windowXaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.xaml'))
+$tileCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\SubjectTileControl.cs'))
+$attachmentImageCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\AttachmentImageControl.cs'))
+$dataCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\AppDataStore.cs'))
+$weatherCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\XiaomiWeatherService.cs'))
+$weatherCatalogCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\WeatherCityCatalog.cs'))
+$updateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\GitHubUpdateService.cs'))
+$autofillServiceCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\AutofillService.cs'))
+$autofillPopupCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\AutofillPopup.cs'))
+$autofillInputCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\AutofillInputs.cs'))
+$projectCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Projects.cs'))
+$settingsCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\MainWindow.Settings.cs'))
+$stateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Services\ProjectState.cs'))
+$themeXaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Themes\ThemeResources.xaml'))
 $failures = [System.Collections.Generic.List[string]]::new()
 
 if ($windowXaml -match 'x:Name="BoardScrollViewer"' -and
@@ -119,7 +119,7 @@ if ($dataCode -notmatch 'Scale = a\.Scale' -or
     $failures.Add('图片缩放、位置或裁切视窗没有持久化。')
 }
 
-if ($dataCode -notmatch 'AppContext\.BaseDirectory' -or $dataCode -notmatch 'pancake\.json' -or $windowCode -notmatch 'ScheduleSave') {
+if ($dataCode -notmatch 'AppContext\.BaseDirectory' -or $dataCode -notmatch 'workwidgets\.json' -or $windowCode -notmatch 'ScheduleSave') {
     $failures.Add('布局与配置没有自动保存到软件目录。')
 }
 
@@ -201,7 +201,7 @@ if ($settingsCode -notmatch 'ToggleButton randomToggle' -or
     $failures.Add('学科颜色没有始终按当前色系显示，或缺少随机配色按钮与切换色系后的刷新。')
 }
 
-if ($windowXaml -notmatch 'gitee.com/EdgeHH/pancake' -or
+if ($windowXaml -notmatch 'gitee.com/EdgeHH/workwidgets' -or
     $windowXaml -notmatch '在 Gitee 中打开' -or
     $windowXaml -notmatch 'Foreground="\{ThemeResource BoardTextBrush\}"' -or
     $settingsCode -match 'HyperlinkButton gitee' -or

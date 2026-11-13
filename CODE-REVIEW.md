@@ -1,6 +1,6 @@
-# Pancake 代码评审报告
+# WorkWidgets 代码评审报告
 
-> 评审对象：`D:\Files\Codes\Projects\Pancake\Pancake`（WinUI 3 / Windows App SDK 1.8 桌面应用，.NET 8，版本 2.0.6）
+> 评审对象：`D:\Files\Codes\Projects\WorkWidgets\WorkWidgets`（WinUI 3 / Windows App SDK 1.8 桌面应用，.NET 8，版本 2.0.6）
 > 评审方式：纯静态阅读（未执行 `dotnet build`），覆盖 64 个 `.cs` + 3 个 `.xaml`（共 12,724 行）、6 个测试 `.cs`（约 2,958 行）、10 个 PowerShell 脚本、CI 工作流与项目配置。
 > 评审维度：代码结构、命名规范、可读性、潜在缺陷、性能问题、安全性、测试覆盖。
 
@@ -36,7 +36,7 @@
 
 ### P0-1　全局异常处理器不拦截异常，进程直接崩溃
 
-**文件**：`src/Pancake/App.xaml.cs:12`
+**文件**：`src/WorkWidgets/App.xaml.cs:12`
 
 ```csharp
 UnhandledException += (_, args) => WriteCrashLog(new Exception(args.Message, args.Exception));
@@ -55,7 +55,7 @@ UnhandledException += (_, args) => WriteCrashLog(new Exception(args.Message, arg
 
 ### P0-2　`ClearInk_Click`：`async void` + 绕过重入守卫 + 绕过事务回滚
 
-**文件**：`src/Pancake/MainWindow.Projects.cs:371-391`
+**文件**：`src/WorkWidgets/MainWindow.Projects.cs:371-391`
 
 ```csharp
 371: private async void ClearInk_Click(object sender, RoutedEventArgs e)
@@ -90,7 +90,7 @@ UnhandledException += (_, args) => WriteCrashLog(new Exception(args.Message, arg
 
 | 测试项目 | 行数 | 覆盖内容 |
 |---|---|---|
-| `tests/ProjectLogic` | 166 | 项目存取、`.pch` 包往返、附件收纳、路径穿越、恶意 ZIP、迁移幂等 |
+| `tests/ProjectLogic` | 166 | 项目存取、`.wwh` 包往返、附件收纳、路径穿越、恶意 ZIP、迁移幂等 |
 | `tests/SettingsLogic` | 347 | 颜色/RTF 转换、天气解析、噪音门限、媒体库、播放列表、自动填充 130+ 断言 |
 | `tests/UpdateLogic` | 160 | 分卷 ZIP 构造与合并、7z 归一化、更新端到端、备份与回滚 |
 
@@ -114,7 +114,7 @@ README 也明确承认"设置、排版、更新回滚和交互契约等更完整
 
 ### P1-1　`github.Result!` / `gitee.Result` 空引用风险
 
-**文件**：`src/Pancake/MainWindow.Updates.cs:19-20`
+**文件**：`src/WorkWidgets/MainWindow.Updates.cs:19-20`
 
 ```csharp
 string message = ReleaseUpdateService.RecommendGitHub(gitee.Result, github.Result)
@@ -132,7 +132,7 @@ if (gitee.Result is { } g && github.Result is { } h && ReleaseUpdateService.Reco
 
 ### P1-2　`Assembly.GetName().Version!` 空引用风险
 
-**文件**：`src/Pancake/MainWindow.xaml.cs:1005`
+**文件**：`src/WorkWidgets/MainWindow.xaml.cs:1005`
 
 ```csharp
 ReleaseUpdateService.IsNewer(latest.Version, typeof(MainWindow).Assembly.GetName().Version!)
@@ -144,7 +144,7 @@ ReleaseUpdateService.IsNewer(latest.Version, typeof(MainWindow).Assembly.GetName
 
 ### P1-3　空 `catch { }` 静默吞掉颜色解析异常
 
-**文件**：`src/Pancake/MainWindow.Settings.cs:992`
+**文件**：`src/WorkWidgets/MainWindow.Settings.cs:992`
 
 ```csharp
 try { color.Color = ViewModels.MainViewModel.BrushFromHex(string.IsNullOrEmpty(style.Color) ? "#202024" : style.Color).Color; } catch { }
@@ -156,7 +156,7 @@ try { color.Color = ViewModels.MainViewModel.BrushFromHex(string.IsNullOrEmpty(s
 
 ### P1-4　笔迹擦除是 O(笔画数 × 点数)，且每帧重新分配列表
 
-**文件**：`src/Pancake/Controls/SubjectTileControl.cs:889-900`、`src/Pancake/Controls/ClockInkLayer.cs:155-165`
+**文件**：`src/WorkWidgets/Controls/SubjectTileControl.cs:889-900`、`src/WorkWidgets/Controls/ClockInkLayer.cs:155-165`
 
 ```csharp
 // SubjectTileControl.cs:891
@@ -177,7 +177,7 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 ### P1-5　自动排列对富文本做 O(列数 × 磁贴数) 次 `Measure`
 
-**文件**：`src/Pancake/MainWindow.xaml.cs:447-472`
+**文件**：`src/WorkWidgets/MainWindow.xaml.cs:447-472`
 
 ```csharp
 454: for (int columns = maxColumns; columns >= 1 && placements is null; columns--)
@@ -234,7 +234,7 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 ### P1-8　`BoardSettingsState` 是约 60 属性的上帝对象，且用字符串冒充枚举
 
-**文件**：`src/Pancake/Services/ProjectState.cs`
+**文件**：`src/WorkWidgets/Services/ProjectState.cs`
 
 `BoardSettingsState` 把布局、网格、磁贴、工具栏、背景、噪音、天气、自动填充、更新等所有子系统的配置扁平堆在一个类里。更严重的是**所有"枚举"都是裸字符串**：
 
@@ -263,32 +263,32 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 ### P1-9　解决方案不包含测试项目
 
-**文件**：`Pancake.slnx`
+**文件**：`WorkWidgets.slnx`
 
 ```xml
 <Solution>
-  <Project Path="src/Pancake/Pancake.csproj" DefaultStartup="true" />
+  <Project Path="src/WorkWidgets/WorkWidgets.csproj" DefaultStartup="true" />
 </Solution>
 ```
 
-三个测试项目（`tests/ProjectLogic`、`tests/SettingsLogic`、`tests/UpdateLogic`）都不在解决方案里。后果：`dotnet build Pancake.slnx` 不编译测试；IDE 里看不到测试；重构改坏被链接的源文件时没有即时反馈。
+三个测试项目（`tests/ProjectLogic`、`tests/SettingsLogic`、`tests/UpdateLogic`）都不在解决方案里。后果：`dotnet build WorkWidgets.slnx` 不编译测试；IDE 里看不到测试；重构改坏被链接的源文件时没有即时反馈。
 
-**建议**：把三个 `.csproj` 加入 `Pancake.slnx`（这是它们唯一的集成障碍）。
+**建议**：把三个 `.csproj` 加入 `WorkWidgets.slnx`（这是它们唯一的集成障碍）。
 
 ### P1-10　更新脚本依赖系统 PowerShell + `-ExecutionPolicy Bypass`
 
-**文件**：`src/Pancake/Services/PortableUpdateService.cs`（`Launch` 方法）
+**文件**：`src/WorkWidgets/Services/PortableUpdateService.cs`（`Launch` 方法）
 
 硬编码 `Environment.SpecialFolder.System + "WindowsPowerShell/v1.0/powershell.exe"`，并传 `-ExecutionPolicy Bypass`。风险：
 - Windows PowerShell 5.1 在未来的 Windows 版本中属于"可选功能"，可能不存在；
 - 企业策略若通过 GPO 禁用 `ExecutionPolicy` 覆盖，`Bypass` 会被拒绝，更新静默失败；
 - `Bypass` 意味着脚本不做签名检查，而 `ApplyUpdate.ps1` 正是会**覆盖程序文件**的脚本。
 
-**建议**：把覆盖逻辑移到 `Pancake.exe` 自身的隐藏启动参数（例如 `--apply-update <config>`），彻底摆脱 PowerShell 依赖；这是可消除的依赖，而不是必须接受的风险。
+**建议**：把覆盖逻辑移到 `WorkWidgets.exe` 自身的隐藏启动参数（例如 `--apply-update <config>`），彻底摆脱 PowerShell 依赖；这是可消除的依赖，而不是必须接受的风险。
 
 ### P1-11　更新包无代码签名
 
-**文件**：`src/Pancake/Services/ReleaseUpdateService.cs`（`DownloadAsync` 中的 `sha256:` 校验）、`PortableUpdateService.Prepare`
+**文件**：`src/WorkWidgets/Services/ReleaseUpdateService.cs`（`DownloadAsync` 中的 `sha256:` 校验）、`PortableUpdateService.Prepare`
 
 当前信任链是：HTTPS 取 Release 元数据 → 从同一元数据取 SHA-256 → 校验下载包。这只防传输损坏，**不防上游账户被入侵**（攻击者改 Release 和摘要即可）。同时 `PortableUpdateService` 会以 `-ExecutionPolicy Bypass` 执行覆盖。
 
@@ -300,7 +300,7 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 ### P2-1　`AppDataStore` 中 `Save` / `Load` 已是死代码，且实现与 `AtomicWrite` 不一致
 
-**文件**：`src/Pancake/Services/AppDataStore.cs:15-27`
+**文件**：`src/WorkWidgets/Services/AppDataStore.cs:15-27`
 
 ```csharp
 15: public AppState? Load() { ... }           // 无调用点
@@ -321,7 +321,7 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 ### P2-2　笔迹逻辑在两处重复实现
 
-**文件**：`src/Pancake/Controls/SubjectTileControl.cs:889-931` 与 `src/Pancake/Controls/ClockInkLayer.cs:47-180`
+**文件**：`src/WorkWidgets/Controls/SubjectTileControl.cs:889-931` 与 `src/WorkWidgets/Controls/ClockInkLayer.cs:47-180`
 
 两者都实现了：`_renderedStrokes` 字典、`BeginStroke` / `EndStroke`、`EraseStrokeAt`、`RenderStoredStrokes`、`ScaleOut`（`/ TipScaleX` 反缩放）、`ClearStrokes`。差异仅在容器与坐标系。P1-4 的性能修复因此要做两遍，未来任一处改 bug 都可能漏改另一处。
 
@@ -331,10 +331,10 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 | 实现 | 位置 |
 |---|---|
-| 手写 `Clone()` | `src/Pancake/Models/BoardModels.cs`（`HomeworkEntry.Clone`、`AttachmentItem` 逐属性复制、`SubjectBoard.Clone`） |
-| JSON 往返 `Clone` | `src/Pancake/Services/ProjectStore.cs:32`（`JsonOptions` + `JsonSerializer`） |
-| `CaptureSubjects` / `RestoreSubjects` | `src/Pancake/Services/AppDataStore.cs:29-64`、`87-107` |
-| `CaptureInk` / `RestoreInk` | `src/Pancake/Services/AppDataStore.cs:67-85` |
+| 手写 `Clone()` | `src/WorkWidgets/Models/BoardModels.cs`（`HomeworkEntry.Clone`、`AttachmentItem` 逐属性复制、`SubjectBoard.Clone`） |
+| JSON 往返 `Clone` | `src/WorkWidgets/Services/ProjectStore.cs:32`（`JsonOptions` + `JsonSerializer`） |
+| `CaptureSubjects` / `RestoreSubjects` | `src/WorkWidgets/Services/AppDataStore.cs:29-64`、`87-107` |
+| `CaptureInk` / `RestoreInk` | `src/WorkWidgets/Services/AppDataStore.cs:67-85` |
 
 `AttachmentItem` 有 12 个属性，在 `AppDataStore.cs:49-56` 与 `AppDataStore.cs:94-104` 被逐一手写两遍。新增一个属性需要改 4 处，漏改会导致静默丢字段——这正是"复制粘贴映射"最典型的失败模式。
 
@@ -344,10 +344,10 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 **文件与行号**：
 
-- `src/Pancake/Controls/AttachmentImageControl.cs:49` — `private readonly TaskCompletionSource<bool> _imageReady = new();`
-- `src/Pancake/Controls/ExportTileVisual.cs:25` — `private readonly TaskCompletionSource _loaded = new();`
-- `src/Pancake/Controls/ExportImageView.cs:58` — `private readonly TaskCompletionSource _loaded = new();`
-- `src/Pancake/Controls/ExportImageView.cs:414` — `TaskCompletionSource laidOut = new();`
+- `src/WorkWidgets/Controls/AttachmentImageControl.cs:49` — `private readonly TaskCompletionSource<bool> _imageReady = new();`
+- `src/WorkWidgets/Controls/ExportTileVisual.cs:25` — `private readonly TaskCompletionSource _loaded = new();`
+- `src/WorkWidgets/Controls/ExportImageView.cs:58` — `private readonly TaskCompletionSource _loaded = new();`
+- `src/WorkWidgets/Controls/ExportImageView.cs:414` — `TaskCompletionSource laidOut = new();`
 
 未指定 `TaskCreationOptions.RunContinuationsAsynchronously` 时，`SetResult` 会在**调用线程上同步执行**所有续接。这三处都在 UI 线程 `SetResult`，续接若做布局或 `UpdateLayout`（`ExportImageView` 正是这么用的），会在非预期时机重入 UI 树。
 
@@ -355,7 +355,7 @@ var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
 
 ### P2-5　窗口尺寸变化路径做了大量重复工作
 
-**文件**：`src/Pancake/MainWindow.xaml.cs:1184-1190`
+**文件**：`src/WorkWidgets/MainWindow.xaml.cs:1184-1190`
 
 ```csharp
 private void RootShell_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -373,7 +373,7 @@ private void RootShell_SizeChanged(object sender, SizeChangedEventArgs e)
 
 ### P2-6　命令行解析用子串匹配，且两处风格不一致
 
-**文件**：`src/Pancake/App.xaml.cs:32-53`
+**文件**：`src/WorkWidgets/App.xaml.cs:32-53`
 
 ```csharp
 32: string commandLine = string.Join(' ', Environment.GetCommandLineArgs().Skip(1));
@@ -388,7 +388,7 @@ private void RootShell_SizeChanged(object sender, SizeChangedEventArgs e)
 
 ### P2-7　`SubjectTileControl` 中的死代码
 
-**文件**：`src/Pancake/Controls/SubjectTileControl.cs:769`、`:918`
+**文件**：`src/WorkWidgets/Controls/SubjectTileControl.cs:769`、`:918`
 
 ```csharp
 769: private static ToggleButton CreateIconToggle(string glyph, string tooltip)   // 无调用点
@@ -401,28 +401,28 @@ private void RootShell_SizeChanged(object sender, SizeChangedEventArgs e)
 
 ### P2-8　缺少 `.editorconfig` / `Directory.Build.props` / 分析器 / `TreatWarningsAsErrors`
 
-仓库根目录没有 `.editorconfig`，没有 `Directory.Build.props`，`Pancake.csproj` 也未启用 `EnableNETAnalyzers` 之外的任何强制项，`TreatWarningsAsErrors` 未设置。这就是为什么 `Nullable=enable` 已经打开，却仍然能在 `MainWindow.Updates.cs:20`、`MainWindow.xaml.cs:1005` 看到 `!` 抑制——告警只提示不阻断。
+仓库根目录没有 `.editorconfig`，没有 `Directory.Build.props`，`WorkWidgets.csproj` 也未启用 `EnableNETAnalyzers` 之外的任何强制项，`TreatWarningsAsErrors` 未设置。这就是为什么 `Nullable=enable` 已经打开，却仍然能在 `MainWindow.Updates.cs:20`、`MainWindow.xaml.cs:1005` 看到 `!` 抑制——告警只提示不阻断。
 
 **建议**：加 `.editorconfig`（至少统一缩进/换行/`var` 偏好）+ `Directory.Build.props` 打开 `TreatWarningsAsErrors`（可先对 `CS86xx` 可空性告警单独开），并在 CI 加 `dotnet format --verify-no-changes`。
 
 ### P2-9　UI 文案全中文硬编码，本地化不可行
 
-**文件**：`src/Pancake/MainWindow.xaml`（全文件）、`MainWindow.Settings.cs`（全部 `Toggle("…")` / `Note("…")` / `Heading("…")` 字面量）
+**文件**：`src/WorkWidgets/MainWindow.xaml`（全文件）、`MainWindow.Settings.cs`（全部 `Toggle("…")` / `Note("…")` / `Heading("…")` 字面量）
 
-XAML 中没有任何 `x:Uid`，代码后置里的设置项文案也全是中文字面量。但 `Pancake.csproj` 却声明了 `SatelliteResourceLanguages = zh-Hans;zh-Hant;en`，暗示支持三种语言。当前状态下切换语言不会有任何效果。
+XAML 中没有任何 `x:Uid`，代码后置里的设置项文案也全是中文字面量。但 `WorkWidgets.csproj` 却声明了 `SatelliteResourceLanguages = zh-Hans;zh-Hant;en`，暗示支持三种语言。当前状态下切换语言不会有任何效果。
 
 **建议**：二选一——要么移除 `SatelliteResourceLanguages` 里的 `en` 并明确"仅中文"，要么把文案迁到 `.resw` 资源文件并加 `x:Uid`（工作量大，建议先明确决策再动手）。
 
 ### P2-10　自动填充容量上限只在 UI 层校验
 
-**文件**：`src/Pancake/MainWindow.Settings.cs:217`、`:449`
+**文件**：`src/WorkWidgets/MainWindow.Settings.cs:217`、`:449`
 
 ```csharp
 217: if (_settings.Autofill.Subject.Subjects.Count >= AutofillService.MaxSubjectEntries) { ...提示... }
 449: if (_settings.Autofill.Homework.Items.Count(item => item.Source == AutofillService.ManualSource) >= AutofillService.MaxManualItems) { ...提示... }
 ```
 
-`AutofillService` 自身（`src/Pancake/Services/AutofillService.cs`）在 `RecordHomework` / `EnsureBuiltIns` 路径上**不检查**这两个上限，只有 `TrimAutoItems` 处理 `MaxAutoItems`。因此：手改 `projects.json`、或经 `.pch` 导入含大量手动条目的项目后，服务层会接受超限数据，UI 才在下一次点击"添加"时提示。
+`AutofillService` 自身（`src/WorkWidgets/Services/AutofillService.cs`）在 `RecordHomework` / `EnsureBuiltIns` 路径上**不检查**这两个上限，只有 `TrimAutoItems` 处理 `MaxAutoItems`。因此：手改 `projects.json`、或经 `.wwh` 导入含大量手动条目的项目后，服务层会接受超限数据，UI 才在下一次点击"添加"时提示。
 
 **建议**：把上限校验下沉到 `AutofillService`（`Prune` 或写入前统一裁剪），UI 只负责提示。
 
@@ -443,7 +443,7 @@ Browser-rendered evidence: not applicable; this is a native WinUI application
 
 ### P2-12　发布版本号有两个来源
 
-**文件**：`src/Pancake/Pancake.csproj`（`<Version>2.0.6</Version>`）与 `.github/workflows/release.yml:56`（`-p:Version=${{ steps.version.outputs.version }}`）
+**文件**：`src/WorkWidgets/WorkWidgets.csproj`（`<Version>2.0.6</Version>`）与 `.github/workflows/release.yml:56`（`-p:Version=${{ steps.version.outputs.version }}`）
 
 CI 用 tag 推导版本覆盖 csproj 的值，本地构建则用 csproj 的硬编码值。两者容易漂移，且 `MainWindow.xaml.cs:106-108` 显示的"关于"版本会随之不同。
 
@@ -462,7 +462,7 @@ CI 用 tag 推导版本覆盖 csproj 的值，本地构建则用 csproj 的硬�
 | P3-5 | `IsAsciiLetters`（复数）与 `IsAsciiLetter`（单数）语义不同、名字几乎一样 | `Services/AutofillService.cs:452`、`:461` |
 | P3-6 | 错误消息带尾随空格 | `Services/GitHubUpdateService.cs:24`（`"更新仓库格式应为 owner/repository。 "`） |
 | P3-7 | 孤儿构建产物目录（只剩 `bin`/`obj`，无源文件、无 csproj） | `tests/RichTextLogic/`、`tests/UiHeadless/` |
-| P3-8 | `legacy/Pancake.WinUI/obj/` 下 5 个构建产物被 Git 跟踪 | `legacy/Pancake.WinUI/obj/...`（`*.json`/`*.props`/`*.targets`/`*.cache`） |
+| P3-8 | `legacy/WorkWidgets.WinUI/obj/` 下 5 个构建产物被 Git 跟踪 | `legacy/WorkWidgets.WinUI/obj/...`（`*.json`/`*.props`/`*.targets`/`*.cache`） |
 | P3-9 | `.gitignore` 只有 4 行，未忽略 `legacy/**/obj` | `.gitignore` |
 | P3-10 | 魔法数：`94`（dB 参考值）、`0.0000001`（下限） | `Services/NoiseMonitorService.cs`（dB 计算与窗口判断） |
 | P3-11 | 魔法数：亮度阈值 `145`；`_appearanceTask` fire-and-forget 未 await | `Controls/ExportImageView.cs`（`light` 判定、`_appearanceTask = RefreshBackdropAsync(...)`） |
@@ -494,9 +494,9 @@ CI 用 tag 推导版本覆盖 csproj 的值，本地构建则用 csproj 的硬�
 | 资产名过滤 | 同上 | 排除 `arm64`、`/archive/`、含路径分隔符、含非法文件名字符 |
 | HTTPS 强制 | 同上 | 要求 `uri.Scheme == "https"` |
 | 原子写 | `ProjectStore.AtomicWrite` | 随机临时名 + `Flush(true)` + `File.Move(..., true)` |
-| 包内附件路径白名单 | `PchPackageService.IsAssetPath` | `\Aassets/[0-9a-fA-F]{32}(?:\.[a-zA-Z0-9]{1,10})?\z` |
-| 包体积上限 | `PchPackageService` | 512 MB / manifest 16 MB / 10000 文件 |
-| 覆盖前拒绝覆盖导出图 | `PchPackageService.Save` | `files.ContainsKey(Path.GetFullPath(destination))` |
+| 包内附件路径白名单 | `WwhPackageService.IsAssetPath` | `\Aassets/[0-9a-fA-F]{32}(?:\.[a-zA-Z0-9]{1,10})?\z` |
+| 包体积上限 | `WwhPackageService` | 512 MB / manifest 16 MB / 10000 文件 |
+| 覆盖前拒绝覆盖导出图 | `WwhPackageService.Save` | `files.ContainsKey(Path.GetFullPath(destination))` |
 | 失败回滚 | `ApplyUpdate.ps1` | 逆序恢复备份，新文件 `Remove-Item`；失败写 `UPDATE_FAILED` |
 | 发布目录保护 | `installer/Optimize-Publish.ps1` | 拒绝等于仓库根/盘根、拒绝含 `data`、拒绝 `ReparsePoint` |
 | 项目校验 | `ProjectStore.ProjectValidation.Validate` | 版本、GUID、名称长度、主题/色系枚举、数量上限、`double.IsFinite`、颜色格式（`ProjectStore.cs:227-231`） |
@@ -509,14 +509,14 @@ CI 用 tag 推导版本覆盖 csproj 的值，本地构建则用 csproj 的硬�
 
 **做得好的部分**：
 - 逻辑层用例密度高、反例充分。`tests/ProjectLogic/Program.cs` 覆盖了 7 个危险资源路径、恶意 ZIP（`CreateEntry("../escape")`）、损坏包、未知版本、`MigrateInk` 幂等性；`tests/UpdateLogic/Program.cs` 甚至**手工构造 PKZIP 多磁盘结构**来测分卷合并，并用 `Path.Combine(root, "程序 ' & 空格")` 验证特殊字符/引号/空格路径；`tests/SettingsLogic/Program.cs` 有 130+ 条自动填充断言。
-- 通过 `<Compile Include="../../src/Pancake/...">` 链接源文件复用被测代码，避免逻辑重复实现。
+- 通过 `<Compile Include="../../src/WorkWidgets/...">` 链接源文件复用被测代码，避免逻辑重复实现。
 - 断言采用 `Check` / `Reject` 双语义（`Reject` 捕获 `InvalidDataException or IOException or JsonException or UnauthorizedAccessException or InvalidOperationException`），能表达"必须被拒绝"的期望。
 
 **主要缺口**（按影响排序）：
 
 1. **CI 不跑**（见 P0-3）——最严重，等于这些测试在生产流程中不存在。
 2. **不在解决方案里**（见 P1-9）。
-3. **UI 验证依赖条件编译 + 真实窗口**：`EnableUiVerification=true` 定义 `PANCAKE_UI_TESTS`（`Pancake.csproj`），再经 `App.xaml.cs:54-104` 的 8 个 `--verify-*` 分支 + PowerShell 脚本驱动。这需要交互式桌面会话，无法在无头 CI 运行，且失败信息只有日志文本。
+3. **UI 验证依赖条件编译 + 真实窗口**：`EnableUiVerification=true` 定义 `WORKWIDGETS_UI_TESTS`（`WorkWidgets.csproj`），再经 `App.xaml.cs:54-104` 的 8 个 `--verify-*` 分支 + PowerShell 脚本驱动。这需要交互式桌面会话，无法在无头 CI 运行，且失败信息只有日志文本。
 4. **无覆盖率统计**，无法判断哪些分支未被触达。
 5. **视觉验收 `blocked`**（见 P2-11）。
 6. **`tests/UiVerification.cs` 2101 行单文件**，新增契约的成本随文件增长而上升。
@@ -548,7 +548,7 @@ CI 用 tag 推导版本覆盖 csproj 的值，本地构建则用 csproj 的硬�
 1. **P0-1** 全局异常处理器：`args.Handled` + 正确记录 `args.Exception`。
 2. **P0-2** `ClearInk_Click` 改走 `RunProjectAction` + 统一对话框守卫。
 3. **P0-3** CI 增加三个逻辑测试项目的执行步骤。
-4. **P1-9** 把三个测试项目加入 `Pancake.slnx`。
+4. **P1-9** 把三个测试项目加入 `WorkWidgets.slnx`。
 
 > 这一批全部是低风险、低工作量的改动，但把"崩溃"和"零回归验证"两个最大风险同时消掉。
 
