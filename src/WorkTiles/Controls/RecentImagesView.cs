@@ -13,14 +13,16 @@ public sealed class RecentImagesView : StackPanel
     private readonly MediaLibrary _library;
     private readonly Func<string, Task> _select;
     private readonly MediaScope _scope;
+    private readonly bool _imagesOnly;
     private readonly StackPanel _images = new() { Orientation = Orientation.Horizontal, Spacing = 8 };
-    public RecentImagesView(MediaLibrary library, Func<string, Task> select, MediaScope scope = MediaScope.Images)
+    public RecentImagesView(MediaLibrary library, Func<string, Task> select, MediaScope scope = MediaScope.Images, bool imagesOnly = false)
     {
         _library = library;
         _select = select;
         _scope = scope;
+        _imagesOnly = imagesOnly;
         Spacing = 8;
-        Children.Add(new TextBlock { Text = scope == MediaScope.Images ? "最近使用的图像" : "最近媒体" });
+        Children.Add(new TextBlock { Text = scope == MediaScope.Images || imagesOnly ? "最近使用的图像" : "最近媒体" });
         Children.Add(new ScrollViewer { Content = _images, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
             HorizontalScrollMode = ScrollMode.Enabled, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollMode = ScrollMode.Disabled });
@@ -31,7 +33,7 @@ public sealed class RecentImagesView : StackPanel
     private void Refresh()
     {
         _images.Children.Clear();
-        foreach (string path in _library.RecentMedia(_scope))
+        foreach (string path in _library.RecentMedia(_scope).Where(path => !_imagesOnly || MediaLibrary.IsImage(path)))
         {
             bool image = MediaLibrary.IsImage(path);
             // 历史列表只展示静态封面/类型标签，不能为每个视频或网页启动播放器。
@@ -48,7 +50,7 @@ public sealed class RecentImagesView : StackPanel
         }
         if (_images.Children.Count == 0) _images.Children.Add(new TextBlock
         {
-            Text = _scope == MediaScope.Images ? "选择图片后会显示在这里" : "导入图片、视频或动态壁纸后会显示在这里",
+            Text = _scope == MediaScope.Images || _imagesOnly ? "选择图片后会显示在这里" : "导入图片、视频或动态壁纸后会显示在这里",
             Opacity = .6
         });
     }

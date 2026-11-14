@@ -1643,6 +1643,15 @@ public sealed partial class MainWindow
         foreach (string page in new[] { "AppearanceTile", "AppearanceBackground", "AppearanceGrid", "AppearanceToolbar" })
         {
             ShowSettingsPage(page); await NextLayoutAsync();
+            if (page == "AppearanceTile")
+            {
+                List<string> tileMediaLabels = FindVisuals<Button>(_settingsPages[page].Content)
+                    .Select(button => button.Content as string ?? "")
+                    .ToList();
+                check(tileMediaLabels.Contains("选择图片")
+                    && !tileMediaLabels.Any(label => label.Contains("视频", StringComparison.Ordinal) || label.Contains("Wallpaper", StringComparison.Ordinal)),
+                    "tile appearance offers images without video or Wallpaper Engine import");
+            }
             // 磁贴预览在宽窗口里固定在设置页右侧，向下滚动编辑选项时始终可见；其余预览仍在可滚动内容中。
             // 环境给不了宽窗口时（例如 1024x768 的屏幕）应用按设计回退到页内预览，此时同样要求预览真实渲染出来。
             bool stickyTilePreview = SettingsPreviewHost.Visibility == Visibility.Visible;

@@ -22,9 +22,11 @@ public sealed partial class MainWindow
     private StackPanel CreateBackgroundMediaEditor(BackgroundSettings style, MediaScope scope = MediaScope.Background)
     {
         style.Playlist ??= [];
+        // 磁贴外观只接受图片。视频和 Wallpaper Engine 留给背景板。
+        bool imagesOnly = scope == MediaScope.Tile;
         StackPanel panel = SettingsStack(), rows = SettingsStack();
         bool busy = false;
-        Button pick = new() { Content = "选择图片或视频" };
+        Button pick = new() { Content = imagesOnly ? "选择图片" : "选择图片或视频" };
         panel.Children.Add(pick);
         async Task Import(IEnumerable<string> paths, IReadOnlyDictionary<string, WallpaperProject>? projects = null, bool recent = false)
         {
@@ -35,6 +37,7 @@ public sealed partial class MainWindow
             {
                 foreach (string path in paths)
                 {
+                    if (imagesOnly && !MediaLibrary.IsImage(path)) continue;
                     string owned = recent ? await MediaLibraryStore.UseRecentAsync(path, scope)
                         : projects is null ? await MediaLibraryStore.ImportAsync(path, scope) : await MediaLibraryStore.ImportWallpaperAsync(projects[path], scope);
                     if (style.PlaylistEnabled)
@@ -51,22 +54,22 @@ public sealed partial class MainWindow
         {
             try
             {
-                var file = await MediaPicker(true).PickSingleFileAsync();
+                var file = await MediaPicker(!imagesOnly).PickSingleFileAsync();
                 if (file is not null) await Import([file.Path]);
             }
             catch (Exception ex) { await ShowMessageAsync("无法选择媒体", ex.Message, "知道了"); }
         };
-        panel.Children.Add(new RecentImagesView(MediaLibraryStore, path => Import([path], recent: true), scope));
+        panel.Children.Add(new RecentImagesView(MediaLibraryStore, path => Import([path], recent: true), scope, imagesOnly));
         panel.Children.Add(Toggle("播放队列模式", style.PlaylistEnabled, value =>
         {
             style.PlaylistEnabled = value;
             if (value && style.Playlist.Count == 0 && File.Exists(style.ImagePath)) style.Playlist.Add(style.ImagePath);
         }, read: () => style.PlaylistEnabled));
         StackPanel queue = SettingsStack();
-        Button add = new() { Content = "添加多个媒体" };
+        Button add = new() { Content = imagesOnly ? "添加多张图片" : "添加多个媒体" };
         add.Click += async (_, _) =>
         {
-            try { var files = await MediaPicker(true).PickMultipleFilesAsync(); await Import(files.Select(file => file.Path)); }
+            try { var files = await MediaPicker(!imagesOnly).PickMultipleFilesAsync(); await Import(files.Select(file => file.Path)); }
             catch (Exception ex) { await ShowMessageAsync("无法选择媒体", ex.Message, "知道了"); }
         };
         queue.Children.Add(add);
@@ -81,8 +84,15 @@ public sealed partial class MainWindow
             style.SwitchIntervalSeconds = BackgroundPlaylist.NormalizeInterval(args.NewValue); SettingChanged();
         };
         queue.Children.Add(interval);
-        queue.Children.Add(Toggle("视频播放完成时切换", style.SwitchOnMediaEnded, value => style.SwitchOnMediaEnded = value, read: () => style.SwitchOnMediaEnded));
-        queue.Children.Add(Note("两种切换都开启时，先触发的条件生效。关闭播放完成切换后视频循环播放；图片、GIF 和网页壁纸通过定时切换。两个开关都关闭时停留在当前媒体。"));
+        ToggleSwitch videoSwitch = Toggle("视频播放完成时切换", style.SwitchOnMediaEnded, value => style.SwitchOnMediaEnded = value, read: () => style.SwitchOnMediaEnded);
+        TextBlock videoNote = Note("两种切换都开启时，先触发的条件生效。关闭播放完成切换后视频循环播放；图片、GIF 和网页壁纸通过定时切换。两个开关都关闭时停留在当前媒体。");
+        if (imagesOnly)
+        {
+            videoSwitch.Visibility = Visibility.Collapsed;
+            videoNote.Visibility = Visibility.Collapsed;
+        }
+        queue.Children.Add(videoSwitch);
+        queue.Children.Add(videoNote);
         panel.Children.Add(queue);
         string signature = "";
         _refreshSettingAvailability.Add(() =>
@@ -93,7 +103,7 @@ public sealed partial class MainWindow
             if (current == signature && rows.Children.Count > 0) return;
             signature = current;
             rows.Children.Clear();
-            if (style.Playlist.Count == 0) rows.Children.Add(Note("队列为空，请添加图片或视频。"));
+            if (style.Playlist.Count == 0) rows.Children.Add(Note(imagesOnly ? "队列为空，请添加图片。" : "队列为空，请添加图片或视频。"));
             for (int index = 0; index < style.Playlist.Count; index++)
             {
                 int position = index;
@@ -116,6 +126,8 @@ public sealed partial class MainWindow
                 Grid.SetColumn(commands, 1); row.Children.Add(commands); rows.Children.Add(row);
             }
         });
+        if (!imagesOnly)
+        {
         Button wallpaper = new() { Content = "从 Wallpaper Engine 导入", Visibility = Visibility.Collapsed };
         TextBlock detection = Note("正在检测 Wallpaper Engine…");
         panel.Children.Add(wallpaper); panel.Children.Add(detection);
@@ -154,6 +166,8 @@ public sealed partial class MainWindow
             finally { wallpaper.IsEnabled = true; }
         };
         panel.Children.Add(Note("视频背景默认静音，支持 MP4 等 Windows 可解码的视频；动态 GIF 可作为图片背景使用。"));
+        }
+        else panel.Children.Add(Note("磁贴背景只使用图片。动态 GIF 可以，视频和 Wallpaper Engine 壁纸请放到背景板。"));
         return panel;
     }
 
