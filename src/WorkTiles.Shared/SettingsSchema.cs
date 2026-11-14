@@ -80,7 +80,7 @@ public static class SettingsSchema
         new("LayoutMode", "Layout", "布局模式", SettingKind.Enum, "Split", Options: [new("Split", "分屏"), new("Board", "仅作业"), new("Clock", "仅时钟"), new("Free", "自由布局")]),
         new("SplitRatio", "Layout", "时钟区宽度", SettingKind.Number, 0.4, 0.1, 0.9, 0.01, Hint: "也可以在预览里拖动分隔条。", When: "LayoutMode=Split"),
         new("InfiniteBoard", "Layout", "无限作业板", SettingKind.Bool, false, Hint: "开启后可滚动、触摸平移、Ctrl + 滚轮缩放；编辑磁贴时可用滚动条平移。"),
-        new("GridSize", "Layout", "网格大小", SettingKind.Number, 48, 16, 160, 1, Unit: "px"),
+        new("GridSize", "Layout", "网格大小", SettingKind.Number, 48, 32, 160, 1, Unit: "px"),
         new("GridSnappingEnabled", "Layout", "吸附到网格", SettingKind.Bool, true, Section: "自动布局"),
         new("AutoLayoutGap", "Layout", "自动排版磁贴间隔", SettingKind.Number, 0, 0, 120, 1, Unit: "px", Section: "自动布局"),
         new("AutoLayoutAlign", "Layout", "自动对齐", SettingKind.Bool, true, Section: "自动布局"),

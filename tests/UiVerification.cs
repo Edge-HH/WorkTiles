@@ -1712,7 +1712,7 @@ public sealed partial class MainWindow
         _settings.GridStyle = "Grid";
         int GridLineCount() => FindVisuals<Microsoft.UI.Xaml.Shapes.Line>(_appearancePreviews["Layout"]).Count();
         double layoutPreviewGrid = _settings.GridSize;
-        _settings.GridSize = 16; ApplyExtendedSettings(); await NextLayoutAsync();
+        _settings.GridSize = 32; ApplyExtendedSettings(); await NextLayoutAsync();
         int denseLines = GridLineCount();
         _settings.GridSize = 160; ApplyExtendedSettings(); await NextLayoutAsync();
         int sparseLines = GridLineCount();
@@ -1758,6 +1758,10 @@ public sealed partial class MainWindow
         check(IsGridSnappingEnabled && GridSnapToggleButton.IsChecked == true && _settings.GridSnappingEnabled &&
             Math.Abs(gapSlider.StepFrequency - Math.Max(1, GridSize) / 2) < .01,
             "auto layout snap switch enables snapping and half cell gap steps");
+        TextBlock gapReadout = FindVisuals<TextBlock>(_settingsPages["Layout"].Content).Single(text => text.Name == "AutoLayoutGapReadout");
+        check(gapReadout.Text.EndsWith("格", StringComparison.Ordinal),
+            "snapped arrangement gap is shown in grid cells (" + gapReadout.Text + ")");
+        check(Math.Abs(gridSizeSlider.Minimum - LayoutMetrics.MinimumGridSize) < .01, "grid size slider minimum is raised");
         GridSnapToggleButton.IsChecked = false; await NextLayoutAsync();
         check(!snapToggle.IsOn && Math.Abs(gapSlider.StepFrequency - 10) < .01, "board snap button turns the auto layout snap switch off");
         GridSnapToggleButton.IsChecked = true; await NextLayoutAsync();

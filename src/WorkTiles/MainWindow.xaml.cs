@@ -22,7 +22,7 @@ namespace WorkTiles;
 public sealed partial class MainWindow : Window
 {
     // 网格大小只取整数：旧配置里的小数值（例如拖动过旧版滑块留下的 48.37）在这里统一收敛。
-    private double GridSize => Math.Clamp(Math.Round(_settings.GridSize), 16, 160);
+    private double GridSize => Math.Clamp(Math.Round(_settings.GridSize), LayoutMetrics.MinimumGridSize, LayoutMetrics.MaximumGridSize);
     private static readonly Brush FullScreenHintBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 220, 38, 38));
     private static readonly Brush ToolbarButtonBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
@@ -831,7 +831,7 @@ public sealed partial class MainWindow : Window
     private void DrawGrid(Canvas canvas, string style, double left, double top, double right, double bottom, double viewScale = 1)
     {
         canvas.Children.Clear();
-        if (style == "None") return;
+        if (style == "None" || LayoutMetrics.GridTooDense(right - left, bottom - top, GridSize)) return;
         double inverseScale = viewScale > 0 ? 1 / viewScale : 1;
         if (style == "Dots")
         {

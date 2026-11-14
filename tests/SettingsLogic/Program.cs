@@ -658,6 +658,9 @@ Check(DesktopTileLayout.Arrange([], desktopArea).Count == 0, "没有磁贴时不
 List<string> merged = DesktopTileLayout.MergeOrder(["语文", "已删除", "数学"], ["数学", "英语", "语文"]);
 Check(merged.SequenceEqual(["语文", "数学", "英语"]), "已保存的顺序保留还在的科目，新科目接在末尾");
 Check(DesktopTileLayout.MergeOrder(["数学", "数学"], ["数学"]).SequenceEqual(["数学"]), "同名科目按出现次数对应，多出来的保存项丢掉");
+Check(LayoutMetrics.FormatArrangementGap(24, 48, true) == "0.5 格" && LayoutMetrics.FormatArrangementGap(48, 48, true) == "1 格", "吸附到网格时间隔按半格显示");
+Check(LayoutMetrics.FormatArrangementGap(24, 48, false) == "24 px", "未吸附时仍显示像素");
+Check(LayoutMetrics.GridTooDense(4000, 4000, 32) && !LayoutMetrics.GridTooDense(800, 600, 48), "一次要画的格子太多时不显示网格");
 Check(ToolbarChrome.CornerRadius(0, 120, 48) == 0, "圆角 0 是直角");
 Check(ToolbarChrome.CornerRadius(20, 80, 40) == 20 && ToolbarChrome.CornerRadius(20, 200, 100) == 50, "圆角 20 在任何尺寸都是短边一半的胶囊");
 Check(Math.Abs(ToolbarChrome.CornerRadius(10, 80, 40) / 40 - ToolbarChrome.CornerRadius(10, 200, 100) / 100) < 0.001, "同一档位的圆角比例不随控制窗大小变化");

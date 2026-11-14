@@ -20,6 +20,7 @@ public sealed partial class MainWindow
     private ComboBox? _layoutChoice;
     private Slider? _gridSizeSlider;
     private Slider? _autoLayoutGapSlider;
+    private TextBlock? _autoLayoutGapReadout;
     private ToggleSwitch? _gridSnapToggle;
     private Action? _refreshHomeworkAutofill;
     private Action? _refreshSubjectAutofill;
@@ -37,8 +38,8 @@ public sealed partial class MainWindow
         layout.Children.Add(Note("开启后可滚动、触摸平移、Ctrl + 滚轮缩放；编辑磁贴时可用滚动条平移。"));
         // 网格大小与自动布局共用同一张预览，改任一项都能立刻看到结果。
         layout.Children.Add(CreateAppearancePreview("Layout"));
-        _gridSizeSlider = Range("网格大小", 16, 160, Math.Round(_settings.GridSize), value =>
-        { _settings.GridSize = Math.Round(value); _renderedGridWidth = 0; }, GridSizeChanged, read: () => Math.Round(_settings.GridSize));
+        _gridSizeSlider = Range("网格大小", LayoutMetrics.MinimumGridSize, LayoutMetrics.MaximumGridSize, GridSize, value =>
+        { _settings.GridSize = Math.Round(value); _renderedGridWidth = 0; }, GridSizeChanged, read: () => GridSize);
         // 网格大小按整数调节，避免出现 48.37 px 这类没有意义的取值。
         _gridSizeSlider.StepFrequency = 1;
         _gridSizeSlider.SmallChange = 1;
@@ -52,7 +53,10 @@ public sealed partial class MainWindow
         layout.Children.Add(_gridSnapToggle);
         _autoLayoutGapSlider = Range("自动排版磁贴间隔", 0, 120, _settings.AutoLayoutGap,
             value => _settings.AutoLayoutGap = value, AutoLayoutGapChanged, read: () => _settings.AutoLayoutGap);
+        _autoLayoutGapReadout = new TextBlock { Name = "AutoLayoutGapReadout", Opacity = 0.75 };
         layout.Children.Add(_autoLayoutGapSlider);
+        layout.Children.Add(_autoLayoutGapReadout);
+        UpdateAutoLayoutGapStep();
         layout.Children.Add(Toggle("自动对齐", _settings.AutoLayoutAlign, value => _settings.AutoLayoutAlign = value, read: () => _settings.AutoLayoutAlign));
         layout.Children.Add(Toggle("自动调整磁贴大小", _settings.AutoLayoutResize, value => _settings.AutoLayoutResize = value, read: () => _settings.AutoLayoutResize));
         layout.Children.Add(Note("点击自动排列时按文字、图片和笔迹收紧磁贴；自动对齐会尽量统一相近尺寸并对齐行列。看板与图片导出共用这些设置，优先从左上角排列。"));
@@ -1000,6 +1004,8 @@ public sealed partial class MainWindow
         _autoLayoutGapSlider.StepFrequency = step;
         _autoLayoutGapSlider.SmallChange = step;
         _autoLayoutGapSlider.LargeChange = step * 2;
+        if (_autoLayoutGapReadout is not null)
+            _autoLayoutGapReadout.Text = LayoutMetrics.FormatArrangementGap(_settings.AutoLayoutGap, GridSize, IsGridSnappingEnabled);
     }
 
     /// <summary>自动布局里的“吸附到网格”和编辑工具栏的吸附按钮共用同一份设置。</summary>
