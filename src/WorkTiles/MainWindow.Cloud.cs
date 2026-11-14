@@ -185,7 +185,7 @@ public sealed partial class MainWindow
     // 只影响行为、不影响看板外观的设置：应用它们时不必重建磁贴。
     private static readonly HashSet<string> NonVisualCloudKeys =
     [
-        "NoiseAlertEnabled", "NoiseThresholdDb", "NoiseIntervalSeconds", "NoiseAlertVolume", "PauseNoiseWhenMinimized", "PastePlainTextOnly", "AutoSaveEnabled",
+        "NoiseAlertEnabled", "NoiseThresholdDb", "NoiseIntervalSeconds", "NoiseAlertVolume", "PauseNoiseWhenMinimized", "PauseNoiseWhenUnfocused", "PastePlainTextOnly", "AutoSaveEnabled",
         "Autofill.Subject.Enabled", "Autofill.Subject.MatchLevel", "Autofill.Homework.Enabled", "Autofill.Homework.AutoRecord",
         "Autofill.Homework.RecordLevel", "Autofill.Homework.Isolation", "BoardBannerLevels", "ShowWeatherAlerts", "WeatherCityName", "WeatherCityCode"
     ];

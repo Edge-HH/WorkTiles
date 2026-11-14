@@ -23,7 +23,9 @@ public sealed class ReleaseUpdateService
 
     public async Task<ReleaseSnapshot?> GetLatestAsync(string source, CancellationToken token = default)
     {
-        string url = source == "Gitee" ? "https://gitee.com/api/v5/repos/EdgeHH/worktiles/releases/latest" : "https://api.github.com/repos/Edge-HH/WorkTiles/releases/latest";
+        string url = source == "Gitee"
+            ? "https://gitee.com/api/v5/repos/EdgeHH/Pancake/releases/latest"
+            : "https://api.github.com/repos/Edge-HH/WorkTiles/releases/latest";
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(token); timeout.CancelAfter(TimeSpan.FromSeconds(20));
         using var response = await _http.GetAsync(url, timeout.Token);
         if (response.StatusCode == HttpStatusCode.NotFound) return null;

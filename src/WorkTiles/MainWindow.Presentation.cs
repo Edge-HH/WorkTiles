@@ -32,7 +32,8 @@ public sealed partial class MainWindow
         RootShell.AddHandler(UIElement.KeyDownEvent, new KeyEventHandler((_, _) => RecordToolbarActivity()), true);
         Activated += (_, args) =>
         {
-            if (args.WindowActivationState == WindowActivationState.Deactivated) _presentationPointers.Clear();
+            WindowDeactivated = args.WindowActivationState == WindowActivationState.Deactivated;
+            if (WindowDeactivated) _presentationPointers.Clear();
             RecordToolbarActivity();
             RefreshNoiseSuspension();
         };
@@ -108,8 +109,14 @@ public sealed partial class MainWindow
         storyboard.Begin();
     }
 
-    private bool ShouldSuspendNoise => _settings.PauseNoiseWhenMinimized &&
+    private bool WindowDeactivated { get; set; }
+
+    private bool Minimized =>
         _appWindow?.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
+    private bool ShouldSuspendNoise =>
+        (_settings.PauseNoiseWhenMinimized && Minimized) ||
+        (_settings.PauseNoiseWhenUnfocused && WindowDeactivated);
 
     private void RefreshNoiseSuspension()
     {
@@ -123,10 +130,11 @@ public sealed partial class MainWindow
             _noiseAlertPlayer.Dispose();
             _noiseAlertGate.Reset();
             // 暂停态整段替换：数字框收起，状态文本承担提示；恢复监测后由读数更新恢复数字框。
+            bool minimized = Minimized && _settings.PauseNoiseWhenMinimized;
             NoiseText.Visibility = Visibility.Collapsed;
             NoiseStatusText.Text = "监测已暂停";
             MicrophoneStatusInfoBar.Severity = Microsoft.UI.Xaml.Controls.InfoBarSeverity.Informational;
-            MicrophoneStatusInfoBar.Message = "窗口已最小化，恢复窗口后继续监测。";
+            MicrophoneStatusInfoBar.Message = minimized ? "窗口已最小化，恢复窗口后继续监测。" : "窗口不在前台，回到窗口后继续监测。";
         }
         else if (_initialView != "verification") StartNoiseMonitoring();
     }

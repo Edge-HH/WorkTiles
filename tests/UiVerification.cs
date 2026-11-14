@@ -1623,17 +1623,26 @@ public sealed partial class MainWindow
         List<HyperlinkButton> repoLinks = FindVisuals<HyperlinkButton>(RepositorySettingsCard).ToList();
         check(repoLinks.Count == 2 &&
             repoLinks.Any(link => link.NavigateUri?.Host == "github.com") &&
-            repoLinks.Any(link => link.NavigateUri?.Host == "gitee.com"),
-            "About lists GitHub and Gitee repository cards");
+            repoLinks.Any(link => link.NavigateUri?.AbsolutePath.Contains("Pancake", StringComparison.OrdinalIgnoreCase) == true),
+            "About lists GitHub and the Pancake Gitee repository");
+        HyperlinkButton githubLink = repoLinks.Single(link => link.NavigateUri?.Host == "github.com");
+        HyperlinkButton giteeLink = repoLinks.Single(link => link.NavigateUri?.Host == "gitee.com");
+        check(Grid.GetColumn(githubLink) > 0 && Grid.GetColumn(giteeLink) > 0 && Grid.GetColumn(githubLink) != Grid.GetColumn(giteeLink)
+            && Grid.GetRow(githubLink) == Grid.GetRow(giteeLink),
+            "repository cards sit side by side");
         ShowSettingsPage("Exam"); await NextLayoutAsync();
         check(FindVisuals<TextBlock>(_settingsPages["Exam"].Content).Any(text => text.Text == "更进阶的考试功能请使用ExamAware2"),
             "exam page points to ExamAware2");
+        check(FindVisuals<ToggleSwitch>(_settingsPages["ComponentsNoise"].Content).Any(toggle => Equals(toggle.Header, "窗口失焦时停止监测")),
+            "noise settings can stop monitoring when the window loses focus");
+        check(FindVisuals<ToggleSwitch>(_settingsPages["AppearanceTile"].Content).Any(toggle => Equals(toggle.Header, "右下角显示学科字样") && toggle.IsOn),
+            "tile appearance shows the subject label by default");
         ElementTheme originalAboutTheme = RootShell.RequestedTheme;
         RootShell.RequestedTheme = ElementTheme.Light;
         await NextLayoutAsync();
         List<Windows.UI.Color> repoText = repoLinks
             .SelectMany(link => FindVisuals<TextBlock>(link))
-            .Where(text => text.Text is "Edge-HH/WorkTiles" or "EdgeHH/worktiles" or "在 GitHub 中打开" or "在 Gitee 中打开")
+            .Where(text => text.Text is "Edge-HH/WorkTiles" or "EdgeHH/Pancake" or "在 GitHub 中打开" or "在 Gitee 中打开")
             .Select(text => (text.Foreground as SolidColorBrush)?.Color ?? Windows.UI.Color.FromArgb(0, 0, 0, 0))
             .ToList();
         check(repoLinks.All(link => (link.Background as SolidColorBrush)?.Color == Windows.UI.Color.FromArgb(255, 255, 255, 255)) &&

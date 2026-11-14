@@ -96,6 +96,7 @@ public static class SettingsSchema
         new("TileBodyBold", "AppearanceTile", "正文默认粗体", SettingKind.Bool, false),
         new("TileBodyItalic", "AppearanceTile", "正文默认斜体", SettingKind.Bool, false),
         new("PastePlainTextOnly", "AppearanceTile", "仅粘贴纯文本", SettingKind.Bool, false),
+        new("ShowTileSubjectLabel", "AppearanceTile", "右下角显示学科字样", SettingKind.Bool, true),
         new("TileBackground", "AppearanceTile", "磁贴背景", SettingKind.Background, BackgroundDefault(), Section: "磁贴背景", Variant: "Surface"),
 
         // 外观 → 背景板
@@ -157,12 +158,13 @@ public static class SettingsSchema
         new("NoiseAlertEnabled", "ComponentsNoise", "吵闹时播放提示音", SettingKind.Bool, false),
         new("NoiseAlertVolume", "ComponentsNoise", "提示音音量", SettingKind.Number, 1, 0, 1, 0.01, EnableWhen: "NoiseAlertEnabled"),
         new("PauseNoiseWhenMinimized", "ComponentsNoise", "最小化时暂停监测", SettingKind.Bool, false),
+        new("PauseNoiseWhenUnfocused", "ComponentsNoise", "窗口失焦时停止监测", SettingKind.Bool, false),
 
         // 组件 → 班务条
         new("BoardBannerLevels", "ComponentsBanner", "显示的公告", SettingKind.Enum, "All", Options: [new("All", "全部生效公告"), new("ImportantOnly", "仅重要、紧急与置顶")]),
 
         // 自动填充
-        new("Autofill.Subject.Enabled", "AutofillSubject", "学科补全", SettingKind.Bool, false, Hint: "在磁贴标题里输入中文、全拼或首字母会弹出候选，采纳后标题与磁贴主题色切换为该学科的默认颜色。"),
+        new("Autofill.Subject.Enabled", "AutofillSubject", "学科补全", SettingKind.Bool, true, Hint: "在磁贴标题里输入中文、全拼或首字母会弹出候选，采纳后标题与磁贴主题色切换为该学科的默认颜色。"),
         new("Autofill.Subject.MatchLevel", "AutofillSubject", "匹配程度", SettingKind.Enum, "Normal", Options: Levels),
         new("Autofill.Homework.Enabled", "AutofillHomework", "作业补全", SettingKind.Bool, false),
         new("Autofill.Homework.AutoRecord", "AutofillHomework", "自动记录常输入的作业名称", SettingKind.Bool, true),

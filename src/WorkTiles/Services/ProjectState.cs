@@ -34,6 +34,8 @@ public sealed class BoardSettingsState
     public bool TileBodyBold { get; set; }
     public bool TileBodyItalic { get; set; }
     public bool PastePlainTextOnly { get; set; }
+    /// <summary>磁贴右下角显示学科名称。默认打开，保持现有看板的大字水印。</summary>
+    public bool ShowTileSubjectLabel { get; set; } = true;
     public BackgroundSettings TileBackground { get; set; } = new();
     public bool SharedBackgroundEnabled { get; set; }
     public BackgroundSettings SharedBackground { get; set; } = new();
@@ -75,6 +77,8 @@ public sealed class BoardSettingsState
     public double NoiseThresholdDb { get; set; } = 60;
     public bool NoiseAlertEnabled { get; set; }
     public bool PauseNoiseWhenMinimized { get; set; }
+    /// <summary>窗口失去焦点时停止噪音监测。最小化已经会失焦，最小化暂停优先显示。</summary>
+    public bool PauseNoiseWhenUnfocused { get; set; }
     public double NoiseAlertVolume { get; set; } = 1;
     public double CalibrationTargetDb { get; set; } = 40;
     public bool ShowWeatherAlerts { get; set; } = true;
@@ -241,7 +245,7 @@ public sealed class AutofillSettings
 /// <summary>学科补全：候选只来自内置清单与设置页手动添加项，程序不会自动收录项目科目。</summary>
 public sealed class SubjectCompletionSettings
 {
-    public bool Enabled { get; set; }
+    public bool Enabled { get; set; } = true;
     // 匹配程度：Loose（1 个字符即提示且允许首字母跳字）、Normal、Strict（只认完整前缀）。
     public string MatchLevel { get; set; } = "Normal";
     public List<SubjectSuggestion> Subjects { get; set; } = [];

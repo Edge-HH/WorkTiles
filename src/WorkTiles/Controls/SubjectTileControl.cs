@@ -317,6 +317,7 @@ public sealed class SubjectTileControl : Grid
         // 预览拖动只更新标题和背景；正文格式写入 RichEditBox 很贵，不能跟在网格/间隔滑块后面跑。
         if (applyBodyDefaults) ApplyBodyDefaults(settings);
         _nameEditor.MaxWidth = Math.Max(240, Width - 150);
+        _watermark.Visibility = settings.ShowTileSubjectLabel ? Visibility.Visible : Visibility.Collapsed;
         // 保持透明画刷以接收双击等命中测试，同时不遮挡桌面透明与圆角透底。
         _frame.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         _backgroundVisual.Apply(settings.TileBackground, BoardTheme.SurfaceBrush, surface: true);

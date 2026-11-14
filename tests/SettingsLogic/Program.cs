@@ -395,11 +395,13 @@ Check(autofillRoundTrip.Autofill.Homework.Isolation == "Global"
     "自动填充设置往返保存");
 Check(autofillRoundTrip.Autofill.Subject.Subjects.All(item => !item.RandomColor), "随机配色开关随学科一起保存");
 BoardSettingsState legacyAutofill = JsonSerializer.Deserialize<BoardSettingsState>("{}")!;
-Check(!legacyAutofill.Autofill.Subject.Enabled && !legacyAutofill.Autofill.Homework.Enabled
+Check(legacyAutofill.Autofill.Subject.Enabled && !legacyAutofill.Autofill.Homework.Enabled
     && legacyAutofill.Autofill.Subject.MatchLevel == "Normal" && legacyAutofill.Autofill.Homework.RecordLevel == "Normal"
     && legacyAutofill.Autofill.Homework.Items.Count == 0
     && legacyAutofill.Autofill.Subject.Subjects.All(item => !item.RandomColor),
-    "旧配置缺少自动填充字段时使用默认值并保持关闭");
+    "旧配置缺少自动填充字段时学科补全默认打开，作业补全保持关闭");
+Check(new BoardSettingsState().ShowTileSubjectLabel, "磁贴右下角学科字样默认显示");
+Check(!new BoardSettingsState().PauseNoiseWhenUnfocused, "窗口失焦停止监测默认关闭");
 Console.WriteLine("PASS: autofill subject library, pinyin matching levels, homework tokenizing, thresholds, isolation, expiry and blocking.");
 
 // 锁定：密码哈希校验、两步验证生效条件、Base32 与 TOTP 时间窗。

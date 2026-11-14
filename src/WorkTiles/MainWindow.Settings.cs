@@ -121,7 +121,7 @@ public sealed partial class MainWindow
         tile.Children.Add(DefaultBodyFontPicker());
         tile.Children.Add(Toggle("正文默认粗体", _settings.TileBodyBold, value => _settings.TileBodyBold = value, TileBodyStyleChanged, read: () => _settings.TileBodyBold));
         tile.Children.Add(Toggle("正文默认斜体", _settings.TileBodyItalic, value => _settings.TileBodyItalic = value, TileBodyStyleChanged, read: () => _settings.TileBodyItalic));
-        tile.Children.Add(Toggle("仅粘贴纯文本", _settings.PastePlainTextOnly, value => _settings.PastePlainTextOnly = value, read: () => _settings.PastePlainTextOnly));
+        tile.Children.Add(Toggle("右下角显示学科字样", _settings.ShowTileSubjectLabel, value => _settings.ShowTileSubjectLabel = value, read: () => _settings.ShowTileSubjectLabel));
         tile.Children.Add(Note("默认正文样式用于新建和尚未单独设置格式的正文；已有的局部字体、粗体、斜体、颜色与高光不会被覆盖。开启纯文本粘贴后，Ctrl+V 和右键粘贴都会移除来源格式。"));
         tile.Children.Add(BackgroundEditor(_settings.TileBackground, () => true, () => true, surface: true, scope: MediaScope.Tile));
         StackPanel backgrounds = SettingsStack();
@@ -174,6 +174,9 @@ public sealed partial class MainWindow
         ((StackPanel)NoiseSettingsCard.Child).Children.Insert(2,
             Toggle("最小化时暂停监测", _settings.PauseNoiseWhenMinimized, value =>
             { _settings.PauseNoiseWhenMinimized = value; RefreshNoiseSuspension(); }, read: () => _settings.PauseNoiseWhenMinimized));
+        ((StackPanel)NoiseSettingsCard.Child).Children.Insert(3,
+            Toggle("窗口失焦时停止监测", _settings.PauseNoiseWhenUnfocused, value =>
+            { _settings.PauseNoiseWhenUnfocused = value; RefreshNoiseSuspension(); }, read: () => _settings.PauseNoiseWhenUnfocused));
         RegisterSettingsPage("ComponentsWeather", ComponentSettingsPanel, WeatherSettingsCard, "天气", "选择天气地区并查看预警。");
         RegisterSettingsPage("ComponentsNoise", ComponentSettingsPanel, NoiseSettingsCard, "噪音检测", "设置麦克风检测、报警与校准。");
         AutofillSettingsPanel.Children.Clear();
