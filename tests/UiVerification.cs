@@ -177,6 +177,14 @@ public sealed partial class MainWindow
                 english.Entries[0].Attachments.Add(new AttachmentItem { Name = "attachment.png", Kind = "图片", Path = _projectStore.CopyAttachment(project.Id, imagePath), FrameWidth = 260, AspectRatio = 260d / 120, Scale = 1.3, Rotation = 90, OffsetX = 10, PositionY = 8 });
                 BuildTiles(); EnterEditing(); await NextLayoutAsync();
                 Check(ProjectCommands.Visibility == Visibility.Visible && ProjectNameText.Text == project.Name, "project commands visible in editor");
+                Check(Title == "WorkTiles", "window title is only WorkTiles");
+                List<string> fileMenu = FileMenuFlyout.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).ToList();
+                Check(fileMenu.SequenceEqual(["新建", "重命名", "删除", "保存", "导入", "导出"]),
+                    "save sits above import and export (" + string.Join(" / ", fileMenu) + ")");
+                NavigationViewItem menuBarNav = WindowNavigationGroup.MenuItems.OfType<NavigationViewItem>().First(item => Equals(item.Content, "菜单栏"));
+                NavigationViewItem windowNav = WindowNavigationGroup.MenuItems.OfType<NavigationViewItem>().First(item => Equals(item.Content, "窗口"));
+                Check(menuBarNav.Icon is FluentIcon menuIcon && windowNav.Icon is FluentIcon windowIcon && menuIcon.Symbol == windowIcon.Symbol,
+                    "menu bar settings use the same icon as window settings");
                 var editor = FindVisuals<RichEditBox>(BoardCanvas).Last();
                 editor.IsReadOnly = false;
                 editor.Document.Selection.SetRange(0, 2);
@@ -1616,6 +1624,9 @@ public sealed partial class MainWindow
             repoLinks.Any(link => link.NavigateUri?.Host == "github.com") &&
             repoLinks.Any(link => link.NavigateUri?.Host == "gitee.com"),
             "About lists GitHub and Gitee repository cards");
+        ShowSettingsPage("Exam"); await NextLayoutAsync();
+        check(FindVisuals<TextBlock>(_settingsPages["Exam"].Content).Any(text => text.Text == "更进阶的考试功能请使用ExamAware2"),
+            "exam page points to ExamAware2");
         ElementTheme originalAboutTheme = RootShell.RequestedTheme;
         RootShell.RequestedTheme = ElementTheme.Light;
         await NextLayoutAsync();

@@ -20,6 +20,7 @@ public sealed partial class MainWindow
     private UIElement BuildExamSettingsPage()
     {
         StackPanel page = SettingsStack();
+        page.Children.Add(Note("更进阶的考试功能请使用ExamAware2"));
         page.Children.Add(Note("服务器下发的启用考试计划优先显示；未连接集控或服务器没有启用计划时，使用下面的本机安排。本机安排只保存在这台大屏上。"));
         _localExamServerStatus = new TextBlock
         {
