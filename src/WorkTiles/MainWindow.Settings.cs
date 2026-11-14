@@ -1136,7 +1136,8 @@ public sealed partial class MainWindow
         _refreshSettingAvailability.Add(() => hideTime.IsEnabled = animation.IsEnabled = _settings.ToolbarAutoHide);
         panel.Children.Add(Toggle("无字模式", _settings.ToolbarIconOnly, value => _settings.ToolbarIconOnly = value, read: () => _settings.ToolbarIconOnly));
         panel.Children.Add(Range("大小", .6, 2, _settings.ToolbarScale, value => _settings.ToolbarScale = value, read: () => _settings.ToolbarScale));
-        panel.Children.Add(Range("圆角", 0, 60, _settings.ToolbarRadius, value => _settings.ToolbarRadius = value, read: () => _settings.ToolbarRadius));
+        panel.Children.Add(Range("圆角", 0, ToolbarChrome.MaxRoundness, ToolbarChrome.NormalizeRoundness(_settings.ToolbarRadius),
+            value => _settings.ToolbarRadius = ToolbarChrome.NormalizeRoundness(value), read: () => ToolbarChrome.NormalizeRoundness(_settings.ToolbarRadius)));
         panel.Children.Add(Range("边框粗细", 0, 20, _settings.ToolbarBorderThickness,
             value => _settings.ToolbarBorderThickness = value, ToolbarBorderChanged, read: () => _settings.ToolbarBorderThickness));
         ColorPicker borderColor = new()
@@ -1416,6 +1417,13 @@ public sealed partial class MainWindow
         }
     }
 
+    private double ToolbarPixelRadius(double scale)
+    {
+        double padding = 7 * scale;
+        double cross = ToolbarCrossSize(ToolbarContentSize(scale), padding);
+        return ToolbarChrome.CornerRadius(_settings.ToolbarRadius, cross, cross);
+    }
+
     private void ApplyToolbarSettings()
     {
         if (FloatingToolbar is null) return;
@@ -1428,6 +1436,7 @@ public sealed partial class MainWindow
         MainToolbarScroll.VerticalScrollBarVisibility = InkToolbarScroll.VerticalScrollBarVisibility = vertical ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
         double scale = Math.Clamp(_settings.ToolbarScale, .6, 2);
         double toolbarPadding = 7 * scale;
+        double pixelRadius = ToolbarPixelRadius(scale);
         // 画笔栏按钮比主控制窗小一号，用内边距补足差值；两块窗口的高（竖版为宽）因此完全一致。
         double inkToolbarPadding = Math.Max(0,
             (ToolbarCrossSize(ToolbarContentSize(scale), toolbarPadding) - 40 * scale) / 2 - IslandBorderThickness);
@@ -1464,10 +1473,10 @@ public sealed partial class MainWindow
             if (pair.Icon is FluentIcon glyph) glyph.FontSize = 18 * scale;
             double buttonWidth = double.IsNaN(button.Width) ? 88 * scale : button.Width;
             double buttonHeight = double.IsNaN(button.Height) ? 64 * scale : button.Height;
-            button.CornerRadius = MatchToolbarButtonRadius(_settings.ToolbarRadius, toolbarPadding, buttonWidth, buttonHeight);
+            button.CornerRadius = MatchToolbarButtonRadius(pixelRadius, toolbarPadding, buttonWidth, buttonHeight);
         }
         foreach (var button in ToolbarItems.Children.OfType<ButtonBase>().Where(button => !_toolbarLabels.ContainsKey(button)))
-            button.CornerRadius = MatchToolbarButtonRadius(_settings.ToolbarRadius, toolbarPadding, 44, 44);
+            button.CornerRadius = MatchToolbarButtonRadius(pixelRadius, toolbarPadding, 44, 44);
         ToolbarItems.Spacing = 4 * scale;
         FullScreenIcon.FontSize = 18 * scale;
         foreach (var button in GlobalInkTools.Children.OfType<ButtonBase>())
@@ -1480,14 +1489,14 @@ public sealed partial class MainWindow
             button.HorizontalContentAlignment = HorizontalAlignment.Center;
             button.VerticalContentAlignment = VerticalAlignment.Center;
             // 与主控制窗按钮同一规则：圆角随控制窗圆角并扣除画笔栏内边距，保持与外框同心。
-            button.CornerRadius = MatchToolbarButtonRadius(_settings.ToolbarRadius, inkToolbarPadding, iconButtonSize, iconButtonSize);
+            button.CornerRadius = MatchToolbarButtonRadius(pixelRadius, inkToolbarPadding, iconButtonSize, iconButtonSize);
             if (button.Content is FluentIcon glyph) glyph.FontSize = 20 * scale;
             if (button.Content is Viewbox { Child: IconSourceElement } vectorIcon)
                 vectorIcon.Width = vectorIcon.Height = 20 * scale;
         }
         foreach (var swatch in _inkColors.Children.OfType<ColorSwatchButton>()) swatch.Width = swatch.Height = 32 * scale;
         foreach (var preset in _inkWidths.Children.OfType<InkWidthPresetButton>()) preset.ApplyScale(scale);
-        FloatingToolbar.CornerRadius = GlobalInkToolbar.CornerRadius = new CornerRadius(_settings.ToolbarRadius);
+        FloatingToolbar.CornerRadius = GlobalInkToolbar.CornerRadius = new CornerRadius(pixelRadius);
         FloatingToolbar.Padding = new Thickness(toolbarPadding);
         GlobalInkToolbar.Padding = new Thickness(inkToolbarPadding);
         ApplyToolbarBorder(FloatingToolbar);

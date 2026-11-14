@@ -450,12 +450,14 @@ public sealed partial class MainWindow
         double scale = Math.Clamp(_settings.ToolbarScale, .6, 2);
         double padding = 7 * scale;
         double button = 40 * scale;
-        double radius = MatchToolbarButtonRadius(_settings.ToolbarRadius, padding, button, button).TopLeft;
+        double outer = button + padding * 2 + IslandBorderThickness * 2;
+        double pixelRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, outer, outer);
+        double radius = MatchToolbarButtonRadius(pixelRadius, padding, button, button).TopLeft;
         _desktopCommands.ApplyToolbarChrome(
             CreateToolbarBackground(),
             CreateToolbarBorder(_settings.ToolbarBorderColor),
             IslandBorderThickness,
-            _settings.ToolbarRadius,
+            pixelRadius,
             radius,
             button,
             16 * scale,

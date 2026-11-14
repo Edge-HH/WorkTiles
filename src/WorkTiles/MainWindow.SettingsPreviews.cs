@@ -900,6 +900,7 @@ public sealed partial class MainWindow
         _buildingPreviewRefreshers?.Add(() => background.Apply(UseSharedBackground ? _settings.SharedBackground : _settings.BoardBackground, BoardTheme.SurfaceBrush));
         viewport.Children.Add(background);
         StackPanel buttons = new() { Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal, Spacing = 4 * scale };
+        double frameRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, toolbarWidth, toolbarHeight);
         foreach (var (glyph, label) in new[] { (FluentGlyphs.Edit, "编辑看板"), (FluentGlyphs.Settings, "设置"), (FluentGlyphs.FullScreen, "进入全屏") })
         {
             StackPanel content = new() { Orientation = Orientation.Vertical,
@@ -915,12 +916,12 @@ public sealed partial class MainWindow
             double buttonHeight = (_settings.ToolbarIconOnly ? 44 : 64) * scale;
             buttons.Children.Add(new Button { Width = buttonWidth,
                 Height = buttonHeight, Padding = new Thickness(6 * scale),
-                CornerRadius = MatchToolbarButtonRadius(_settings.ToolbarRadius, 7 * scale, buttonWidth, buttonHeight),
+                CornerRadius = MatchToolbarButtonRadius(frameRadius, 7 * scale, buttonWidth, buttonHeight),
                 Style = SettingsButton.Style, Content = content, IsTabStop = false });
         }
         viewport.Children.Add(new Border
         {
-            Name = "ToolbarPreviewFrame", Child = buttons, Padding = new Thickness(7 * scale), CornerRadius = new CornerRadius(_settings.ToolbarRadius),
+            Name = "ToolbarPreviewFrame", Child = buttons, Padding = new Thickness(7 * scale), CornerRadius = new CornerRadius(frameRadius),
             Background = CreateToolbarBackground(),
             BorderBrush = CreateToolbarBorder(_settings.ToolbarBorderColor), BorderThickness = new Thickness(previewBorder),
             HorizontalAlignment = position.EndsWith("Left") ? HorizontalAlignment.Left : position.EndsWith("Right") ? HorizontalAlignment.Right : HorizontalAlignment.Center,

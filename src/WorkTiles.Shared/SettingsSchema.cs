@@ -126,7 +126,7 @@ public static class SettingsSchema
         new("ToolbarHideAnimation", "AppearanceToolbar", "隐藏动画", SettingKind.Enum, "Fade", Options: [new("Fade", "渐入渐出"), new("Fly", "飞出")], EnableWhen: "ToolbarAutoHide"),
         new("ToolbarIconOnly", "AppearanceToolbar", "无字模式", SettingKind.Bool, true),
         new("ToolbarScale", "AppearanceToolbar", "大小", SettingKind.Number, 1, 0.6, 2, 0.05, Unit: "×"),
-        new("ToolbarRadius", "AppearanceToolbar", "圆角", SettingKind.Number, 14, 0, 60, 1, Unit: "px"),
+        new("ToolbarRadius", "AppearanceToolbar", "圆角", SettingKind.Number, 14, 0, 20, 1),
         new("ToolbarBorderThickness", "AppearanceToolbar", "边框粗细", SettingKind.Number, 1, 0, 20, 0.5, Unit: "px"),
         new("ToolbarBorderColor", "AppearanceToolbar", "边框颜色", SettingKind.Color, ""),
         new("ToolbarHorizontalInset", "AppearanceToolbar", "距左右边框", SettingKind.Number, 24, 0, 200, 1, Unit: "px", When: "!ToolbarPosition$=Center"),

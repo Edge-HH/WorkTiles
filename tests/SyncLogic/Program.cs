@@ -434,16 +434,16 @@ try
     await layoutConnected.Task.WaitAsync(TimeSpan.FromSeconds(10));
 
     libB.Settings.GridColor = "#11223344";
-    Check((await WebPatch(r0, new() { ["ToolbarRadius"] = 30 })).IsSuccessStatusCode, "网页按键修改控制窗圆角");
+    Check((await WebPatch(r0, new() { ["ToolbarRadius"] = 16 })).IsSuccessStatusCode, "网页按键修改控制窗圆角");
     await syncB.SynchronizeAsync(libB, Hooks("大屏B"));
     var both = JsonNode.Parse((await ServerLayout()).PayloadJson)!;
-    Check(libB.Settings.GridColor == "#11223344" && libB.Settings.ToolbarRadius == 30 && both["GridColor"]!.GetValue<string>() == "#11223344" && both["ToolbarRadius"]!.GetValue<double>() == 30,
+    Check(libB.Settings.GridColor == "#11223344" && libB.Settings.ToolbarRadius == 16 && both["GridColor"]!.GetValue<string>() == "#11223344" && both["ToolbarRadius"]!.GetValue<double>() == 16,
         "大屏改网格颜色、网页改圆角：两边改动都保留");
     var echo = await layoutEvent.Task.WaitAsync(TimeSpan.FromSeconds(10));
     Check(echo.SourceDeviceId == libB.Settings.CloudSync.DeviceId && echo.Keys!.SequenceEqual(["GridColor"]), "布局通知带上修改来源设备与改动的键");
     layoutEvents.Stop();
     await syncC.SynchronizeAsync(libC, Hooks("大屏C"));
-    Check(libC.Settings.GridColor == "#11223344" && libC.Settings.ToolbarRadius == 30 && syncC.LastAppliedLayoutKeys.Order().SequenceEqual(["GridColor", "ToolbarRadius"]), "其他大屏只应用改动的键");
+    Check(libC.Settings.GridColor == "#11223344" && libC.Settings.ToolbarRadius == 16 && syncC.LastAppliedLayoutKeys.Order().SequenceEqual(["GridColor", "ToolbarRadius"]), "其他大屏只应用改动的键");
 
     // 同一个键两边都改：以服务器为准并提示
     libC.Settings.TileTitleSize = 50;

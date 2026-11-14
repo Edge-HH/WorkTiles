@@ -320,7 +320,8 @@ public sealed partial class MainWindow
         double contentSize = ToolbarContentSize(scale);
         double crossSize = ToolbarCrossSize(contentSize, padding);
         Brush background = CreateToolbarBackground();
-        CornerRadius corner = new(_settings.ToolbarRadius);
+        double pixelRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, crossSize, crossSize);
+        CornerRadius corner = new(pixelRadius);
         foreach (Border island in new[] { RichTextIsland, ZoomIsland })
         {
             island.Padding = new Thickness(padding);
@@ -494,7 +495,9 @@ public sealed partial class MainWindow
         button.Padding = new Thickness(6 * scale);
         button.HorizontalContentAlignment = HorizontalAlignment.Center;
         button.VerticalContentAlignment = VerticalAlignment.Center;
-        button.CornerRadius = MatchToolbarButtonRadius(_settings.ToolbarRadius, padding, size, size);
+        double cross = ToolbarCrossSize(contentSize, padding);
+        double pixelRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, cross, cross);
+        button.CornerRadius = MatchToolbarButtonRadius(pixelRadius, padding, size, size);
         if (icon is FluentIcon fluent) fluent.FontSize = 18 * scale;
         else if (icon is FontIcon font) font.FontSize = 15 * scale;
         else if (icon is TextBlock text) text.FontSize = 14 * scale;

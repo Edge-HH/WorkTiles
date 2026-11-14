@@ -658,6 +658,10 @@ Check(DesktopTileLayout.Arrange([], desktopArea).Count == 0, "没有磁贴时不
 List<string> merged = DesktopTileLayout.MergeOrder(["语文", "已删除", "数学"], ["数学", "英语", "语文"]);
 Check(merged.SequenceEqual(["语文", "数学", "英语"]), "已保存的顺序保留还在的科目，新科目接在末尾");
 Check(DesktopTileLayout.MergeOrder(["数学", "数学"], ["数学"]).SequenceEqual(["数学"]), "同名科目按出现次数对应，多出来的保存项丢掉");
+Check(ToolbarChrome.CornerRadius(0, 120, 48) == 0, "圆角 0 是直角");
+Check(ToolbarChrome.CornerRadius(20, 80, 40) == 20 && ToolbarChrome.CornerRadius(20, 200, 100) == 50, "圆角 20 在任何尺寸都是短边一半的胶囊");
+Check(Math.Abs(ToolbarChrome.CornerRadius(10, 80, 40) / 40 - ToolbarChrome.CornerRadius(10, 200, 100) / 100) < 0.001, "同一档位的圆角比例不随控制窗大小变化");
+Check(ToolbarChrome.CornerRadius(60, 40, 40) == 20 && ToolbarChrome.NormalizeRoundness(60) == 20, "超过 20 的旧数值按胶囊处理");
 Check(MenuBarPolicy.ShowChrome(false, false) == false, "预览关闭时查看模式不显示菜单栏");
 Check(MenuBarPolicy.ShowChrome(false, true) && MenuBarPolicy.ShowChrome(true, false), "编辑模式或打开预览显示时保留菜单栏");
 Check(!MenuBarPolicy.ShowCommands(false, false) && !MenuBarPolicy.ShowCommands(true, true) && MenuBarPolicy.ShowCommands(true, false),

@@ -1453,7 +1453,7 @@ public sealed partial class MainWindow
         {
             _settings.ToolbarScale = 1;
             _settings.ToolbarRadius = radius; ApplyToolbarSettings(); await NextLayoutAsync();
-            double expected = Math.Clamp(radius - GlobalInkToolbar.Padding.Left, 0, 20);
+            double expected = Math.Clamp(ToolbarChrome.CornerRadius(radius, ToolbarCrossSize(ToolbarContentSize(1), 7), ToolbarCrossSize(ToolbarContentSize(1), 7)) - GlobalInkToolbar.Padding.Left, 0, 20);
             check(new[] { _inkPen, _inkEraser }.All(button => Math.Abs(button.CornerRadius.TopLeft - expected) < .01),
                 $"ink icon button corners follow the control window radius {radius} ({_inkPen.CornerRadius.TopLeft:0.##})");
         }
@@ -1576,7 +1576,8 @@ public sealed partial class MainWindow
                     ? Math.Abs(FullScreenButton.ActualWidth - 44) < 1 && FullScreenButton.ActualHeight > 44 && labelRect.Top >= iconRect.Bottom
                     : Math.Abs(FullScreenButton.ActualHeight - 44) < 1 && FullScreenButton.ActualWidth > 44 && labelRect.Left >= iconRect.Right,
                 position + " fullscreen hint grows only along the toolbar axis");
-            double expectedRadius = Math.Min(60 - 7, Math.Min(FullScreenButton.ActualWidth, FullScreenButton.ActualHeight) / 2);
+            double outerRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, ToolbarCrossSize(ToolbarContentSize(1), 7), ToolbarCrossSize(ToolbarContentSize(1), 7));
+            double expectedRadius = Math.Clamp(outerRadius - 7, 0, Math.Min(FullScreenButton.ActualWidth, FullScreenButton.ActualHeight) / 2);
             check(Math.Abs(FullScreenButton.CornerRadius.TopLeft - expectedRadius) < 1,
                 position + " fullscreen hint corner follows the maximum toolbar radius without clipping");
             await SaveVisualAsync(RootShell, Path.Combine(output, $"fullscreen-hint-{position}.png"), (int)RootShell.ActualWidth, (int)RootShell.ActualHeight);
@@ -1913,10 +1914,11 @@ public sealed partial class MainWindow
         positionPicker.StartBringIntoView(); await NextLayoutAsync();
         await SaveVisualAsync(positionPicker, Path.Combine(output, "toolbar-position-picker.png"), 640, 226);
         _settings.ToolbarScale = originalToolbarScale; _settings.ToolbarIconOnly = originalIconOnly;
-        _settings.ToolbarPosition = "CenterLeft"; _settings.ToolbarRadius = 37; ApplyExtendedSettings(); await NextLayoutAsync();
+        _settings.ToolbarPosition = "CenterLeft"; _settings.ToolbarRadius = 20; ApplyExtendedSettings(); await NextLayoutAsync();
         var toolbarPreview = FindVisuals<Border>(_appearancePreviews["Toolbar"]).Single(border => border.Name == "ToolbarPreviewFrame");
-        check(toolbarPreview.HorizontalAlignment == HorizontalAlignment.Left && toolbarPreview.CornerRadius.TopLeft == 37,
-            "toolbar preview follows position and corner radius");
+        double previewCapsule = Math.Min(toolbarPreview.ActualWidth, toolbarPreview.ActualHeight) / 2;
+        check(toolbarPreview.HorizontalAlignment == HorizontalAlignment.Left && Math.Abs(toolbarPreview.CornerRadius.TopLeft - previewCapsule) < 1,
+            "toolbar preview follows position and uses a capsule at the maximum radius");
         _settings.ToolbarRadius = 14; _settings.ToolbarPosition = "BottomCenter";
         _settings.ToolbarAutoHide = true; _settings.ToolbarAutoHideSeconds = 1; _settings.ToolbarHideAnimation = "Fade";
         ApplyExtendedSettings(); ShowBoard(); await NextLayoutAsync();
