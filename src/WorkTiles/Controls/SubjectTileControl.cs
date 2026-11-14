@@ -247,6 +247,9 @@ public sealed class SubjectTileControl : Grid
 
     public bool IsEditing => _isEditing;
 
+    /// <summary>标题编辑框。查看模式验收用来确认焦点和输入外观都已收起。</summary>
+    internal TextBox TitleEditor => _nameEditor;
+
     /// <summary>桌面磁贴拖动标题时通知宿主换顺序，而不是改作业板坐标。</summary>
     public event Action? DesktopDragStarted;
     public event Action<double, double>? DesktopDragDelta;
@@ -379,6 +382,9 @@ public sealed class SubjectTileControl : Grid
 
     public void SetEditing(bool editing)
     {
+        // 先把焦点移出磁贴，再拆掉作业编辑框。否则焦点会落到标题框上，
+        // 查看模式里就剩一个关不掉的输入框。
+        if (_isEditing && !editing) ReleaseContainedFocus();
         _isEditing = editing;
         if (!editing) HideAutofill();
         ApplyEditChrome();
@@ -391,8 +397,48 @@ public sealed class SubjectTileControl : Grid
         _editingTools.Visibility = _isEditing ? Visibility.Visible : Visibility.Collapsed;
         foreach (Thumb thumb in Children.OfType<Thumb>())
             thumb.Visibility = _isEditing ? Visibility.Visible : Visibility.Collapsed;
-        _nameEditor.IsReadOnly = !_isEditing;
-        _nameEditor.IsHitTestVisible = _isEditing;
+        ApplyInlineEditorChrome(_nameEditor, _isEditing);
+    }
+
+    /// <summary>
+    /// 查看模式的标题不能再接收焦点，也不能留下聚焦时的白底和强调色下划线。
+    /// 主题画刷写在控件资源里，视觉状态切回普通态时才会读到透明色。
+    /// </summary>
+    private static void ApplyInlineEditorChrome(TextBox editor, bool editing)
+    {
+        editor.IsReadOnly = !editing;
+        editor.IsTabStop = editing;
+        editor.IsHitTestVisible = editing;
+        if (editing)
+        {
+            foreach (string key in InlineEditorChromeKeys)
+                editor.Resources.Remove(key);
+            return;
+        }
+
+        SolidColorBrush clear = new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+        foreach (string key in InlineEditorChromeKeys)
+            editor.Resources[key] = clear;
+    }
+
+    private static readonly string[] InlineEditorChromeKeys =
+    [
+        "TextControlBackground",
+        "TextControlBackgroundPointerOver",
+        "TextControlBackgroundFocused",
+        "TextControlBackgroundDisabled",
+        "TextControlBorderBrush",
+        "TextControlBorderBrushPointerOver",
+        "TextControlBorderBrushFocused",
+        "TextControlBorderBrushDisabled"
+    ];
+
+    private void ReleaseContainedFocus()
+    {
+        _nameEditor.IsTabStop = false;
+        if (!ContainsFocus() || XamlRoot?.Content is not UIElement root) return;
+        if (!root.Focus(FocusState.Programmatic))
+            FocusManager.TryMoveFocus(FocusNavigationDirection.Next);
     }
 
     private bool ContainsFocus()
@@ -514,14 +560,21 @@ public sealed class SubjectTileControl : Grid
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            RichEditBox editor = CreateRichEditor(homework);
+            // 序号和正文第一行共用字号、字体和上沿。正文默认在编辑框里垂直居中，序号会显得偏高。
+            editor.VerticalContentAlignment = VerticalAlignment.Top;
             row.Children.Add(new TextBlock
             {
-                Text = $"{index}.", FontSize = 20,
+                Text = $"{index}.",
+                FontSize = editor.FontSize,
+                FontFamily = editor.FontFamily,
+                FontWeight = editor.FontWeight,
+                FontStyle = editor.FontStyle,
                 Foreground = BoardTheme.TextBrush,
-                Margin = new Thickness(0, 4, 0, 0)
+                VerticalAlignment = VerticalAlignment.Top,
+                Margin = new Thickness(0, editor.Padding.Top, 6, 0)
             });
 
-            RichEditBox editor = CreateRichEditor(homework);
             Grid.SetColumn(editor, 1);
             row.Children.Add(editor);
 
@@ -591,7 +644,9 @@ public sealed class SubjectTileControl : Grid
             MinHeight = 42,
             TextWrapping = TextWrapping.Wrap,
             IsReadOnly = !_isEditing,
+            IsTabStop = _isEditing,
             IsHitTestVisible = _isEditing,
+            VerticalContentAlignment = VerticalAlignment.Top,
             // 空作业只显示灰色提示（颜色见 Themes/ThemeResources.xaml 的 TextControlPlaceholderForeground）；
             // 查看模式没有输入入口，不再显示提示文字。
             PlaceholderText = _isEditing ? HomeworkState.PlaceholderText : string.Empty,

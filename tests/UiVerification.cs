@@ -5,6 +5,7 @@ using Microsoft.UI.Windowing;
 using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -916,6 +917,16 @@ public sealed partial class MainWindow
         _appWindow!.Resize(VerificationWindowSize());
         ShowBoard(); EnterEditing(); ApplyExtendedSettings(); await NextLayoutAsync();
         await FocusEditorAsync();
+        RichEditBox alignedEditor = FindVisuals<RichEditBox>(BoardCanvas).First();
+        if (alignedEditor.Parent is Grid indexRow && indexRow.Children.OfType<TextBlock>().FirstOrDefault() is TextBlock indexLabel)
+        {
+            Rect indexBounds = Bounds(indexLabel);
+            Rect editorBounds = Bounds(alignedEditor);
+            check(Math.Abs(indexBounds.Top - editorBounds.Top) <= 2,
+                $"homework index lines up with the editor ({indexBounds.Top:0.#} / {editorBounds.Top:0.#})");
+        }
+        check(RichTextToolbar.HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled || RichTextToolbar.ScrollableWidth > 8,
+            $"rich text toolbar hides its scrollbar when the tools fit ({RichTextToolbar.ScrollableWidth:0.#})");
         Rect toolbar = Bounds(FloatingToolbar);
         Rect island = Bounds(RichTextIsland);
         check(RichTextIsland.Visibility == Visibility.Visible, "editing mode hosts the rich text island");
@@ -976,6 +987,16 @@ public sealed partial class MainWindow
         {
             check(slider.Left >= zoom.Left - .5 && slider.Right <= zoom.Right + .5,
                 $"wide window keeps the slider inside the visible island ({slider.Left:0.#}..{slider.Right:0.#} in {zoom.Left:0.#}..{zoom.Right:0.#})");
+            check(ZoomIslandScroll.HorizontalScrollBarVisibility == ScrollBarVisibility.Disabled && ZoomIslandScroll.ScrollableWidth <= 1.5,
+                $"zoom island does not show a scrollbar when it fits ({ZoomIslandScroll.ScrollableWidth:0.#})");
+        }
+        if (_zoomLevelText is not null)
+        {
+            Rect percent = Bounds(_zoomLevelText);
+            double percentMid = (percent.Top + percent.Bottom) / 2;
+            double sliderMid = (slider.Top + slider.Bottom) / 2;
+            check(Math.Abs(percentMid - sliderMid) <= 4,
+                $"zoom slider stays level with the percentage ({percentMid:0.#} / {sliderMid:0.#})");
         }
         double initialZoom = BoardScroller.ZoomFactor;
         Invoke(zoomButtons[2]); await NextLayoutAsync();
@@ -997,7 +1018,16 @@ public sealed partial class MainWindow
             "restoring 100% also moves the slider back");
         // 查看模式：缩放岛收起，但缩放结果保留，作业板仍可平移。
         SetBoardZoom(1.5); await NextLayoutAsync();
+        SubjectTileControl focusedTile = BoardCanvas.Children.OfType<SubjectTileControl>().First();
+        focusedTile.TitleEditor.Focus(FocusState.Programmatic);
+        await NextLayoutAsync();
         FinishEditing(); await NextLayoutAsync();
+        check(focusedTile.TitleEditor.IsReadOnly && !focusedTile.TitleEditor.IsTabStop && !focusedTile.TitleEditor.IsHitTestVisible,
+            "view mode title is no longer an editor");
+        check(FocusManager.GetFocusedElement(focusedTile.XamlRoot) is not TextBox,
+            "leaving edit mode does not leave a tile title focused");
+        check(focusedTile.TitleEditor.Resources["TextControlBackgroundFocused"] is SolidColorBrush titleFill && titleFill.Color.A == 0,
+            "view mode title does not keep the focused input fill");
         check(ZoomIsland.Visibility == Visibility.Collapsed, "view mode hides the zoom island");
         check(Math.Abs(BoardScroller.ZoomFactor - 1.5) < .01 && BoardScroller.ZoomMode == ZoomMode.Enabled,
             $"view mode keeps the applied zoom and stays pannable ({BoardScroller.ZoomFactor:0.##})");

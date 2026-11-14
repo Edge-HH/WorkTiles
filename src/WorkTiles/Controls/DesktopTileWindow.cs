@@ -400,7 +400,11 @@ internal sealed class DesktopCommandWindow
             Text = "100%", FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Center, TextAlignment = TextAlignment.Center
         };
-        _zoomSlider = new Slider { Minimum = 50, Maximum = 200, Value = 100, Width = 100, VerticalAlignment = VerticalAlignment.Center };
+        _zoomSlider = new Slider
+        {
+            Minimum = 50, Maximum = 200, Value = 100, Width = 100, MinHeight = 0,
+            VerticalAlignment = VerticalAlignment.Center
+        };
         _zoomSlider.ValueChanged += (_, _) =>
         {
             if (_writingZoom) return;
@@ -671,12 +675,16 @@ internal sealed class DesktopCommandWindow
             double minSlider = Math.Max(48, button * 1.2);
             double zoomOuter = _editing ? Outer(button * 3 + slider + spacing * 3, _padding, _border) : 0;
             double formatInner = 0;
+            bool formatClipped = false;
             if (_editing && _formatting is not null)
             {
                 _formatting.Measure(new Size(double.PositiveInfinity, button));
-                formatInner = _formatting.DesiredSize.Width;
-                if (formatInner < 1 || !double.IsFinite(formatInner)) formatInner = button * 8;
-                formatInner = Math.Min(formatInner, button * 12);
+                double natural = _formatting.DesiredSize.Width;
+                if (natural < 1 || !double.IsFinite(natural)) natural = button * 8;
+                double cap = button * 12;
+                // 放得下时多留两个像素，否则滚动条会在内容已经完整可见时冒出来。
+                formatClipped = natural > cap + 0.5;
+                formatInner = formatClipped ? cap : Math.Min(cap, natural + IslandScroll.FitSlack);
             }
             double formatOuter = formatInner > 0 ? Outer(formatInner, _padding, _border) : 0;
             double minFormat = Outer(button * 3, _padding, _border);
@@ -709,6 +717,10 @@ internal sealed class DesktopCommandWindow
             {
                 _formatScroll.Width = Math.Max(0, formatOuter - _padding * 2 - _border * 2);
                 _formatScroll.Height = Math.Max(0, height - _padding * 2 - _border * 2);
+                _formatScroll.HorizontalScrollBarVisibility = formatClipped ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+                _formatScroll.HorizontalScrollMode = formatClipped ? ScrollMode.Enabled : ScrollMode.Disabled;
+                _formatScroll.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+                _formatScroll.VerticalScrollMode = ScrollMode.Disabled;
             }
             _commands.WidthDip = commandOuter;
             _commands.HeightDip = height;

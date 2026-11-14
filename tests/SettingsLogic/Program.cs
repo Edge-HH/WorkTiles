@@ -658,6 +658,11 @@ Check(DesktopTileLayout.Arrange([], desktopArea).Count == 0, "没有磁贴时不
 List<string> merged = DesktopTileLayout.MergeOrder(["语文", "已删除", "数学"], ["数学", "英语", "语文"]);
 Check(merged.SequenceEqual(["语文", "数学", "英语"]), "已保存的顺序保留还在的科目，新科目接在末尾");
 Check(DesktopTileLayout.MergeOrder(["数学", "数学"], ["数学"]).SequenceEqual(["数学"]), "同名科目按出现次数对应，多出来的保存项丢掉");
+Check(IslandScroll.Slot(200, 400) == 202, "放得下的浮岛多留两个像素，避免滚动条凭空出现");
+Check(IslandScroll.Slot(200, 201) == 201, "可用空间不够多留时槽位不超过可用空间");
+Check(!IslandScroll.Clipped(200, IslandScroll.Slot(200, 400)), "放得下时不显示滚动条");
+Check(IslandScroll.Slot(200, 120) == 120 && IslandScroll.Clipped(200, 120), "放不下时收窄到可用空间并允许滚动");
+Check(IslandScroll.Slot(double.NaN, 80) == 80 && IslandScroll.Slot(40, double.PositiveInfinity) == 42, "无效尺寸按放得下或没有空间处理");
 Check(DesktopTileLayout.MergeOrder(null, ["英语", "数学"]).SequenceEqual(["英语", "数学"]), "没有保存过顺序时沿用当前科目顺序");
 List<string> desktopNames = ["语文", "数学", "英语"];
 Check(DesktopTileLayout.RenameAt(desktopNames, 1, "数学", "代数") && desktopNames.SequenceEqual(["语文", "代数", "英语"]),

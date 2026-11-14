@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using WorkTiles.Controls;
+using WorkTiles.Services;
 using Windows.Foundation;
 
 namespace WorkTiles;
@@ -330,13 +331,14 @@ public sealed partial class MainWindow
         // 竖版控制窗较窄，浮岛改成与控制窗等宽、竖向排布；横版控制窗则等高、横向排布。
         RichTextIsland.Width = ZoomIsland.Width = vertical ? crossSize : double.NaN;
         RichTextIsland.Height = ZoomIsland.Height = vertical ? double.NaN : crossSize;
-        RichTextToolbar.HorizontalScrollBarVisibility = vertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
-        RichTextToolbar.VerticalScrollBarVisibility = vertical ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
-        ZoomIslandScroll.HorizontalScrollBarVisibility = vertical ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
-        ZoomIslandScroll.VerticalScrollBarVisibility = vertical ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        // 先按放得下处理。摆位发现空间不够时再打开对应方向的滚动条，避免差一像素就出现滑条。
+        ApplyIslandScroll(RichTextIsland, vertical, clipped: false);
+        ApplyIslandScroll(ZoomIsland, vertical, clipped: false);
         // 缩放岛与控制窗同向排布：竖版控制窗时缩放按钮也竖向叠放，宽度才不会超出浮岛。
         ZoomIslandItems.Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal;
         ZoomIslandItems.Spacing = 4 * scale;
+        ZoomIslandItems.VerticalAlignment = VerticalAlignment.Center;
+        ZoomIslandItems.HorizontalAlignment = HorizontalAlignment.Center;
         foreach (var (button, icon, label) in _zoomIslandButtons)
             StyleIslandButton(button, icon, label, scale, padding, contentSize, vertical);
         // 滑条跟随控制窗排布：横版控制窗留出拖动长度，竖版控制窗改成同样竖排的滑条，
@@ -344,8 +346,13 @@ public sealed partial class MainWindow
         if (_zoomSlider is not null)
         {
             _zoomSlider.Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal;
+            _zoomSlider.MinWidth = 0;
+            _zoomSlider.MinHeight = 0;
             _zoomSlider.Width = vertical ? contentSize : Math.Max(80, 100 * scale);
             _zoomSlider.Height = vertical ? Math.Max(59, 80 * scale) : Math.Min(contentSize, 32 * scale);
+            // 横版滑条比按钮矮，居中后轨道才和百分比文字在同一高度。
+            _zoomSlider.VerticalAlignment = VerticalAlignment.Center;
+            _zoomSlider.HorizontalAlignment = HorizontalAlignment.Center;
         }
         ApplyRichTextIslandAppearance(vertical, scale, padding, contentSize);
     }
@@ -552,7 +559,8 @@ public sealed partial class MainWindow
             {
                 double extent = vertical ? size.Height : size.Width;
                 double available = Math.Max(0, before ? cursor - limit : limit - cursor);
-                double placed = Math.Min(extent, available);
+                double placed = IslandScroll.Slot(extent, available);
+                bool clipped = IslandScroll.Clipped(extent, placed);
                 double rendered = Math.Max(placed, floor);
                 if (vertical)
                 {
@@ -566,12 +574,41 @@ public sealed partial class MainWindow
                     double cross = Math.Min(size.Height, Math.Max(0, control.Height));
                     PlaceIsland(island, before ? cursor - rendered : cursor, control.Top + (control.Height - cross) / 2, placed, cross);
                 }
+                ApplyIslandScroll(island, vertical, clipped);
                 cursor = before ? cursor - rendered - gap : cursor + rendered + gap;
             }
         }
         Place(before, true, vertical ? control.Top - gap : control.Left - gap, vertical ? insetY : insetX);
         Place(after, false, vertical ? control.Bottom + gap : control.Right + gap,
             vertical ? windowHeight - insetY : windowWidth - insetX);
+    }
+
+    /// <summary>
+    /// 只有浮岛被收窄到放不下内容时才打开滚动条。放得下时滚动条会占掉固定高度，滑条和文字就不再对齐。
+    /// </summary>
+    private void ApplyIslandScroll(FrameworkElement island, bool vertical, bool clipped)
+    {
+        ScrollViewer? viewer = ReferenceEquals(island, ZoomIsland) ? ZoomIslandScroll
+            : ReferenceEquals(island, RichTextIsland) ? RichTextToolbar
+            : ReferenceEquals(island, GlobalInkToolbar) ? InkToolbarScroll
+            : null;
+        if (viewer is null) return;
+        ScrollBarVisibility bar = clipped ? ScrollBarVisibility.Auto : ScrollBarVisibility.Disabled;
+        ScrollMode mode = clipped ? ScrollMode.Enabled : ScrollMode.Disabled;
+        if (vertical)
+        {
+            viewer.HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
+            viewer.HorizontalScrollMode = ScrollMode.Disabled;
+            viewer.VerticalScrollBarVisibility = bar;
+            viewer.VerticalScrollMode = mode;
+            return;
+        }
+
+        viewer.VerticalScrollBarVisibility = ScrollBarVisibility.Disabled;
+        viewer.VerticalScrollMode = ScrollMode.Disabled;
+        viewer.HorizontalScrollBarVisibility = bar;
+        viewer.HorizontalScrollMode = mode;
+        viewer.VerticalContentAlignment = VerticalAlignment.Center;
     }
 
     private static void PlaceIsland(FrameworkElement island, double left, double top, double maxWidth, double maxHeight)
