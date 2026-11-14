@@ -1,9 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using WorkWidgets.Controls;
+using WorkTiles.Controls;
 using Windows.Media.Playback;
 
-namespace WorkWidgets;
+namespace WorkTiles;
 
 public sealed partial class MainWindow
 {
@@ -16,8 +16,8 @@ public sealed partial class MainWindow
             List<string> evidence = [];
             try
             {
-                string video = Environment.GetEnvironmentVariable("WORKWIDGETS_TEST_VIDEO") ?? Path.Combine(AppContext.BaseDirectory, "media-test.mp4");
-                string baselineVideo = Environment.GetEnvironmentVariable("WORKWIDGETS_TEST_VIDEO_BASE") ?? Path.Combine(AppContext.BaseDirectory, "media-test-base.mp4");
+                string video = Environment.GetEnvironmentVariable("WORKTILES_TEST_VIDEO") ?? Path.Combine(AppContext.BaseDirectory, "media-test.mp4");
+                string baselineVideo = Environment.GetEnvironmentVariable("WORKTILES_TEST_VIDEO_BASE") ?? Path.Combine(AppContext.BaseDirectory, "media-test-base.mp4");
                 File.WriteAllText(Path.Combine(output, "performance-progress.txt"), "Applying video: " + video);
                 _settings.AutoUpdateEnabled = false;
                 _settings.SharedBackgroundEnabled = true;

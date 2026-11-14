@@ -46,23 +46,23 @@ jobs:
       - name: 📥 获取集控服务端代码
         uses: actions/checkout@v5
         with:
-          repository: Edge-HH/WorkWidgetsServer
-          path: WorkWidgetsServer
+          repository: Edge-HH/WorkTilesServer
+          path: WorkTilesServer
           # 固定到与本次发版测试过的服务端版本，服务端仓库更新协议后同步改这里；
           # 不固定的话服务端 main 的改动会让发版流水线里的同步测试随时挂掉。
           # ci-desktop-sync 分支：服务端 Shared 与桌面端对齐的快照（暂不含桌面端未落地的 WidgetProfile）。
-          ref: 244a1350b6ca32a16df989d7b3a82fd28264cafd
+          ref: 95318321ee020ae7e9dd7111d958de55c81b621b
 
       - name: 🧪 集控同步测试
         shell: pwsh
         run: |
-          dotnet run --project ./tests/SyncLogic/SyncLogic.csproj -c Release --nologo -p:WorkWidgetsServerDir=$PWD/WorkWidgetsServer/
+          dotnet run --project ./tests/SyncLogic/SyncLogic.csproj -c Release --nologo -p:WorkTilesServerDir=$PWD/WorkTilesServer/
           if ($LASTEXITCODE -ne 0) { throw "集控同步测试失败。" }
 
       - name: 📦 生成自带运行环境的程序
         shell: pwsh
         run: |
-          dotnet publish .\src\WorkWidgets\WorkWidgets.csproj `
+          dotnet publish .\src\WorkTiles\WorkTiles.csproj `
             -c Release `
             -r win-x64 `
             --self-contained true `
@@ -82,20 +82,20 @@ jobs:
         run: |
           Compress-Archive `
             -Path .\artifacts\publish\* `
-            -DestinationPath .\artifacts\WorkWidgets-win-x64-${{ steps.version.outputs.version }}.zip `
+            -DestinationPath .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip `
             -CompressionLevel Optimal
 
       - name: 🚀 验证成品启动
         shell: pwsh
         run: |
-          Expand-Archive -LiteralPath .\artifacts\WorkWidgets-win-x64-${{ steps.version.outputs.version }}.zip -DestinationPath .\artifacts\package-check
+          Expand-Archive -LiteralPath .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip -DestinationPath .\artifacts\package-check
           .\tests\verify-release-startup.ps1 -PublishDirectory .\artifacts\package-check
 
       - name: 📤 上传便携版产物
         uses: actions/upload-artifact@v7
         with:
-          name: WorkWidgets-win-x64-${{ steps.version.outputs.version }}
-          path: .\artifacts\WorkWidgets-win-x64-${{ steps.version.outputs.version }}.zip
+          name: WorkTiles-win-x64-${{ steps.version.outputs.version }}
+          path: .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip
           if-no-files-found: error
 
       - name: 🎉 创建 GitHub 正式发布
@@ -105,8 +105,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "${{ github.ref_name }}" `
-            .\artifacts\WorkWidgets-win-x64-${{ steps.version.outputs.version }}.zip `
+            .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip `
             --repo "${{ github.repository }}" `
             --verify-tag `
             --generate-notes `
-            --title "WorkWidgets ${{ github.ref_name }}"
+            --title "WorkTiles ${{ github.ref_name }}"

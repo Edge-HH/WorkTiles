@@ -3,11 +3,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using WorkWidgets.Controls;
-using WorkWidgets.Services;
+using WorkTiles.Controls;
+using WorkTiles.Services;
 using Windows.Media.Playback;
 
-namespace WorkWidgets;
+namespace WorkTiles;
 
 public sealed partial class MainWindow
 {
@@ -42,7 +42,7 @@ public sealed partial class MainWindow
                 string video = Path.Combine(AppContext.BaseDirectory, "media-test.mp4");
                 Check(File.Exists(video), "generated H264 video fixture exists");
                 // RenderTargetBitmap 不包含合成毛玻璃；保留真实窗口供截图对比视频上下半区。
-                if (Environment.GetEnvironmentVariable("WORKWIDGETS_GLASS_PROBE") == "1")
+                if (Environment.GetEnvironmentVariable("WORKTILES_GLASS_PROBE") == "1")
                 {
                     Grid probe = new() { Width = 640, Height = 360 };
                     BackgroundVisual movie = new();
@@ -118,7 +118,7 @@ public sealed partial class MainWindow
                         ExportOverlay.Visibility = Visibility.Visible; ExportOverlay.Children.Add(background);
                         settings.Playlist = [imported]; background.Apply(settings, BoardTheme.SurfaceBrush);
                         await NextLayoutAsync();
-                        await WaitUntil(() => FindVisuals<MediaPlayerElement>(background).Any(v => v.MediaPlayer.PlaybackSession.Position > TimeSpan.FromMilliseconds(80)), "imported Wallpaper Engine video decodes in WorkWidgets");
+                        await WaitUntil(() => FindVisuals<MediaPlayerElement>(background).Any(v => v.MediaPlayer.PlaybackSession.Position > TimeSpan.FromMilliseconds(80)), "imported Wallpaper Engine video decodes in WorkTiles");
                         ExportOverlay.Children.Clear(); ExportOverlay.Visibility = Visibility.Collapsed;
                     }
                 }

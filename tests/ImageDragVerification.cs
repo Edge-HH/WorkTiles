@@ -3,13 +3,13 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using WorkWidgets.Controls;
-using WorkWidgets.Models;
-using WorkWidgets.Services;
+using WorkTiles.Controls;
+using WorkTiles.Models;
+using WorkTiles.Services;
 using Windows.Foundation;
 using Path = System.IO.Path;
 
-namespace WorkWidgets;
+namespace WorkTiles;
 
 public sealed partial class MainWindow
 {
@@ -82,7 +82,7 @@ public sealed partial class MainWindow
         Windows.Graphics.SizeInt32 size = VerificationWindowSize();
         _appWindow?.MoveAndResize(new Windows.Graphics.RectInt32(0, 0, size.Width, size.Height));
         await NextLayoutAsync();
-        // 本机可能还开着另一个 WorkWidgets 窗口，置顶测试窗口，注入的鼠标才会落在被测控件上。
+        // 本机可能还开着另一个 WorkTiles 窗口，置顶测试窗口，注入的鼠标才会落在被测控件上。
         SetWindowPos(hwnd, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
         ForceForeground(hwnd);
         await Task.Delay(300);

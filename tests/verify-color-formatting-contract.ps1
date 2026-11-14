@@ -1,10 +1,10 @@
 ﻿$ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$tileCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\SubjectTileControl.cs'))
+$tileCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\SubjectTileControl.cs'))
 $failures = [System.Collections.Generic.List[string]]::new()
 
-$swatchBlock = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkWidgets\Controls\ColorSwatchButton.cs'))
+$swatchBlock = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\ColorSwatchButton.cs'))
 if ($tileCode -notmatch 'new\(BoardTheme\.DisplayContentColor\(MainViewModel\.BrushFromHex\(hex\)\.Color\), size\)' -or
     $swatchBlock -notmatch 'Background = new SolidColorBrush\(color\)' -or
     $swatchBlock -notmatch 'Width = Height = size' -or $swatchBlock -notmatch 'ButtonBackgroundPointerOver') {

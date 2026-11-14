@@ -13,7 +13,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $source = (Resolve-Path -LiteralPath $PublishDirectory).Path
 $evidence = [IO.Path]::GetFullPath($EvidenceDirectory)
-$testRoot = Join-Path ([IO.Path]::GetTempPath()) ('WorkWidgets-ui-test-' + [guid]::NewGuid().ToString('N'))
+$testRoot = Join-Path ([IO.Path]::GetTempPath()) ('WorkTiles-ui-test-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $testRoot
 try {
     Get-ChildItem -LiteralPath $source | Where-Object { $_.Name -notin @('data', 'verification', 'startup-ok.txt') } | Copy-Item -Destination $testRoot -Recurse
@@ -30,11 +30,11 @@ try {
         # 差分对照的低清基线样本。
         & ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc=size=1280x720:rate=30' -t $duration -c:v libx264 -pix_fmt yuv420p -y (Join-Path $testRoot 'media-test-base.mp4')
         if ($LASTEXITCODE -ne 0) { throw '基线测试视频生成失败，需要可用的 ffmpeg。' }
-        $env:WORKWIDGETS_TEST_VIDEO = Join-Path $testRoot 'media-test-high.mp4'
-        $env:WORKWIDGETS_TEST_VIDEO_BASE = Join-Path $testRoot 'media-test-base.mp4'
+        $env:WORKTILES_TEST_VIDEO = Join-Path $testRoot 'media-test-high.mp4'
+        $env:WORKTILES_TEST_VIDEO_BASE = Join-Path $testRoot 'media-test-base.mp4'
     }
     $verificationArgument = if ($MediaPerformanceOnly) { '--verify-media-performance' } elseif ($BackgroundMediaOnly) { '--verify-background-media' } elseif ($FullScreenHintOnly) { '--verify-fullscreen-hint' } elseif ($AutoLayoutOnly) { '--verify-ui --auto-layout-only' } elseif ($FontAuditOnly) { '--verify-font-audit' } elseif ($AutofillKeysOnly) { '--verify-autofill-keys' } elseif ($AutofillImeOnly) { '--verify-autofill-ime' } elseif ($GridCoverageOnly) { '--verify-grid-coverage' } else { '--verify-ui' }
-    $process = Start-Process -FilePath (Join-Path $testRoot 'WorkWidgets.exe') -ArgumentList $verificationArgument -WorkingDirectory $testRoot -WindowStyle Hidden -PassThru
+    $process = Start-Process -FilePath (Join-Path $testRoot 'WorkTiles.exe') -ArgumentList $verificationArgument -WorkingDirectory $testRoot -WindowStyle Hidden -PassThru
     # 真实窗口检查数量随功能增加，慢机器上会接近一分钟；上限只用于兜住卡死，留足正常通过的时间。
     if (-not $process.WaitForExit(180000)) {
         # 超时也要保住测量证据：进度文件能显示验证推进到哪一步，临时目录马上要被清理。
@@ -63,7 +63,7 @@ try {
 finally {
     if ($process -and -not $process.HasExited) { Stop-Process -Id $process.Id -Force }
     $resolved = [IO.Path]::GetFullPath($testRoot)
-    if ($resolved.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $resolved) -like 'WorkWidgets-ui-test-*') {
+    if ($resolved.StartsWith([IO.Path]::GetFullPath([IO.Path]::GetTempPath()), [StringComparison]::OrdinalIgnoreCase) -and (Split-Path -Leaf $resolved) -like 'WorkTiles-ui-test-*') {
         # 进程退出后 DLL 可能仍被系统短暂占用；清理失败不能覆盖真正的验证结果。
         try { Remove-Item -LiteralPath $resolved -Recurse -Force -ErrorAction Stop }
         catch { Write-Warning "临时验证目录未能删除：$resolved（$($_.Exception.Message)）" }

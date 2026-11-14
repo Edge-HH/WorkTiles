@@ -4,9 +4,9 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
-using WorkWidgets.Server;
-using WorkWidgets.Services;
-using WorkWidgets.Shared;
+using WorkTiles.Server;
+using WorkTiles.Services;
+using WorkTiles.Shared;
 
 // 两台模拟大屏 + 网页管理员，驱动桌面端 CloudSyncService 与真实服务端完成完整同步流程。
 int checks = 0;
@@ -35,12 +35,12 @@ var sanitized = SettingsSchema.Sanitize(JsonNode.Parse("""{"GridSize":999,"TileB
 Check(sanitized["GridSize"]!.GetValue<double>() == 160 && sanitized["TileBodyFontSize"]!.GetValue<double>() == 20 && !sanitized.ContainsKey("Theme")
     && sanitized["GridColor"]!.GetValue<string>() == "#ABCDEF" && !sanitized.ContainsKey("Lock") && !sanitized.ContainsKey("Unknown") && sanitized["Autofill.Subject.Enabled"]!.GetValue<bool>(), "设置校验：限幅、取整、枚举、颜色与未知键");
 
-string root = Path.Combine(Path.GetTempPath(), "WorkWidgets-sync-tests-" + Guid.NewGuid().ToString("N"));
+string root = Path.Combine(Path.GetTempPath(), "WorkTiles-sync-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
-var app = WorkWidgetsServer.Build([
+var app = WorkTilesServer.Build([
     "--Urls=http://127.0.0.1:0",
-    $"--ConnectionStrings:WorkWidgets=Data Source={Path.Combine(root, "server.db")};Pooling=False",
-    $"--WorkWidgets:AssetsPath={Path.Combine(root, "server-assets")}",
+    $"--ConnectionStrings:WorkTiles=Data Source={Path.Combine(root, "server.db")};Pooling=False",
+    $"--WorkTiles:AssetsPath={Path.Combine(root, "server-assets")}",
     "--Logging:LogLevel:Default=Warning"
 ]);
 await app.StartAsync();

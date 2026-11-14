@@ -8,13 +8,13 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
-using WorkWidgets.Controls;
-using WorkWidgets.Models;
-using WorkWidgets.Services;
+using WorkTiles.Controls;
+using WorkTiles.Models;
+using WorkTiles.Services;
 using Windows.Foundation;
 using Windows.Graphics.Imaging;
 
-namespace WorkWidgets;
+namespace WorkTiles;
 
 public sealed partial class MainWindow
 {
@@ -183,7 +183,7 @@ public sealed partial class MainWindow
                 editor.Document.Selection.CharacterFormat.Bold = FormatEffect.On;
                 editor.Document.Selection.CharacterFormat.ForegroundColor = Microsoft.UI.Colors.Red;
                 editor.Document.GetRange(2, 4).CharacterFormat.Name = "Arial";
-                editor.Document.GetRange(20, 25).CharacterFormat.Name = "WorkWidgets Missing Typeface";
+                editor.Document.GetRange(20, 25).CharacterFormat.Name = "WorkTiles Missing Typeface";
                 var range = editor.Document.GetRange(0, int.MaxValue); range.EndPosition--;
                 range.GetText(TextGetOptions.FormatRtf, out string rtf);
                 File.WriteAllText(Path.Combine(output, "font-before.rtf"), rtf);
@@ -287,9 +287,9 @@ public sealed partial class MainWindow
                 for (int i = 0; i < 3; i++) { BuildTiles(); await NextLayoutAsync(); }
                 Check(chinese.Entries[0].Content == capturedPlain, "rebuilding rich text does not accumulate paragraphs");
                 PersistProjects();
-                string packagePath = Path.Combine(output, "roundtrip.wwh");
-                new WwhPackageService(_projectStore).Save(project, packagePath);
-                ProjectDocument imported = new WwhPackageService(_projectStore).Import(packagePath);
+                string packagePath = Path.Combine(output, "roundtrip.wth");
+                new WthPackageService(_projectStore).Save(project, packagePath);
+                ProjectDocument imported = new WthPackageService(_projectStore).Import(packagePath);
                 Check(imported.Subjects.Count == 2 && File.Exists(imported.Subjects[1].Entries[0].Attachments[0].Path), "actual rich text and image project package roundtrip");
                 ExportImageView export = new(ProjectStore.Clone(project), this, () => { });
                 ExportOverlay.Children.Add(export); ExportOverlay.Visibility = Visibility.Visible;
@@ -309,15 +309,15 @@ public sealed partial class MainWindow
                 Check(chinese.TileWidth == 420 && chinese.TileHeight == 320, "export does not mutate board dimensions");
                 RichEditBox missingProbe = new() { FontFamily = FontService.DefaultFamily };
                 ExportOverlay.Children.Clear(); ExportOverlay.Children.Add(missingProbe); await NextLayoutAsync();
-                missingProbe.Document.SetText(TextSetOptions.FormatRtf, @"{\rtf1\ansi{\fonttbl{\f0\fnil WorkWidgets Missing Typeface;}}\f0 Missing font text}");
+                missingProbe.Document.SetText(TextSetOptions.FormatRtf, @"{\rtf1\ansi{\fonttbl{\f0\fnil WorkTiles Missing Typeface;}}\f0 Missing font text}");
                 FontService.RebindBundledFont(missingProbe);
                 Check(missingProbe.Document.GetRange(0, 1).CharacterFormat.Name.Contains("HarmonyOS"), "missing font uses bundled fallback");
                 var fallbacks = FontService.CaptureFallbacks(missingProbe);
-                Check(fallbacks.Count == 1 && fallbacks[0].Family == "WorkWidgets Missing Typeface", "missing font original name preserved separately");
+                Check(fallbacks.Count == 1 && fallbacks[0].Family == "WorkTiles Missing Typeface", "missing font original name preserved separately");
                 missingProbe.Document.GetText(TextGetOptions.FormatRtf, out string fallbackRtf);
                 missingProbe.Document.SetText(TextSetOptions.FormatRtf, fallbackRtf);
                 FontService.RebindBundledFont(missingProbe, fallbacks);
-                Check(FontService.CaptureFallbacks(missingProbe)[0].Family == "WorkWidgets Missing Typeface", "missing font name survives fallback roundtrip");
+                Check(FontService.CaptureFallbacks(missingProbe)[0].Family == "WorkTiles Missing Typeface", "missing font name survives fallback roundtrip");
                 ExportOverlay.Children.Clear(); ExportOverlay.Visibility = Visibility.Collapsed;
                 Check(new FluentIcon().Glyph == FluentGlyphs.Info, "default Info icon is initialized without a property change");
                 Check(((FluentIcon)AboutNavigationGroup.Icon).Glyph == FluentGlyphs.Info, "settings About item has an Info glyph");
@@ -339,14 +339,14 @@ public sealed partial class MainWindow
                 await NextLayoutAsync();
                 Check(inkSwatches[2].IsSelected && inkSwatches.Count(s => s.IsSelected) == 1, "clicking an ink color moves the checkmark");
                 PaletteComboBox.SelectedIndex = 1; await NextLayoutAsync();
-                Check(_inkColors.Children.Cast<ColorSwatchButton>().ElementAt(2).Color.Equals(WorkWidgets.ViewModels.MainViewModel.BrushFromHex("#E5B3B3").Color), "ink swatches follow Macaron palette");
+                Check(_inkColors.Children.Cast<ColorSwatchButton>().ElementAt(2).Color.Equals(WorkTiles.ViewModels.MainViewModel.BrushFromHex("#E5B3B3").Color), "ink swatches follow Macaron palette");
                 Check(_inkColors.Children.Cast<ColorSwatchButton>().Count(s => s.IsSelected) == 1, "palette changes retain current ink selection");
                 await SaveVisualAsync(RootShell, Path.Combine(output, "selected-color.png"), (int)RootShell.ActualWidth, (int)RootShell.ActualHeight);
                 GlobalPenButton.IsChecked = false;
                 var themeButton = FindVisuals<Button>(BoardCanvas).First(b => ToolTipService.GetToolTip(b)?.ToString() == "磁贴主题色");
                 themeButton.Flyout.ShowAt(themeButton); await NextLayoutAsync();
                 var themeSwatches = ((StackPanel)((Flyout)themeButton.Flyout).Content).Children.Cast<ColorSwatchButton>().ToList();
-                Check(themeSwatches[0].Color.Equals(WorkWidgets.ViewModels.MainViewModel.BrushFromHex("#A8D5BA").Color), "tile theme swatches follow Macaron palette");
+                Check(themeSwatches[0].Color.Equals(WorkTiles.ViewModels.MainViewModel.BrushFromHex("#A8D5BA").Color), "tile theme swatches follow Macaron palette");
                 Check(themeSwatches.Count(s => s.IsSelected) == 1, "current tile theme has a checkmark");
                 themeButton.Flyout.Hide();
                 RichEditBox paletteEditor = FindVisuals<RichEditBox>(BoardCanvas).First();
@@ -357,7 +357,7 @@ public sealed partial class MainWindow
                 InvokeButton(textColorButton); await NextLayoutAsync();
                 var textSwatches = ((StackPanel)((Flyout)textColorButton.Flyout).Content).Children.Cast<ColorSwatchButton>().ToList();
                 Check(textSwatches[0].Color.Equals(Microsoft.UI.Colors.Black) && textSwatches[1].Color.Equals(Microsoft.UI.Colors.White), "text palette always starts with black and white");
-                Check(textSwatches[2].Color.Equals(WorkWidgets.ViewModels.MainViewModel.BrushFromHex("#E8D5A5").Color), "other text color swatches follow Macaron palette");
+                Check(textSwatches[2].Color.Equals(WorkTiles.ViewModels.MainViewModel.BrushFromHex("#E8D5A5").Color), "other text color swatches follow Macaron palette");
                 InvokeButton(textSwatches[1]); await NextLayoutAsync();
                 Check(paletteEditor.Document.GetRange(0, 2).CharacterFormat.ForegroundColor.Equals(textSwatches[1].Color), "text swatch applies to preserved text selection");
                 InvokeButton(textColorButton); await NextLayoutAsync();
@@ -367,7 +367,7 @@ public sealed partial class MainWindow
                 var highlightButton = FindVisuals<Button>(RichTextToolbarHost).First(b => ToolTipService.GetToolTip(b)?.ToString() == "高光颜色");
                 InvokeButton(highlightButton); await NextLayoutAsync();
                 var highlightSwatches = ((StackPanel)((Flyout)highlightButton.Flyout).Content).Children.Cast<ColorSwatchButton>().ToList();
-                Check(highlightSwatches[2].Color.Equals(WorkWidgets.ViewModels.MainViewModel.BrushFromHex("#E8D5A5").Color), "highlight swatches follow Macaron palette");
+                Check(highlightSwatches[2].Color.Equals(WorkTiles.ViewModels.MainViewModel.BrushFromHex("#E8D5A5").Color), "highlight swatches follow Macaron palette");
                 InvokeButton(highlightSwatches[2]); await NextLayoutAsync();
                 InvokeButton(highlightButton); await NextLayoutAsync();
                 Check(highlightSwatches[2].IsSelected, "reopened highlight palette marks current selection color");
@@ -1565,7 +1565,7 @@ public sealed partial class MainWindow
         await NextLayoutAsync();
         List<Windows.UI.Color> repoText = repoLinks
             .SelectMany(link => FindVisuals<TextBlock>(link))
-            .Where(text => text.Text is "Edge-HH/WorkWidgets" or "EdgeHH/workwidgets" or "在 GitHub 中打开" or "在 Gitee 中打开")
+            .Where(text => text.Text is "Edge-HH/WorkTiles" or "EdgeHH/worktiles" or "在 GitHub 中打开" or "在 Gitee 中打开")
             .Select(text => (text.Foreground as SolidColorBrush)?.Color ?? Windows.UI.Color.FromArgb(0, 0, 0, 0))
             .ToList();
         check(repoLinks.All(link => (link.Background as SolidColorBrush)?.Color == Windows.UI.Color.FromArgb(255, 255, 255, 255)) &&

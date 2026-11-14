@@ -2,12 +2,12 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build WorkWidgets (Debug x64)",
+      "label": "build WorkTiles (Debug x64)",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/WorkWidgets.slnx",
+        "${workspaceFolder}/WorkTiles.slnx",
         "--configuration",
         "Debug",
         "--property:Platform=x64"
@@ -19,12 +19,12 @@
       }
     },
     {
-      "label": "build WorkWidgets (Release x64)",
+      "label": "build WorkTiles (Release x64)",
       "type": "process",
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/WorkWidgets.slnx",
+        "${workspaceFolder}/WorkTiles.slnx",
         "--configuration",
         "Release",
         "--property:Platform=x64"

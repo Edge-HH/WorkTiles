@@ -4,12 +4,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using WorkWidgets.Models;
-using WorkWidgets.Services;
+using WorkTiles.Models;
+using WorkTiles.Services;
 using Windows.Foundation;
 using Path = System.IO.Path;
 
-namespace WorkWidgets;
+namespace WorkTiles;
 
 public sealed partial class MainWindow
 {

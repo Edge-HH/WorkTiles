@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$tilePath = Join-Path $projectRoot 'src\WorkWidgets\Controls\SubjectTileControl.cs'
+$tilePath = Join-Path $projectRoot 'src\WorkTiles\Controls\SubjectTileControl.cs'
 $tileCode = [System.IO.File]::ReadAllText($tilePath)
 $failures = [System.Collections.Generic.List[string]]::new()
 

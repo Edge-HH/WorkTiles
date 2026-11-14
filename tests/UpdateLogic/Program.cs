@@ -1,6 +1,6 @@
 using System.Diagnostics;
 using System.IO.Compression;
-using WorkWidgets.Services;
+using WorkTiles.Services;
 
 int checks = 0;
 void Check(bool value, string message) { if (!value) throw new Exception(message); checks++; }
@@ -10,7 +10,7 @@ void Reject(Action action)
     try { action(); } catch (InvalidDataException) { rejected = true; }
     Check(rejected, "危险或残缺更新包未被拒绝");
 }
-string root = Path.Combine(Path.GetTempPath(), "WorkWidgets-update-test-" + Guid.NewGuid().ToString("N"));
+string root = Path.Combine(Path.GetTempPath(), "WorkTiles-update-test-" + Guid.NewGuid().ToString("N"));
 // 构造标准 PKZIP 多磁盘包，区别于 7-Zip 的 .zip.001 二进制切片。
 static Dictionary<string, byte[]> CreateStandardSplitZip(byte[] zip)
 {
@@ -33,7 +33,7 @@ static Dictionary<string, byte[]> CreateStandardSplitZip(byte[] zip)
     U16(end + 4, end / size); U16(end + 6, central / size); U32(end + 16, central % size);
     Dictionary<string, byte[]> parts = [];
     for (int offset = 0, disk = 1; offset < data.Length; offset += size, disk++)
-        parts["WorkWidgets-standard." + (offset + size >= data.Length ? "zip" : "z" + disk.ToString("00"))] = data[offset..Math.Min(offset + size, data.Length)];
+        parts["WorkTiles-standard." + (offset + size >= data.Length ? "zip" : "z" + disk.ToString("00"))] = data[offset..Math.Min(offset + size, data.Length)];
     return parts;
 }
 Directory.CreateDirectory(root);
@@ -42,13 +42,13 @@ try
     string target = Path.Combine(root, "程序 ' & 空格");
     Directory.CreateDirectory(Path.Combine(target, "data"));
     File.WriteAllText(Path.Combine(target, "data", "projects.json"), "user-projects");
-    File.WriteAllText(Path.Combine(target, "WorkWidgets.dll"), "old-version");
+    File.WriteAllText(Path.Combine(target, "WorkTiles.dll"), "old-version");
     File.WriteAllText(Path.Combine(target, "z-locked.dll"), "old-locked");
     string Package(string name, params (string Name, string Content)[] extra)
     {
         string path = Path.Combine(root, name + ".zip");
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
-        foreach (var file in new[] { ("WorkWidgets.exe", "exe"), ("WorkWidgets.dll", "new-version"), ("WorkWidgets.pri", "resources"), ("WorkWidgets.runtimeconfig.json", "{}") }.Concat(extra))
+        foreach (var file in new[] { ("WorkTiles.exe", "exe"), ("WorkTiles.dll", "new-version"), ("WorkTiles.pri", "resources"), ("WorkTiles.runtimeconfig.json", "{}") }.Concat(extra))
         {
             using StreamWriter writer = new(zip.CreateEntry(file.Item1).Open()); writer.Write(file.Item2);
         }
@@ -91,11 +91,11 @@ try
     Check(withNotes!.Notes == "## 更新内容\n- 新增启动参数", "Release 正文应解析为更新日志");
     Check(withNotes.Update is null && withNotes.Notes == "## 更新内容\n- 新增启动参数",
         "没有可安装资产时更新日志仍随快照返回");
-    var splitUpdate = Parse("WorkWidgets-win-x64.zip.003", "WorkWidgets-win-x64.zip.001", "WorkWidgets-win-x64.zip.002", "v2.0.4.zip");
+    var splitUpdate = Parse("WorkTiles-win-x64.zip.003", "WorkTiles-win-x64.zip.001", "WorkTiles-win-x64.zip.002", "v2.0.4.zip");
     Check(splitUpdate.Parts.Count == 3 && splitUpdate.Parts[0].Name.EndsWith("001"), "分卷应按数字排序且排除源码包");
     Check(splitUpdate.Notes is null, "Release 没有 body 字段时更新日志为空");
-    Reject(() => Parse("WorkWidgets-win-x64.zip.001", "WorkWidgets-win-x64.zip.003"));
-    Check(Parse("WorkWidgets-win-x64.z02", "WorkWidgets-win-x64.zip", "WorkWidgets-win-x64.z01").Parts.Count == 3, "标准 ZIP 分卷未识别");
+    Reject(() => Parse("WorkTiles-win-x64.zip.001", "WorkTiles-win-x64.zip.003"));
+    Check(Parse("WorkTiles-win-x64.z02", "WorkTiles-win-x64.zip", "WorkTiles-win-x64.z01").Parts.Count == 3, "标准 ZIP 分卷未识别");
     byte[] zipBytes = File.ReadAllBytes(valid);
     var chunks = new Dictionary<string, byte[]>();
     for (int i = 0; i < 3; i++) chunks[splitUpdate.Parts[i].Name] = zipBytes[(zipBytes.Length * i / 3)..(zipBytes.Length * (i + 1) / 3)];
@@ -104,25 +104,25 @@ try
     Check(File.ReadAllBytes(joined).SequenceEqual(zipBytes), "下载合并的 ZIP 与原包不一致");
     string splitConfig = PortableUpdateService.Prepare(joined, target, root, int.MaxValue);
     Check(Apply(splitConfig) == 0 && File.ReadAllText(Path.Combine(target, "data", "projects.json")) == "user-projects", "分卷覆盖应保留配置");
-    File.WriteAllText(Path.Combine(target, "WorkWidgets.dll"), "old-version");
+    File.WriteAllText(Path.Combine(target, "WorkTiles.dll"), "old-version");
     string sevenSource = Path.Combine(root, "seven-source");
     ZipFile.ExtractToDirectory(valid, sevenSource);
-    string seven = Path.Combine(root, "WorkWidgets-win-x64.7z");
+    string seven = Path.Combine(root, "WorkTiles-win-x64.7z");
     string sevenTool = Path.Combine(AppContext.BaseDirectory, "Tools", "7zip", "x64", "7za.exe");
     await SplitUpdatePackage.RunAsync(sevenTool, ["a", "-t7z", seven, Path.Combine(sevenSource, "*")], default);
     string normalized = await SplitUpdatePackage.NormalizeAsync(seven);
     Check(Apply(PortableUpdateService.Prepare(normalized, target, root, int.MaxValue)) == 0, "7z 转换与覆盖失败");
-    File.WriteAllText(Path.Combine(target, "WorkWidgets.dll"), "old-version");
+    File.WriteAllText(Path.Combine(target, "WorkTiles.dll"), "old-version");
     byte[] sevenBytes = File.ReadAllBytes(seven);
-    var sevenParts = Parse("WorkWidgets-win-x64.7z.002", "WorkWidgets-win-x64.7z.001");
+    var sevenParts = Parse("WorkTiles-win-x64.7z.002", "WorkTiles-win-x64.7z.001");
     var sevenDownloads = new ReleaseUpdateService(new AssetHandler(new()
     {
-        ["WorkWidgets-win-x64.7z.001"] = sevenBytes[..(sevenBytes.Length / 2)],
-        ["WorkWidgets-win-x64.7z.002"] = sevenBytes[(sevenBytes.Length / 2)..]
+        ["WorkTiles-win-x64.7z.001"] = sevenBytes[..(sevenBytes.Length / 2)],
+        ["WorkTiles-win-x64.7z.002"] = sevenBytes[(sevenBytes.Length / 2)..]
     }));
     string sevenJoined = await sevenDownloads.DownloadAsync(sevenParts, root);
     Check(Apply(PortableUpdateService.Prepare(await SplitUpdatePackage.NormalizeAsync(sevenJoined), target, root, int.MaxValue)) == 0, "7z 分卷下载合并与覆盖失败");
-    File.WriteAllText(Path.Combine(target, "WorkWidgets.dll"), "old-version");
+    File.WriteAllText(Path.Combine(target, "WorkTiles.dll"), "old-version");
     string unsafeSource = Path.Combine(root, "unsafe-source"); Directory.CreateDirectory(Path.Combine(unsafeSource, "data"));
     File.WriteAllText(Path.Combine(unsafeSource, "data", "projects.json"), "forbidden");
     string unsafeSeven = Path.Combine(root, "unsafe.7z");
@@ -132,25 +132,25 @@ try
     var standardUpdate = Parse(standardParts.Keys.ToArray());
     string standard = await new ReleaseUpdateService(new AssetHandler(standardParts)).DownloadAsync(standardUpdate, root);
     Check(Apply(PortableUpdateService.Prepare(await SplitUpdatePackage.NormalizeAsync(standard), target, root, int.MaxValue)) == 0, "标准 z01 ZIP 分卷下载解压与覆盖失败");
-    File.WriteAllText(Path.Combine(target, "WorkWidgets.dll"), "old-version");
+    File.WriteAllText(Path.Combine(target, "WorkTiles.dll"), "old-version");
     // 最后一卷缺失没有序号空洞，必须由解压校验拒绝。
     string truncated = Path.Combine(root, "truncated.zip"); File.WriteAllBytes(truncated, zipBytes[..(zipBytes.Length / 2)]);
     Reject(() => PortableUpdateService.Prepare(truncated, target, root, int.MaxValue));
     string config = PortableUpdateService.Prepare(valid, target, root, int.MaxValue);
-    Check(File.ReadAllText(Path.Combine(target, "WorkWidgets.dll")) == "old-version", "准备更新时不应覆盖正在运行的程序");
+    Check(File.ReadAllText(Path.Combine(target, "WorkTiles.dll")) == "old-version", "准备更新时不应覆盖正在运行的程序");
     Check(Apply(config) == 0, "更新执行失败");
-    Check(File.ReadAllText(Path.Combine(target, "WorkWidgets.dll")) == "new-version", "旧文件未被覆盖");
+    Check(File.ReadAllText(Path.Combine(target, "WorkTiles.dll")) == "new-version", "旧文件未被覆盖");
     Check(File.ReadAllText(Path.Combine(target, "data", "projects.json")) == "user-projects", "更新改变了项目数据");
-    Check(File.ReadAllText(Path.Combine(Path.GetDirectoryName(config)!, "backup", "WorkWidgets.dll")) == "old-version", "更新没有保留旧文件备份");
+    Check(File.ReadAllText(Path.Combine(Path.GetDirectoryName(config)!, "backup", "WorkTiles.dll")) == "old-version", "更新没有保留旧文件备份");
     string failure = PortableUpdateService.Prepare(Package("locked", ("z-locked.dll", "new-locked")), target, root, int.MaxValue);
-    File.WriteAllText(Path.Combine(target, "WorkWidgets.dll"), "before-failure");
+    File.WriteAllText(Path.Combine(target, "WorkTiles.dll"), "before-failure");
     using (var locked = new FileStream(Path.Combine(target, "z-locked.dll"), FileMode.Open, FileAccess.Read, FileShare.Read))
         Check(Apply(failure) != 0, "锁定文件应导致更新失败");
-    Check(File.ReadAllText(Path.Combine(target, "WorkWidgets.dll")) == "before-failure", "更新失败没有回滚之前覆盖的文件");
-    foreach (string bad in new[] { "../escape", "data/projects.json", "C:/escape", "Assets/../../escape", "Assets/test:stream", "Assets/CON", "Assets/a. ", "WorkWidgets.DLL" })
+    Check(File.ReadAllText(Path.Combine(target, "WorkTiles.dll")) == "before-failure", "更新失败没有回滚之前覆盖的文件");
+    foreach (string bad in new[] { "../escape", "data/projects.json", "C:/escape", "Assets/../../escape", "Assets/test:stream", "Assets/CON", "Assets/a. ", "WorkTiles.DLL" })
         Reject(() => PortableUpdateService.Prepare(Package(Guid.NewGuid().ToString("N"), (bad, "bad")), target, root, int.MaxValue));
     string missing = Path.Combine(root, "missing.zip");
-    using (ZipArchive zip = ZipFile.Open(missing, ZipArchiveMode.Create)) zip.CreateEntry("WorkWidgets.exe");
+    using (ZipArchive zip = ZipFile.Open(missing, ZipArchiveMode.Create)) zip.CreateEntry("WorkTiles.exe");
     Reject(() => PortableUpdateService.Prepare(missing, target, root, int.MaxValue));
     Check(!File.Exists(Path.Combine(root, "escape")), "解压路径越界");
     Console.WriteLine($"PASS: {checks} update extraction, overwrite, data preservation, rollback and invalid-package checks.");

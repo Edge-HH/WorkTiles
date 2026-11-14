@@ -4,20 +4,20 @@
     <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <EnableDefaultContentItems>false</EnableDefaultContentItems>
-    <!-- 服务端在独立仓库 Edge-HH/WorkWidgetsServer，默认取与本仓库相邻的检出目录；CI 用 -p:WorkWidgetsServerDir 指定。 -->
-    <WorkWidgetsServerDir Condition="'$(WorkWidgetsServerDir)' == ''">$(MSBuildThisFileDirectory)../../../WorkWidgetsServer/</WorkWidgetsServerDir>
+    <!-- 服务端在独立仓库 Edge-HH/WorkTilesServer，默认取与本仓库相邻的检出目录；CI 用 -p:WorkTilesServerDir 指定。 -->
+    <WorkTilesServerDir Condition="'$(WorkTilesServerDir)' == ''">$(MSBuildThisFileDirectory)../../../WorkTilesServer/</WorkTilesServerDir>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="$(WorkWidgetsServerDir)src/WorkWidgets.Server/WorkWidgets.Server.csproj" />
-    <Compile Include="../../src/WorkWidgets/Services/ProjectState.cs" Link="Desktop/ProjectState.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/ProjectStore.cs" Link="Desktop/ProjectStore.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/CloudPayload.cs" Link="Desktop/CloudPayload.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/CloudSyncService.cs" Link="Desktop/CloudSyncService.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/CloudRealtimeClient.cs" Link="Desktop/CloudRealtimeClient.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/BoardNotices.cs" Link="Desktop/BoardNotices.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/ExamSchedule.cs" Link="Desktop/ExamSchedule.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/ExamScheduleStore.cs" Link="Desktop/ExamScheduleStore.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/SettingsCopy.cs" Link="Desktop/SettingsCopy.cs" />
-    <Compile Include="../../src/WorkWidgets/Services/ProjectMerge.cs" Link="Desktop/ProjectMerge.cs" />
+    <ProjectReference Include="$(WorkTilesServerDir)src/WorkTiles.Server/WorkTiles.Server.csproj" />
+    <Compile Include="../../src/WorkTiles/Services/ProjectState.cs" Link="Desktop/ProjectState.cs" />
+    <Compile Include="../../src/WorkTiles/Services/ProjectStore.cs" Link="Desktop/ProjectStore.cs" />
+    <Compile Include="../../src/WorkTiles/Services/CloudPayload.cs" Link="Desktop/CloudPayload.cs" />
+    <Compile Include="../../src/WorkTiles/Services/CloudSyncService.cs" Link="Desktop/CloudSyncService.cs" />
+    <Compile Include="../../src/WorkTiles/Services/CloudRealtimeClient.cs" Link="Desktop/CloudRealtimeClient.cs" />
+    <Compile Include="../../src/WorkTiles/Services/BoardNotices.cs" Link="Desktop/BoardNotices.cs" />
+    <Compile Include="../../src/WorkTiles/Services/ExamSchedule.cs" Link="Desktop/ExamSchedule.cs" />
+    <Compile Include="../../src/WorkTiles/Services/ExamScheduleStore.cs" Link="Desktop/ExamScheduleStore.cs" />
+    <Compile Include="../../src/WorkTiles/Services/SettingsCopy.cs" Link="Desktop/SettingsCopy.cs" />
+    <Compile Include="../../src/WorkTiles/Services/ProjectMerge.cs" Link="Desktop/ProjectMerge.cs" />
   </ItemGroup>
 </Project>

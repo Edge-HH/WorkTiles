@@ -2,12 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "WorkWidgets",
+      "name": "WorkTiles",
       "type": "coreclr",
       "request": "launch",
-      "preLaunchTask": "build WorkWidgets (Debug x64)",
-      "program": "${workspaceFolder}/src/WorkWidgets/bin/Debug/net8.0-windows10.0.19041.0/win-x64/WorkWidgets.exe",
-      "cwd": "${workspaceFolder}/src/WorkWidgets",
+      "preLaunchTask": "build WorkTiles (Debug x64)",
+      "program": "${workspaceFolder}/src/WorkTiles/bin/Debug/net8.0-windows10.0.19041.0/win-x64/WorkTiles.exe",
+      "cwd": "${workspaceFolder}/src/WorkTiles",
       "args": [],
       "stopAtEntry": false,
       "console": "internalConsole",

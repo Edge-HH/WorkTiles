@@ -1,4 +1,4 @@
-# WorkWidgets
+# WorkTiles
 
 > 面向教室大屏与触控设备的 Windows 班级作业看板。
 
@@ -6,7 +6,7 @@
 ![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)
 ![WinUI](https://img.shields.io/badge/UI-WinUI%203-0078D4)
 
-WorkWidgets 将时间、日期、天气、教室噪音和各科作业集中在一块适合远距离阅读的深色看板中。它使用 WinUI 3 构建，支持鼠标、触控笔与触摸操作，并为教室大屏提供默认全屏展示。
+WorkTiles 将时间、日期、天气、教室噪音和各科作业集中在一块适合远距离阅读的深色看板中。它使用 WinUI 3 构建，支持鼠标、触控笔与触摸操作，并为教室大屏提供默认全屏展示。
 
 ## ✨ 功能
 
@@ -16,10 +16,10 @@ WorkWidgets 将时间、日期、天气、教室噪音和各科作业集中在�
 - 网格布局：磁贴默认吸附到 48 px 网格，设置中可调整网格大小；无限作业板支持滚动、平移和缩放，靠近画布边缘时继续扩展。
 - 对齐辅助：关闭网格时，拖动磁贴会吸附作业区域中轴以及其他磁贴的边缘、中心线，并显示辅助线；导出排版也使用同一规则。
 - 项目管理：顶栏在查看和编辑模式下均可切换最近项目；项目名后显示科目数量，文件菜单支持新建、重命名、删除、导入、保存和图片导出。
-- 作业文件：将布局、配色、富文本、图片和可编辑笔迹打包为 `.wwh`，导入后可以继续修改并保存回原文件。
+- 作业文件：将布局、配色、富文本、图片和可编辑笔迹打包为 `.wth`，导入后可以继续修改并保存回原文件。
 - 作业内容：在磁贴内直接编辑，支持字体、加粗、斜体、下划线、文字颜色和高光，并可添加图片。
 - 图片附件：图片框按原图比例显示；点击图片后显示选中框及下方的裁切、旋转控件，拖动中央移动图片，拖动四角等比缩放。
-- 手写标注：编辑页底栏第一个图标开启全局画笔，弹出的画笔栏提供颜色、细/中/粗三档圆点粗细预设、橡皮擦及按磁贴或全部清空；缩放磁贴不会缩放已有笔迹。仅时钟模式下画笔可以写在屏幕任意位置，笔迹随项目保存并一起进入 `.wwh` 作业包，清空按钮可只清时钟区域，也可连同全部磁贴一起清空。
+- 手写标注：编辑页底栏第一个图标开启全局画笔，弹出的画笔栏提供颜色、细/中/粗三档圆点粗细预设、橡皮擦及按磁贴或全部清空；缩放磁贴不会缩放已有笔迹。仅时钟模式下画笔可以写在屏幕任意位置，笔迹随项目保存并一起进入 `.wth` 作业包，清空按钮可只清时钟区域，也可连同全部磁贴一起清空。
 - 图片导出：支持常用比例和自定义尺寸，可调整背景、色系、标题、磁贴位置和等比缩放，输出不含时钟与编辑工具的 PNG。
 - 磁贴主题：每个科目可独立更换主题色。
 - 自动填充：设置中的「自动填充」可按学科补全磁贴标题（支持中文、全拼与首字母，采纳后同时套用学科颜色，学科可开启随机配色，每次采纳都从预设色里随机取一个），并按学科范围补全常输入的作业名称，两个补全默认关闭。
@@ -27,7 +27,7 @@ WorkWidgets 将时间、日期、天气、教室噪音和各科作业集中在�
 - 噪音检测：通过麦克风实时估算环境音量，支持检测间隔、输入设备、吵闹阈值、提示音音量和目标音量校准。
 - 天气信息：按小米天气接口文档读取当前温度和天气状态，内置 2566 个可按名称搜索的地区。
 - 本地数据：所有项目持续自动保存到可执行文件旁的 `data` 目录，加入项目的图片会复制到对应项目资源目录。
-- 数据设置：设置中的「数据」可开关自动保存（关闭后仅在退出、切换项目或手动保存时写盘）、手动保存、按范围导出 `.wwb` 数据备份（作业数据、当前背景、最近背景、软件设置可任意组合）与从备份还原，还原会覆盖当前数据并自动重启加载；自动备份按目录、间隔和保留份数定期生成 `auto-*.wwb`，超出份数删除最旧的备份。
+- 数据设置：设置中的「数据」可开关自动保存（关闭后仅在退出、切换项目或手动保存时写盘）、手动保存、按范围导出 `.wtb` 数据备份（作业数据、当前背景、最近背景、软件设置可任意组合）与从备份还原，还原会覆盖当前数据并自动重启加载；自动备份按目录、间隔和保留份数定期生成 `auto-*.wtb`，超出份数删除最旧的备份。
 - 锁定：设置中的「锁定」可启用软件锁定，支持密码（仅保存哈希）与验证器两步验证（TOTP）；绑定验证器时弹窗左侧直接显示扫码用二维码，解锁输入以密码框打码显示；密码或验证码任一通过即可解锁，可分别要求「打开设置前」与「编辑看板前」验证。总开关开启但密码与两步验证都未配置时不锁定，避免把自己关在门外。
 - 内置字体：界面与新文字默认使用 HarmonyOS Sans，功能图标使用随程序分发的 Fluent System Icons。
 - 自动更新：默认从 GitHub Release 检查更新，也可选择 Gitee；支持 ZIP、7z 与分卷更新包，确认后保存项目、校验解压、退出覆盖并重新启动，保留项目和软件配置，覆盖失败会尝试恢复旧文件。发现新版本的弹窗会附上 Release 更新说明，关于页的「更新日志」按钮可随时查看当前更新源最新发布的完整说明。
@@ -53,12 +53,12 @@ WorkWidgets 将时间、日期、天气、教室噪音和各科作业集中在�
 3. 直接修改科目名和作业文字，或添加图片；新增一条作业时正文是空的，编辑框里只显示灰色的「在这里输入作业内容」提示，提示只是占位、不会写进作业内容（旧版本把它当正文写入的条目在读取时按空内容还原）。点击图片后可拖动中央移动、拖动四角等比缩放，并可裁切、旋转、复位和删除。
 4. 点击作业文字，控制窗左侧的富文本悬浮岛会显示字体、加粗、斜体、下划线、文字颜色和高光；有选区时只修改选区，没有选区时设置后续输入格式。
 5. 点击底栏第一个画笔图标后在任意磁贴书写；一笔归属起笔磁贴，越界部分不会落笔，弹出的画笔栏统一切换画笔、橡皮擦、颜色和粗细，并占用富文本悬浮岛的位置；当前选中的颜色以白框和右上角勾选标记显示，粗细则用从小到大三个圆点表示细、中、粗，选中档位以强调色描边和实心圆点标记。
-6. 从文件菜单创建或切换项目、导入或保存 `.wwh`，也可以进入图片排版页导出 PNG。
+6. 从文件菜单创建或切换项目、导入或保存 `.wth`，也可以进入图片排版页导出 PNG。
 7. 使用底栏最后一个按钮完成并保存编辑；倒数第二个按钮会在确认后放弃本轮全部修改。
 
 新建项目时，“重置作业”会保留当前科目、布局和配色并清空全部内容；“重置作业和科目布局”会创建空白项目。项目默认按创建日期命名，同一天继续新建时会自动追加序号。
 
-“保存”首次要求选择 `.wwh` 位置，之后更新同一文件；“导出”直接打开图片排版页。项目切换或导入时，若项目记录的主题、色系与当前软件不同，可以分别选择是否应用。
+“保存”首次要求选择 `.wth` 位置，之后更新同一文件；“导出”直接打开图片排版页。项目切换或导入时，若项目记录的主题、色系与当前软件不同，可以分别选择是否应用。
 
 “布局 → 自动布局”提供吸附到网格（与编辑工具栏的吸附按钮是同一个开关，两边状态实时同步）、磁贴最小间隔（默认 0）、自动对齐和自动调整磁贴大小（后两项默认开启）。自动排列先把一行从左到右排满，再换到下一行；内容过宽的磁贴会按列宽收窄并让文字换行，相近尺寸尽量向上统一，关闭自动调整后保留原尺寸。间隔滑块的步进跟随网格吸附：关闭吸附按 10px 调整，开启吸附按半格（网格大小的一半）调整。开启网格吸附与自动对齐时，位置尽量落在网格线上，因此实际间隔可能大于设置值。若按内容尺寸仍放不下，会等比缩小磁贴（磁贴内文字仍可滚动查看），低于最小尺寸时才提示开启无限作业板。
 
@@ -79,14 +79,14 @@ WorkWidgets 将时间、日期、天气、教室噪音和各科作业集中在�
 ### 命令行
 
 ```powershell
-git clone https://github.com/Edge-HH/WorkWidgets.git
-cd WorkWidgets
-dotnet restore .\src\WorkWidgets\WorkWidgets.csproj
-dotnet build .\src\WorkWidgets\WorkWidgets.csproj -c Release -p:Platform=x64
-dotnet run --project .\src\WorkWidgets\WorkWidgets.csproj -c Release -p:Platform=x64
+git clone https://github.com/Edge-HH/WorkTiles.git
+cd WorkTiles
+dotnet restore .\src\WorkTiles\WorkTiles.csproj
+dotnet build .\src\WorkTiles\WorkTiles.csproj -c Release -p:Platform=x64
+dotnet run --project .\src\WorkTiles\WorkTiles.csproj -c Release -p:Platform=x64
 ```
 
-也可以使用 Visual Studio 打开 `WorkWidgets.slnx`，选择 `x64` 后启动 `WorkWidgets` 项目。
+也可以使用 Visual Studio 打开 `WorkTiles.slnx`，选择 `x64` 后启动 `WorkTiles` 项目。
 
 ### 自动构建与发布
 
@@ -103,14 +103,14 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-请等待“📦 构建与发布”工作流成功后再分发 Release 地址。用户完整解压 ZIP 后运行 `WorkWidgets.exe` 即可，不能只复制单个 EXE；项目数据保存在程序旁的 `data` 目录。
+请等待“📦 构建与发布”工作流成功后再分发 Release 地址。用户完整解压 ZIP 后运行 `WorkTiles.exe` 即可，不能只复制单个 EXE；项目数据保存在程序旁的 `data` 目录。
 
-应用内确认更新后会自动解压并覆盖旧文件，再重新启动。更新不会覆盖 `data`，文件备份和执行日志保存在 `data/updates/<随机标识>/backup` 和 `update.log`，覆盖失败时尝试回滚。请先关闭同一目录中其他 WorkWidgets 实例；如果安装目录不可写，更新会在退出前报告错误。旧版无法启动或尚不支持自动覆盖时，需要首次手动解压新版，保留原 `data` 目录。
+应用内确认更新后会自动解压并覆盖旧文件，再重新启动。更新不会覆盖 `data`，文件备份和执行日志保存在 `data/updates/<随机标识>/backup` 和 `update.log`，覆盖失败时尝试回滚。请先关闭同一目录中其他 WorkTiles 实例；如果安装目录不可写，更新会在退出前报告错误。旧版无法启动或尚不支持自动覆盖时，需要首次手动解压新版，保留原 `data` 目录。
 
 本地验证同样的发布流程：
 
 ```powershell
-dotnet publish .\src\WorkWidgets\WorkWidgets.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -o .\artifacts\publish
+dotnet publish .\src\WorkTiles\WorkTiles.csproj -c Release -r win-x64 --self-contained true -p:Platform=x64 -p:WindowsAppSDKSelfContained=true -o .\artifacts\publish
 .\installer\Optimize-Publish.ps1 -PublishDirectory .\artifacts\publish
 .\tests\verify-release-startup.ps1 -PublishDirectory .\artifacts\publish
 ```
@@ -126,14 +126,14 @@ dotnet publish .\src\WorkWidgets\WorkWidgets.csproj -c Release -r win-x64 --self
 | `--view=editor` | 启动后直接进入看板编辑模式 |
 | `--view=ink` | 启动后直接进入可手写的编辑模式 |
 | `--view=settings` | 启动后直接打开设置页 |
-| `--project=<项目名或.wwh路径>` | 启动时打开指定项目：先按名称精确（其次前缀）匹配已有项目，给出存在的 `.wwh` 路径时先导入再打开 |
+| `--project=<项目名或.wth路径>` | 启动时打开指定项目：先按名称精确（其次前缀）匹配已有项目，给出存在的 `.wth` 路径时先导入再打开 |
 
 关闭“允许多实例”后，再次运行带上述参数的命令会把参数转给已打开的窗口执行：切换全屏/窗口状态、打开指定项目或进入对应视图，无需先关闭再打开；未带参数时仍按“已打开时再次启动的行为”设置处理。
 
 例如：
 
 ```powershell
-dotnet run --project .\src\WorkWidgets\WorkWidgets.csproj -- --windowed --view=editor
+dotnet run --project .\src\WorkTiles\WorkTiles.csproj -- --windowed --view=editor
 ```
 
 ## 🌤️ 天气配置
@@ -145,16 +145,16 @@ dotnet run --project .\src\WorkWidgets\WorkWidgets.csproj -- --windowed --view=e
 - 麦克风数据只用于实时计算音量，不录音，也不保存音频。
 - 添加图片时会复制到 `data/projects/<项目标识>/assets`，不会上传或改写原图片。
 - 项目清单、内容和软件设置写入 `data/projects.json`；旧版 `data/pancake.json` 首次启动时会迁移，并保留 `.before-projects.bak` 备份。
-- 自动填充只在本机记录学科与作业名称：数据属于软件设置，写在 `data/projects.json` 里，不上传，也不会写进 `.wwh` 项目文件；关闭「自动记录常输入的作业名称」后不再学习新词，已记录的内容可在设置页逐条删除或一键清空。
+- 自动填充只在本机记录学科与作业名称：数据属于软件设置，写在 `data/projects.json` 里，不上传，也不会写进 `.wth` 项目文件；关闭「自动记录常输入的作业名称」后不再学习新词，已记录的内容可在设置页逐条删除或一键清空。
 - 锁定只保存密码哈希（PBKDF2-SHA256）与两步验证密钥，不保存明文密码；密码与验证码验证均在本机完成，不联网。
-- `.wwh` 是带版本清单的 ZIP 容器，只接受受控的附件路径；保存缺少附件的项目会明确报错，不会生成残缺文件。
+- `.wth` 是带版本清单的 ZIP 容器，只接受受控的附件路径；保存缺少附件的项目会明确报错，不会生成残缺文件。
 - 如果把程序放在无写入权限的目录（例如受保护的系统安装目录），自动保存会在设置页报告失败。
 
 ## 📁 项目结构
 
 ```text
-WorkWidgets/
-├─ src/WorkWidgets/
+WorkTiles/
+├─ src/WorkTiles/
 │  ├─ Assets/         # 内置字体、图标与拼音数据（含许可说明）
 │  ├─ Controls/       # 科目磁贴、拖动、缩放与手写交互
 │  ├─ Models/         # 看板、作业、图片与笔迹模型
@@ -164,7 +164,7 @@ WorkWidgets/
 │  └─ MainWindow.*    # 主界面与窗口交互
 ├─ tests/             # 项目逻辑、隔离 UI 渲染与交互契约验证
 ├─ design-qa.md       # 设计验收记录
-└─ WorkWidgets.slnx
+└─ WorkTiles.slnx
 ```
 
 ## 🧪 验证
@@ -175,11 +175,11 @@ WorkWidgets/
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-interaction-contract.ps1
 ```
 
-该脚本检查触控交互、网格吸附、全局手写工具栏和全屏退出提示等关键实现是否存在。项目与 `.wwh` 往返测试可运行 `dotnet run --project tests/ProjectLogic/ProjectLogic.csproj -c Release`，也覆盖紧密网格排版、区域中轴和相邻磁贴吸附。更新测试运行 `dotnet run --project tests/UpdateLogic/UpdateLogic.csproj -c Release`，在临时目录检查解压、覆盖、数据保留、锁定文件回滚和危险路径拒绝。仓库还包含按条件编译的隔离 WinUI 渲染测试，用于验证内置字体、长富文本、图片、笔迹、多比例 PNG、图标、底栏顺序和实际点击后的色卡选中状态；它不会随正式构建进入应用。
+该脚本检查触控交互、网格吸附、全局手写工具栏和全屏退出提示等关键实现是否存在。项目与 `.wth` 往返测试可运行 `dotnet run --project tests/ProjectLogic/ProjectLogic.csproj -c Release`，也覆盖紧密网格排版、区域中轴和相邻磁贴吸附。更新测试运行 `dotnet run --project tests/UpdateLogic/UpdateLogic.csproj -c Release`，在临时目录检查解压、覆盖、数据保留、锁定文件回滚和危险路径拒绝。仓库还包含按条件编译的隔离 WinUI 渲染测试，用于验证内置字体、长富文本、图片、笔迹、多比例 PNG、图标、底栏顺序和实际点击后的色卡选中状态；它不会随正式构建进入应用。
 
 ## 🚧 当前限制
 
-- Release 中优先选择 x64 便携版 ZIP 自动更新，也支持 7z 和上述分卷格式；`.exe`、`.msix` 和 `.msixbundle` 仍按安装包启动。更新包需与便携版一致，将 `WorkWidgets.exe` 等文件放在压缩包根目录。文件被占用或目录不可写时可能无法更新，可查看保留的备份和日志。
+- Release 中优先选择 x64 便携版 ZIP 自动更新，也支持 7z 和上述分卷格式；`.exe`、`.msix` 和 `.msixbundle` 仍按安装包启动。更新包需与便携版一致，将 `WorkTiles.exe` 等文件放在压缩包根目录。文件被占用或目录不可写时可能无法更新，可查看保留的备份和日志。
 - 小米天气来自第三方整理的非正式接口文档，服务端兼容性不由本项目控制。
 - 噪音数值是基于 PCM 电平和校准偏移的估算值，不等同于经过认证的声级计读数。
 - 原生触屏手势、触控笔压感和目标教室大屏的视觉比例仍需在实际设备上完成最终验收。
@@ -209,7 +209,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-interaction-c
 - 校准时先填写当前环境实际音量（20–120 dB），等待有效读数后点击“校准到此音量”；偏移由该目标值减去原始测量值计算，重复校准不会累加偏差。更换输入设备会重置偏移，需要重新校准。
 - **自动填充 / 学科补全**：总开关默认关闭；匹配程度分宽松（输入 1 个字符即提示，首字母允许跳字）、正常（汉字 1 个或字母 2 个起按前缀匹配）与严格（2 个字符起，只认完整前缀）。下方列表逐项显示学科、启用开关与颜色色卡，可添加或删除；学科名跟随当前主题（浅色黑字、深色白字），切换深浅色后列表会立即重算。色卡始终显示当前色系（鲜艳/马卡龙）下的学科颜色，预设色跟随色系、真正的自定义色原样显示，切换色系后列表会立即重算。颜色浮层默认只给常用预设色，需要精确取色时再展开「自定义颜色」；「自定义颜色」右侧的「随机」按钮让该学科每次采纳都从预设色里随机取一个颜色（不连续重复），再点一次或手动取色即恢复固定颜色，随机模式的色卡显示为预设色渐变。内置语文、数学、英语等 16 个学科，学科库只包含内置学科和设置页手动添加的学科，程序不会自动收录项目或磁贴里的科目；列表上方提供「刷新列表」。在磁贴标题里输入中文、全拼（`yuw`、`yuwen`，输入法用撇号分隔的 `yu'wen` 同样支持）或首字母（`yw`）会弹出候选浮层：上下键切换、Tab 或回车采纳、Esc 关闭，也可以直接点击，按键由窗口统一接管，不受输入框焦点导航影响；采纳后标题与磁贴主题色一起切换为该学科的颜色（开启随机配色时每次换一个预设色），预设色跟随色系、真正的自定义色保持不变。新增磁贴的默认标题「新科目」在点击时会自动清空并列出全部推荐学科。候选浮层一次最多显示 5 条候选，更长的列表在浮层内滚动，鼠标滚轮和触屏滑动都能滚动，点候选是选中、拖动则是滚动；浮层宽度按内容放宽到 240–520 像素，长学科名不会被截断。输入法组合期间候选浮层照常按拼音给出学科（带隔音撇号的 `yu'wen` 同样能匹配），可以直接点击采纳；输入法结束这次组合时会把组合内容按原始拼音再写回文档、覆盖刚采纳的候选，窗口会在组合结束、输入框失焦或文本回退时把被覆盖的那一段补写回候选，所以不需要再点第二次，补写不抢回输入焦点、也不重复套色或重复统计。组合期间上下键与 Tab 被输入法自己的候选窗占用（应用收不到这些按键），需要用键盘选择时先让输入法上屏（空格或回车）或直接输入：上屏后浮层会立即给出候选，上屏的学科名本身也会作为候选出现，此时上下键、Tab、回车与点击都可用。候选浮层绘制在窗口最上层并跟随输入位置，滚动看板时按新位置重新贴合，不会被磁贴裁剪或缩放影响。
 - **自动填充 / 作业补全**：可分别开关整体补全与「自动记录常输入的作业名称」，收录阈值分宽松 2 次、正常 3 次、严格 5 次；记录隔离可选全局或分学科，分学科时自动学习写入当前学科桶，全局词始终可用，切换隔离不迁移历史数据。一条作业的文本真正变化后统计一次：按空白、标点与数字切分，只保留长度 2–12 且含汉字或两个以上连续字母的词，因此页码碎片、单字母（如 P）和默认占位文字都不会入库，`双练一测P30`、`双练一测第 3 页` 这类写法只记录「双练一测」；同一条内重复出现的词只累计一次，反复打开同一条作业不会重复计数。列表顶部有「刷新列表」按钮，会先清理过期条目再刷新下方两个列表。已收录（含手动添加项）可改生效范围为全局或任选若干学科，也可编辑名称、屏蔽或删除；待收录显示还差几次输入与剩余过期天数，可删除或不再收录，被屏蔽的词灰显在列表末尾并可恢复。待收录 14 天未再出现会清除，已收录 90 天未使用会自动移除，手动添加的条目永不过期；上限为自动词条 300、手动词条 200、学科库 200，超出按最久未用淘汰。作业正文与学科标题一样在输入法组合态下可用：采纳候选后输入法再把拼音上屏时，只会把被覆盖的那一段改回候选，其余文字与富文本格式保持不动，失焦结算统计排在补写之后。作业补全与标题补全共用同一个候选浮层，一次最多显示 5 条，超出可在浮层内用鼠标滚轮或触屏滑动查看。
-- **关于**：提供 GitHub 与 [Gitee 仓库](https://gitee.com/EdgeHH/workwidgets/)图标链接（浅色模式为浅底黑字，深色模式为深底浅字）、实际构建版本、检查更新、查看更新日志和启动时自动检查开关。更新源默认 GitHub；选择 Gitee 时比较两个源的最新版本，若 Gitee 落后，会在设置与看板提醒切换 GitHub。无法连接 GitHub 时不会把网络错误误报为版本一致，仍可使用 Gitee 更新。
+- **关于**：提供 GitHub 与 [Gitee 仓库](https://gitee.com/EdgeHH/worktiles/)图标链接（浅色模式为浅底黑字，深色模式为深底浅字）、实际构建版本、检查更新、查看更新日志和启动时自动检查开关。更新源默认 GitHub；选择 Gitee 时比较两个源的最新版本，若 Gitee 落后，会在设置与看板提醒切换 GitHub。无法连接 GitHub 时不会把网络错误误报为版本一致，仍可使用 Gitee 更新。
 - **分卷更新**：支持 `.zip.001/.002/...`、`.7z.001/.002/...`，以及 `.z01/.z02/.../.zip` 标准分卷 ZIP。同一发布中需要包含完整且同名的全部分卷，自动按序下载并校验，再复用便携版更新流程；缺卷、损坏、危险路径或试图覆盖 `data` 的包会被拒绝，当前应用保持运行。独立 7z 解压工具及许可随包分发，来源与源码地址见 `Tools/7zip/README.md`。
 - **画笔菜单**：画笔和橡皮擦改为图标切换，不再显示“当前：科目”；红色垃圾桶可选择清空当前磁贴或全部笔迹。菜单具有边框，笔模式隐藏无法操作的添加、排列与网格按钮，退出后恢复。画笔和橡皮擦按钮按控制窗大小同步缩放、圆角跟随控制窗圆角，图标在按钮内居中且完整显示；画笔栏占用富文本悬浮岛的槽位，并同样与控制窗等高（竖版控制窗下等宽）。
 - **正文格式**：选中正文或把光标放到输入位置后，可在富文本悬浮岛中输入 8–96 的字号；字号与字体、粗体、斜体、下划线、文字颜色和高光一样只修改当前选区或后续输入，不会改动整条作业。
@@ -218,12 +218,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-interaction-c
 - 上述设置会保存到 `data/projects.json`；项目内容和软件设置分开建模，旧配置缺少的新字段使用默认值。
 
 运行设置逻辑回归测试：`dotnet run --project tests/SettingsLogic/SettingsLogic.csproj -c Release`；追加 `-- --live` 可验证实际天气接口。该测试覆盖预设色系往返、富文本保留和特殊天气预警解析，不替代界面及真实音频设备验收。
-该测试同时覆盖自动填充的学科库登记、三档拼音匹配、随机配色取色、作业切词与阈值、分学科隔离、过期清理与屏蔽词。汉字拼音数据来自 [pinyin-data](https://github.com/mozillazg/pinyin-data)（MIT），随包分发在 `src/WorkWidgets/Assets/Pinyin`，许可原文见同目录的 `LICENSE.txt`。
+该测试同时覆盖自动填充的学科库登记、三档拼音匹配、随机配色取色、作业切词与阈值、分学科隔离、过期清理与屏蔽词。汉字拼音数据来自 [pinyin-data](https://github.com/mozillazg/pinyin-data)（MIT），随包分发在 `src/WorkTiles/Assets/Pinyin`，许可原文见同目录的 `LICENSE.txt`。
 
 新版设置与布局的真实窗口回归测试：
 
 ```powershell
-dotnet publish src/WorkWidgets/WorkWidgets.csproj -c Release -p:Platform=x64 -p:EnableUiVerification=true -o artifacts/ui-check
+dotnet publish src/WorkTiles/WorkTiles.csproj -c Release -p:Platform=x64 -p:EnableUiVerification=true -o artifacts/ui-check
 ./tests/verify-ui.ps1 -PublishDirectory artifacts/ui-check -EvidenceDirectory artifacts/ui-evidence
 ```
 
@@ -252,13 +252,13 @@ dotnet publish src/WorkWidgets/WorkWidgets.csproj -c Release -p:Platform=x64 -p:
 - 两项都开启时，以先触发的条件为准；两项都关闭时停留在当前媒体。图片与 GIF 不使用视频结束事件，需开启定时切换才能自动轮换。
 - 关闭队列模式恢复单媒体背景；清除背景媒体会同时清空单媒体和队列，保留背景色。
 
-检测到通过 Steam 安装的 Wallpaper Engine 后会显示“从 Wallpaper Engine 导入”，可以选择本地已下载的视频壁纸；队列模式下可多选。扫描 Steam 的多个库、创意工坊及本地项目目录，导入后复制视频，播放不依赖 Wallpaper Engine 持续运行。场景、网页和应用壁纸不支持导入为 WorkWidgets 背景；场景并非视频文件，参见 [Wallpaper Engine 官方说明](https://help.wallpaperengine.io/en/functionality/export.html)。未检测到安装时仍可手动选择本地视频。
+检测到通过 Steam 安装的 Wallpaper Engine 后会显示“从 Wallpaper Engine 导入”，可以选择本地已下载的视频壁纸；队列模式下可多选。扫描 Steam 的多个库、创意工坊及本地项目目录，导入后复制视频，播放不依赖 Wallpaper Engine 持续运行。场景、网页和应用壁纸不支持导入为 WorkTiles 背景；场景并非视频文件，参见 [Wallpaper Engine 官方说明](https://help.wallpaperengine.io/en/functionality/export.html)。未检测到安装时仍可手动选择本地视频。
 
 媒体逻辑回归包含在 `tests/SettingsLogic` 中。实际播放验证先以 `EnableUiVerification=true` 发布，再执行 `pwsh -File tests/verify-ui.ps1 -PublishDirectory <发布目录> -EvidenceDirectory <证据目录> -BackgroundMediaOnly`；该模式需要 FFmpeg 生成短视频，在隔离目录验证真实解码、播放结束/定时切换、失效跳过、资源释放与缩略图选择。如果本机安装了 Wallpaper Engine 且存在 MP4 视频项目，还会验证真实资源复制与播放。
 
 ## 集控服务
 
-集控服务端（`WorkWidgets.Server`）已迁移到独立仓库 [Edge-HH/WorkWidgetsServer](https://github.com/Edge-HH/WorkWidgetsServer)，单独发布版本，部署与配置说明见该仓库。本仓库保留与服务端共用的 `src/WorkWidgets.Shared` 协议，修改时需同步到服务端仓库。
+集控服务端（`WorkTiles.Server`）已迁移到独立仓库 [Edge-HH/WorkTilesServer](https://github.com/Edge-HH/WorkTilesServer)，单独发布版本，部署与配置说明见该仓库。本仓库保留与服务端共用的 `src/WorkTiles.Shared` 协议，修改时需同步到服务端仓库。
 
 ### 完整同步
 
@@ -284,13 +284,13 @@ dotnet publish src/WorkWidgets/WorkWidgets.csproj -c Release -p:Platform=x64 -p:
 
 同一账号和来源连续输错 5 次密码会被锁定 10 分钟。浏览器的 `<img>` 和 WebSocket 无法附带请求头，登录令牌通过 `access_token` 查询参数传入；上传的非图片/视频文件一律以下载方式返回，避免在本站执行脚本。
 
-### WorkWidgets 客户端
+### WorkTiles 客户端
 
 「设置 → 集控」输入服务器地址和配对码即可连接；换到另一个班级时会清空旧的修订记录，全部项目按新项目上传。设置页可单独关闭“同步班级布局”和“在看板上显示公告”。连接后控制窗出现“班级”入口，显示连接状态、班级公告和全部项目的同步情况，可立即同步或在看板上打开任一项目；分屏模式下班务条放在时钟区上方，不遮挡作业磁贴，点按即可收起。
 
 ### 测试
 
-同步测试需要把 WorkWidgetsServer 检出到与本仓库相邻的目录（或用 `-p:WorkWidgetsServerDir=<路径>` 指定）。
+同步测试需要把 WorkTilesServer 检出到与本仓库相邻的目录（或用 `-p:WorkTilesServerDir=<路径>` 指定）。
 
 ```powershell
 dotnet run --project .\tests\SyncLogic\SyncLogic.csproj       # 桌面端同步服务与真实服务端的端到端测试（两台模拟大屏）
