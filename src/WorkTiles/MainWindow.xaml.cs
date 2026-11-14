@@ -119,6 +119,7 @@ public sealed partial class MainWindow : Window
         SetTitleBar(DragRegion);
         SystemBackdrop = new PersistentMicaBackdrop();
         InitializeAppWindow();
+        InitializeDesktopTiles();
         InitializeTimersAndServices();
         InitializePresentationBehavior();
         InitializeCloudSync();
@@ -172,7 +173,12 @@ public sealed partial class MainWindow : Window
             HideFullScreenExitHint();
         };
         _weatherTimer.Tick += async (_, _) => await RefreshWeatherAsync();
-        _saveTimer.Tick += (_, _) => { _saveTimer.Stop(); SaveStateNow(); };
+        _saveTimer.Tick += (_, _) =>
+        {
+            _saveTimer.Stop();
+            ReloadIdleTileContent();
+            if (_settings.AutoSaveEnabled) SaveStateNow();
+        };
         _autoBackupTimer.Tick += (_, _) => RunAutoBackupIfDue();
 
         _noiseMonitor.FastLevelAvailable += (_, level) => DispatcherQueue.TryEnqueue(() => ProcessNoiseAlert(level));
@@ -392,6 +398,7 @@ public sealed partial class MainWindow : Window
         SetTilesEditing(true);
         ApplyExtendedSettings();
         StartEditLockHeartbeat();
+        SyncDesktopTiles();
     }
 
     private void FinishEditing()
@@ -413,6 +420,7 @@ public sealed partial class MainWindow : Window
         if (_cloudTilesRebuildPending) { _cloudTilesRebuildPending = false; BuildTiles(); }
         ScheduleSave();
         ReleaseCloudEditLock();
+        SyncDesktopTiles();
     }
 
     private async void DiscardEditButton_Click(object sender, RoutedEventArgs e)
@@ -435,6 +443,7 @@ public sealed partial class MainWindow : Window
         UpdateEditingToolbarVisibility();
         ScheduleSave();
         ReleaseCloudEditLock();
+        SyncDesktopTiles();
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -464,18 +473,20 @@ public sealed partial class MainWindow : Window
         ApplyGlobalInkMode();
         UpdateBoardBounds();
         UpdateSubjectCount();
+        SyncDesktopTiles();
     }
 
     private void AddTile(SubjectBoard subject)
     {
-        SubjectTileControl tile = new(
+        SubjectTileControl? tile = null;
+        tile = new(
             subject,
             DeleteSubject,
             LayoutChanged,
             LayoutCommitted,
             SetTileInteractionActive,
             AddAttachmentAsync,
-            ScheduleSave,
+            () => { if (tile is not null) NoteTileContentChanged(tile); },
             _settings,
             _autofill,
             _autofillPopup)
@@ -524,14 +535,7 @@ public sealed partial class MainWindow : Window
         _activeTileInteractions = Math.Max(0, _activeTileInteractions + (active ? 1 : -1));
     }
 
-    private void AddSubjectButton_Click(object sender, RoutedEventArgs e)
-    {
-        SubjectBoard subject = ViewModel.AddSubject("新科目");
-        LayoutCommitted(subject);
-        AddTile(subject);
-        UpdateBoardBounds();
-        UpdateSubjectCount();
-    }
+    private void AddSubjectButton_Click(object sender, RoutedEventArgs e) => AddSubjectCore();
 
     private void UpdateEditButtonPosition()
     {
@@ -682,6 +686,7 @@ public sealed partial class MainWindow : Window
         LayoutChanged(subject);
         AlignmentCanvas.Children.Clear();
         ScheduleSave();
+        SyncDesktopTiles();
     }
 
     private double SnapToGrid(double value) => Math.Round(value / GridSize) * GridSize;
@@ -1326,6 +1331,10 @@ public sealed partial class MainWindow : Window
             if (string.IsNullOrWhiteSpace(_settings.CloudSync.LayoutPolicy)) _settings.CloudSync.LayoutPolicy = LayoutPolicies.Shared;
             // 旧配置缺少本机考试安排或手改数据时补齐默认值。
             _settings.LocalExam ??= new LocalExamSettings();
+            _settings.DesktopTileOrder ??= new();
+            _settings.DesktopTilePlacements ??= new();
+            if (_settings.DesktopTilesZoom is < 0.5 or > 2 || double.IsNaN(_settings.DesktopTilesZoom))
+                _settings.DesktopTilesZoom = 1;
             if (_settings.LocalExam.Days is null) _settings.LocalExam.Days = [];
             _settings.LocalExam.Days.RemoveAll(day => day is null);
             foreach (LocalExamDay day in _settings.LocalExam.Days)
@@ -1372,7 +1381,8 @@ public sealed partial class MainWindow : Window
     {
         if (!_isLoaded) return;
         // 自动保存关闭后只在退出、手动保存或立即保存时写盘，防止意外损坏来不及挽救；设置改动仍会同步到集控。
-        if (!_settings.AutoSaveEnabled) { RequestCloudLayoutSync(); return; }
+        // 计时器照样走：桌面磁贴和看板上的另一份内容按这个节拍刷新，关闭自动保存时到点不写盘。
+        if (!_settings.AutoSaveEnabled) RequestCloudLayoutSync();
         _saveTimer.Stop();
         _saveTimer.Start();
     }

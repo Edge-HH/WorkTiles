@@ -622,6 +622,46 @@ Check(dataRoundTrip.Data.AutoBackup.Enabled && dataRoundTrip.Data.AutoBackup.Int
     "自动备份目录、间隔、保留份数与上次备份时间往返持久化");
 Check(dataRoundTrip.Lock.Enabled && dataRoundTrip.Lock.RequireAuthForEditing && !dataRoundTrip.Lock.RequireAuthForSettings,
     "锁定开关与验证范围往返持久化");
+Check(!dataDefaults.DesktopTilesEnabled && dataDefaults.DesktopTileOrder.Count == 0, "旧配置默认不在桌面显示磁贴");
+Check(dataDefaults.DesktopTilesAutoArrange && dataDefaults.DesktopTilesZoom == 1 && dataDefaults.DesktopTilePlacements.Count == 0,
+    "桌面磁贴默认自动排列、原始比例，自由位置为空");
+BoardSettingsState desktopRoundTrip = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(new BoardSettingsState
+{
+    DesktopTilesEnabled = true,
+    DesktopTileOrder = new Dictionary<string, List<string>> { ["project"] = ["语文", "数学"] }
+}))!;
+Check(desktopRoundTrip.DesktopTilesEnabled && desktopRoundTrip.DesktopTileOrder["project"].SequenceEqual(["语文", "数学"]),
+    "桌面磁贴开关和按项目保存的顺序往返持久化");
 Check((BackupScopes.All | BackupScopes.Jobs).Sanitize() == BackupScopes.All && ((BackupScopes)255).Sanitize() == BackupScopes.All,
     "备份范围只保留合法位");
 Console.WriteLine("PASS: backup pack/restore boundaries, auto-backup pruning and auto-save/data-page persistence.");
+
+var desktopArea = new DesktopWorkArea(0, 0, 1000, 120);
+var desktopSlots = DesktopTileLayout.Arrange([(100, 50), (160, 50), (80, 40)], desktopArea);
+Check(desktopSlots.Count == 3, "每个磁贴都有一个槽位");
+Check(desktopSlots[0].X == 900 && desktopSlots[0].Y == 0 && desktopSlots[0].Width == 100 && desktopSlots[0].Height == 50,
+    "第一块贴在工作区右上角");
+Check(desktopSlots[1].X == 840 && desktopSlots[1].Y == 62 && desktopSlots[1].Width == 160,
+    "同一列向下排，并且按各自宽度右对齐");
+Check(desktopSlots[2].X == 808 && desktopSlots[2].Y == 0 && desktopSlots[2].Width == 80 && desktopSlots[2].Height == 40,
+    "右列下块更宽时，窄磁贴靠进上块左侧的空隙，而不是按整列宽度再左移");
+var spaced = DesktopTileLayout.Arrange([(80, 30), (80, 30)], new DesktopWorkArea(0, 0, 400, 200), 20);
+Check(spaced[0].X == 320 && spaced[0].Y == 0 && spaced[1].X == 320 && spaced[1].Y == 50,
+    "自动排列的间隔使用调用方传入的值");
+var clamped = DesktopTileLayout.Arrange([(40, 250), (40, 30)], new DesktopWorkArea(10, 20, 300, 100));
+Check(clamped[0].X == 270 && clamped[0].Y == 20 && clamped[0].Height == 100 && clamped[0].Width == 40,
+    "高于工作区的磁贴把槽位高度收到工作区高度");
+Check(clamped[1].X == 218 && clamped[1].Y == 20 && clamped[1].Height == 30,
+    "被夹短的磁贴占满一列后，下一块换到左边");
+Check(DesktopTileLayout.Arrange([], desktopArea).Count == 0, "没有磁贴时不产生槽位");
+
+List<string> merged = DesktopTileLayout.MergeOrder(["语文", "已删除", "数学"], ["数学", "英语", "语文"]);
+Check(merged.SequenceEqual(["语文", "数学", "英语"]), "已保存的顺序保留还在的科目，新科目接在末尾");
+Check(DesktopTileLayout.MergeOrder(["数学", "数学"], ["数学"]).SequenceEqual(["数学"]), "同名科目按出现次数对应，多出来的保存项丢掉");
+Check(DesktopTileLayout.MergeOrder(null, ["英语", "数学"]).SequenceEqual(["英语", "数学"]), "没有保存过顺序时沿用当前科目顺序");
+List<string> desktopNames = ["语文", "数学", "英语"];
+Check(DesktopTileLayout.RenameAt(desktopNames, 1, "数学", "代数") && desktopNames.SequenceEqual(["语文", "代数", "英语"]),
+    "改名只替换该位置上的旧名字");
+Check(!DesktopTileLayout.RenameAt(desktopNames, 0, "数学", "几何") && desktopNames[0] == "语文", "位置上的名字对不上时不改顺序");
+Check(!DesktopTileLayout.RenameAt(desktopNames, 5, "英语", "外语"), "越界的改名不做任何事");
+Console.WriteLine("PASS: desktop tiles pack toward the top-right, honor the requested gap, and keep an independent order.");

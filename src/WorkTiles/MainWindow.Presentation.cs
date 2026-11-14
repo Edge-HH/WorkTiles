@@ -48,6 +48,7 @@ public sealed partial class MainWindow
                 !_isEditing && DisplayRoot.Visibility == Visibility.Visible && SettingsRoot.Visibility != Visibility.Visible,
                 interacting, (Environment.TickCount64 - _lastToolbarActivity) / 1000d, _settings.ToolbarAutoHideSeconds);
             SetToolbarHidden(hide, true);
+            UpdateDesktopCommandAutoHide();
         };
         _presentationTimer.Start();
     }

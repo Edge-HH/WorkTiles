@@ -84,6 +84,9 @@ public sealed partial class MainWindow
             Foreground = (Brush)Application.Current.Resources["BoardTextMutedBrush"]
         });
         window.Children.Add(secondLaunchBlock);
+        window.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
+            _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
+        window.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
         // 允许多实例时再次启动会直接开新窗口，再次启动行为没有作用对象。
         _refreshSettingAvailability.Add(() => secondLaunch.IsEnabled = !_settings.AllowMultipleInstances);
         RegisterSettingsPage("Window", WindowSettingsPanel, window, "窗口", "调整同时打开的窗口数量与再次启动的行为。");
@@ -921,6 +924,7 @@ public sealed partial class MainWindow
         // 连续拖动不走全窗口刷新，保留预览编辑器以及所有背景资源。
         foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
             tile.ApplyTitleSize(_settings.TileTitleSize);
+        ForEachDesktopTile(tile => tile.ApplyTitleSize(_settings.TileTitleSize));
         _tileAppearancePreview?.ApplyTitleSize(_settings.TileTitleSize);
         ScheduleSave();
     }
@@ -962,6 +966,7 @@ public sealed partial class MainWindow
         // 改默认样式只触碰未单独格式化的正文；预览是独立示例，可以整体展示当前默认值。
         foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
             tile.ApplyBodyDefaults(_settings);
+        ForEachDesktopTile(tile => tile.ApplyBodyDefaults(_settings));
         _tileAppearancePreview?.ApplyBodyDefaults(_settings, overrideFormatted: true);
         ScheduleSave();
     }
@@ -982,6 +987,8 @@ public sealed partial class MainWindow
     private void AutoLayoutGapChanged()
     {
         RefreshAppearancePreviews();
+        if (_settings.DesktopTilesEnabled && _settings.DesktopTilesAutoArrange)
+            ArrangeDesktopTiles();
         ScheduleSave();
     }
 
@@ -1339,6 +1346,9 @@ public sealed partial class MainWindow
                 FloatingToolbar.Background = CreateToolbarBackground();
                 GlobalInkToolbar.Background = CreateToolbarBackground();
             }
+            ApplyDesktopCommandChrome();
+            ForEachDesktopTile(tile => tile.ApplyAppearance(_settings, applyBodyDefaults: false));
+            ApplyDesktopTileBackdrops();
             ApplyWidgetBackground();
             RefreshAppearancePreviews();
             ScheduleSave();
@@ -1372,6 +1382,9 @@ public sealed partial class MainWindow
         RefreshClockInk();
         ApplyBackgroundVisuals();
         foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>()) tile.ApplyAppearance(_settings);
+        SyncDesktopTiles();
+        ForEachDesktopTile(tile => tile.ApplyAppearance(_settings));
+        ApplyDesktopTileBackdrops();
         // 从无限作业板切回固定作业板时缩放比例回到 100%：原先放大后的位置已经没有意义。
         if (!_settings.InfiniteBoard && _wasInfiniteBoard)
         {
@@ -1481,6 +1494,7 @@ public sealed partial class MainWindow
         ApplyToolbarBorder(GlobalInkToolbar);
         FloatingToolbar.Background = CreateToolbarBackground();
         GlobalInkToolbar.Background = CreateToolbarBackground();
+        ApplyDesktopCommandChrome();
         FloatingToolbar.HorizontalAlignment = position.EndsWith("Left") ? HorizontalAlignment.Left : position.EndsWith("Right") ? HorizontalAlignment.Right : HorizontalAlignment.Center;
         FloatingToolbar.VerticalAlignment = position.StartsWith("Top") ? VerticalAlignment.Top : vertical ? VerticalAlignment.Center : VerticalAlignment.Bottom;
         double x = _settings.ToolbarHorizontalInset, y = _settings.ToolbarVerticalInset;

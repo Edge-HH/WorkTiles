@@ -6,7 +6,7 @@
       "type": "coreclr",
       "request": "launch",
       "preLaunchTask": "build WorkTiles (Debug x64)",
-      "program": "${workspaceFolder}/src/WorkTiles/bin/Debug/net8.0-windows10.0.19041.0/win-x64/WorkTiles.exe",
+      "program": "${workspaceFolder}/src/WorkTiles/bin/x64/Debug/net8.0-windows10.0.19041.0/win-x64/WorkTiles.exe",
       "cwd": "${workspaceFolder}/src/WorkTiles",
       "args": [],
       "stopAtEntry": false,

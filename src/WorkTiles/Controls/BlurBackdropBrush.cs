@@ -44,3 +44,44 @@ public sealed class BlurBackdropBrush(double amount, Windows.UI.Color? tint = nu
         _backdrop = null;
     }
 }
+
+/// <summary>
+/// 桌面控制窗的颜色层：模糊窗口后方的内容，再叠上背景色。
+/// 画在圆角背景上，因此跟随圆角，也跟随控件透明度一起隐藏。边缘用软采样，避免模糊向外扩出一圈。
+/// </summary>
+public sealed class DesktopGlassBrush(double amount, Windows.UI.Color? tint = null) : XamlCompositionBrushBase
+{
+    private CompositionBackdropBrush? _backdrop;
+    public double Amount { get; } = Math.Clamp(amount, 0, 100);
+
+    protected override void OnConnected()
+    {
+        if (CompositionBrush is not null) return;
+        Compositor compositor = CompositionTarget.GetCompositorForCurrentThread();
+        using GaussianBlurEffect blur = new()
+        {
+            BlurAmount = (float)Amount,
+            BorderMode = EffectBorderMode.Soft,
+            Source = new CompositionEffectSourceParameter("backdrop")
+        };
+        using ColorSourceEffect tintEffect = new() { Color = tint ?? Microsoft.UI.Colors.Transparent };
+        using CompositeEffect composite = new()
+        {
+            Mode = Microsoft.Graphics.Canvas.CanvasComposite.SourceOver,
+            Sources = { blur, tintEffect }
+        };
+        using CompositionEffectFactory factory = compositor.CreateEffectFactory(composite);
+        CompositionEffectBrush brush = factory.CreateBrush();
+        _backdrop = compositor.CreateBackdropBrush();
+        brush.SetSourceParameter("backdrop", _backdrop);
+        CompositionBrush = brush;
+    }
+
+    protected override void OnDisconnected()
+    {
+        CompositionBrush?.Dispose();
+        CompositionBrush = null;
+        _backdrop?.Dispose();
+        _backdrop = null;
+    }
+}

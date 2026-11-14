@@ -97,6 +97,7 @@ public sealed partial class MainWindow
             Canvas.SetTop(tile, subject.Y);
         }
         UpdateBoardBounds();
+        SyncDesktopTiles();
     }
 
     private void ApplyDisplayLayout()

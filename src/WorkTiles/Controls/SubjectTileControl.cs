@@ -1,3 +1,4 @@
+using System.Text;
 using WorkTiles.Services;
 using System.Collections.Specialized;
 using Microsoft.UI.Xaml;
@@ -22,8 +23,8 @@ public sealed class SubjectTileControl : Grid
 {
     internal const double MinimumTileWidth = 280;
     internal const double MinimumTileHeight = 96;
-    private const double MaximumTileWidth = 900;
-    private const double MaximumTileHeight = 680;
+    internal const double MaximumTileWidth = 900;
+    internal const double MaximumTileHeight = 680;
     private const double EdgeHitTarget = 22;
     private const double CornerHitTarget = 34;
 
@@ -57,6 +58,9 @@ public sealed class SubjectTileControl : Grid
     private uint? _inkPointerId;
     public event Action<SubjectBoard>? InkActivated;
     private bool _isEditing;
+    private bool _lockBoardGeometry;
+    private bool _applyingModel;
+    private string _modelStamp = "";
     private bool _isDrawing;
     private bool _isErasing;
     private InkStrokeData? _activeStrokeData;
@@ -93,10 +97,18 @@ public sealed class SubjectTileControl : Grid
 
         _frame = new Border
         {
-            Background = BoardTheme.SurfaceBrush,
+            Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent),
             BorderBrush = subject.AccentBrush,
             BorderThickness = new Thickness(3),
             CornerRadius = new CornerRadius(3)
+        };
+        DoubleTapped += (_, args) =>
+        {
+            if (_lockBoardGeometry && !_isEditing)
+            {
+                args.Handled = true;
+                DesktopDoubleTapped?.Invoke();
+            }
         };
         Children.Add(_frame);
 
@@ -142,13 +154,19 @@ public sealed class SubjectTileControl : Grid
         double dragX = 0, dragY = 0;
         _headerMoveThumb.DragStarted += (_, _) =>
         {
-            IsMoving = true;
+            IsMoving = !_lockBoardGeometry;
             HideAutofill();
             dragX = _subject.X; dragY = _subject.Y;
             _interactionChanged(true);
+            if (_lockBoardGeometry) DesktopDragStarted?.Invoke();
         };
         _headerMoveThumb.DragDelta += (_, args) =>
         {
+            if (_lockBoardGeometry)
+            {
+                DesktopDragDelta?.Invoke(args.HorizontalChange, args.VerticalChange);
+                return;
+            }
             // 从原始指针累计位移，避免小幅拖动始终粘在吸附线上。
             dragX += args.HorizontalChange; dragY += args.VerticalChange;
             _subject.X = Math.Max(0, dragX);
@@ -157,6 +175,13 @@ public sealed class SubjectTileControl : Grid
         };
         _headerMoveThumb.DragCompleted += (_, _) =>
         {
+            if (_lockBoardGeometry)
+            {
+                IsMoving = false;
+                _interactionChanged(false);
+                DesktopDragCompleted?.Invoke();
+                return;
+            }
             _layoutCommitted(_subject);
             IsMoving = false;
             _interactionChanged(false);
@@ -172,6 +197,7 @@ public sealed class SubjectTileControl : Grid
         _nameEditor.MaxWidth = 240;
         _nameEditor.TextChanged += (_, _) =>
         {
+            if (_applyingModel) return;
             _subject.Name = _nameEditor.Text;
             _watermark.Text = _subject.Watermark;
             _contentChanged();
@@ -219,6 +245,30 @@ public sealed class SubjectTileControl : Grid
 
     public bool IsMoving { get; private set; }
 
+    public bool IsEditing => _isEditing;
+
+    /// <summary>桌面磁贴拖动标题时通知宿主换顺序，而不是改作业板坐标。</summary>
+    public event Action? DesktopDragStarted;
+    public event Action<double, double>? DesktopDragDelta;
+    public event Action? DesktopDragCompleted;
+    /// <summary>桌面磁贴拖边缘时由窗口按光标改尺寸。不能用控件内部的位移，窗口一变下一次位移就反了。</summary>
+    public event Action<DesktopResizeEdge>? DesktopResizeStarted;
+    public event Action? DesktopResizeDelta;
+    public event Action? DesktopResizeCompleted;
+    public event Action? DesktopDoubleTapped;
+
+    /// <summary>桌面磁贴不改作业板坐标。尺寸仍可拖，由宿主写回宽高。</summary>
+    public bool LockBoardGeometry
+    {
+        get => _lockBoardGeometry;
+        set
+        {
+            if (_lockBoardGeometry == value) return;
+            _lockBoardGeometry = value;
+            ApplyEditChrome();
+        }
+    }
+
     /// <summary>收起候选浮层；统计只在编辑真正结束时结算，避免滚动时把半截文字计入。</summary>
     public void HideAutofill()
     {
@@ -264,7 +314,8 @@ public sealed class SubjectTileControl : Grid
         // 预览拖动只更新标题和背景；正文格式写入 RichEditBox 很贵，不能跟在网格/间隔滑块后面跑。
         if (applyBodyDefaults) ApplyBodyDefaults(settings);
         _nameEditor.MaxWidth = Math.Max(240, Width - 150);
-        _frame.Background = null;
+        // 保持透明画刷以接收双击等命中测试，同时不遮挡桌面透明与圆角透底。
+        _frame.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         _backgroundVisual.Apply(settings.TileBackground, BoardTheme.SurfaceBrush, surface: true);
     }
 
@@ -292,21 +343,79 @@ public sealed class SubjectTileControl : Grid
         _nameEditor.MaxWidth = Math.Max(240, Width - 150);
     }
 
+    /// <summary>去掉圆角，避免窗口直角和磁贴圆角之间露出一圈底色。</summary>
+    public void UseFlushFrame() => _frame.CornerRadius = new CornerRadius(0);
+
+    /// <summary>只改这块控件的显示尺寸，不写回科目的宽高。桌面窗口比磁贴矮时用来夹进工作区。</summary>
+    public void FitDisplaySize(double width, double height)
+    {
+        // 桌面缩放会小于磁贴最小尺寸。不放开 MinWidth，缩小后控件仍停在 280，窗口里就只露出一块。
+        MinWidth = 0;
+        MinHeight = 0;
+        Width = Math.Max(1, width);
+        Height = Math.Max(1, height);
+        _nameEditor.MaxWidth = Math.Max(40, Width - 150);
+    }
+
+    /// <summary>另一块界面改了同一科目时，把没有焦点的这份刷成模型里的内容。</summary>
+    public void ReloadFromModel()
+    {
+        if (ContainsFocus() || ModelStamp() == _modelStamp) return;
+        _applyingModel = true;
+        try
+        {
+            if (!string.Equals(_nameEditor.Text, _subject.Name, StringComparison.Ordinal))
+                _nameEditor.Text = _subject.Name;
+            _watermark.Text = _subject.Watermark;
+            _watermark.Foreground = _subject.AccentBrush;
+            _frame.BorderBrush = _subject.AccentBrush;
+            _nameEditor.Foreground = _subject.AccentBrush;
+            RebuildEntries();
+            RenderStoredStrokes();
+            _modelStamp = ModelStamp();
+        }
+        finally { _applyingModel = false; }
+    }
+
     public void SetEditing(bool editing)
     {
         _isEditing = editing;
         if (!editing) HideAutofill();
-        _editingTools.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
-        _headerMoveThumb.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
-        foreach (Thumb thumb in Children.OfType<Thumb>())
-        {
-            thumb.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        _nameEditor.IsReadOnly = !editing;
-        _nameEditor.IsHitTestVisible = editing;
+        ApplyEditChrome();
         SetInkMode(false, _inkSettings);
         RebuildEntries();
+    }
+
+    private void ApplyEditChrome()
+    {
+        _editingTools.Visibility = _isEditing ? Visibility.Visible : Visibility.Collapsed;
+        foreach (Thumb thumb in Children.OfType<Thumb>())
+            thumb.Visibility = _isEditing ? Visibility.Visible : Visibility.Collapsed;
+        _nameEditor.IsReadOnly = !_isEditing;
+        _nameEditor.IsHitTestVisible = _isEditing;
+    }
+
+    private bool ContainsFocus()
+    {
+        if (XamlRoot is null || FocusManager.GetFocusedElement(XamlRoot) is not DependencyObject focused) return false;
+        for (DependencyObject? node = focused; node is not null; node = VisualTreeHelper.GetParent(node))
+            if (ReferenceEquals(node, this)) return true;
+        return false;
+    }
+
+    private string ModelStamp()
+    {
+        StringBuilder stamp = new();
+        stamp.Append(_subject.Name).Append('\u001f').Append(_subject.AccentHex).Append('\u001f').Append(_subject.InkStrokes.Count);
+        foreach (HomeworkEntry entry in _subject.Entries)
+        {
+            stamp.Append('\u001e').Append(entry.Id).Append('\u001f').Append(entry.Content).Append('\u001f').Append(entry.RtfContent)
+                .Append('\u001f').Append(entry.HasHandwriting);
+            foreach (AttachmentItem attachment in entry.Attachments)
+                stamp.Append('\u001f').Append(attachment.Path).Append('@').Append(attachment.Scale).Append(',').Append(attachment.OffsetX)
+                    .Append(',').Append(attachment.OffsetY).Append(',').Append(attachment.PositionX).Append(',').Append(attachment.PositionY);
+        }
+        return stamp.ToString();
     }
 
     private void AddResizeHandles()
@@ -334,10 +443,21 @@ public sealed class SubjectTileControl : Grid
         {
             HideAutofill();
             _interactionChanged(true);
+            if (_lockBoardGeometry) DesktopResizeStarted?.Invoke(ToDesktopEdge(edge));
         };
-        thumb.DragDelta += ResizeHandle_DragDelta;
+        thumb.DragDelta += (sender, args) =>
+        {
+            if (_lockBoardGeometry) { DesktopResizeDelta?.Invoke(); return; }
+            ResizeHandle_DragDelta(sender, args);
+        };
         thumb.DragCompleted += (_, _) =>
         {
+            if (_lockBoardGeometry)
+            {
+                _interactionChanged(false);
+                DesktopResizeCompleted?.Invoke();
+                return;
+            }
             _layoutCommitted(_subject);
             _interactionChanged(false);
         };
@@ -446,6 +566,7 @@ public sealed class SubjectTileControl : Grid
             if (images is not null) _entriesPanel.Children.Add(images);
             index++;
         }
+        _modelStamp = ModelStamp();
     }
 
     private void DeleteAttachment(HomeworkEntry homework, AttachmentItem attachment)
@@ -933,5 +1054,16 @@ public sealed class SubjectTileControl : Grid
         _contentChanged();
     }
 
+    private static DesktopResizeEdge ToDesktopEdge(ResizeEdge edge) => edge switch
+    {
+        ResizeEdge.Left => DesktopResizeEdge.Left,
+        ResizeEdge.Right => DesktopResizeEdge.Right,
+        ResizeEdge.Bottom => DesktopResizeEdge.Bottom,
+        ResizeEdge.BottomLeft => DesktopResizeEdge.BottomLeft,
+        _ => DesktopResizeEdge.BottomRight
+    };
+
     private enum ResizeEdge { Left, Right, Bottom, BottomLeft, BottomRight }
 }
+
+public enum DesktopResizeEdge { Left, Right, Bottom, BottomLeft, BottomRight }

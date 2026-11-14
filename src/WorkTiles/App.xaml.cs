@@ -14,7 +14,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) => WriteCrashLog(args.ExceptionObject as Exception);
     }
 
-    private static void WriteCrashLog(Exception? exception)
+    internal static void WriteCrashLog(Exception? exception)
     {
         try
         {

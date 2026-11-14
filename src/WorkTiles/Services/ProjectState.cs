@@ -103,6 +103,16 @@ public sealed class BoardSettingsState
     public CloudSyncSettings CloudSync { get; set; } = new();
     /// <summary>本机考试安排：不连接集控时也能按设定时间全屏显示；不参与班级布局同步。</summary>
     public LocalExamSettings LocalExam { get; set; } = new();
+    /// <summary>在 Windows 桌面上显示当前项目的科目磁贴。本机窗口行为，不参与班级同步。</summary>
+    public bool DesktopTilesEnabled { get; set; }
+    /// <summary>每个项目一份桌面顺序，键是项目 Id，值是科目名。不写回作业板坐标。</summary>
+    public Dictionary<string, List<string>> DesktopTileOrder { get; set; } = new();
+    /// <summary>桌面磁贴是否从右上角往空隙里自动排列。关掉后停在当前屏幕位置，不回到开启前的布局。</summary>
+    public bool DesktopTilesAutoArrange { get; set; } = true;
+    /// <summary>桌面磁贴的显示缩放，只影响桌面窗口，不改作业板上的尺寸。</summary>
+    public double DesktopTilesZoom { get; set; } = 1;
+    /// <summary>关闭自动排列后，每个项目记住磁贴在工作区里的位置。坐标相对工作区左上角，单位 DIP。</summary>
+    public Dictionary<string, List<DesktopTilePlacement>> DesktopTilePlacements { get; set; } = new();
 
     /// <summary>再次启动行为只认三种取值；旧配置或手改值一律回到“移至前台”。</summary>
     public static string NormalizeSecondLaunchAction(string? value) =>
@@ -326,6 +336,14 @@ public sealed class BackgroundSettings
     public bool SwitchOnMediaEnded { get; set; } = true;
     public bool Glass { get; set; }
     public double Blur { get; set; } = 20;
+}
+
+/// <summary>桌面磁贴在工作区里的自由位置。宽高仍用科目自己的尺寸，这里只记左上角。</summary>
+public sealed class DesktopTilePlacement
+{
+    public string Name { get; set; } = "";
+    public double X { get; set; }
+    public double Y { get; set; }
 }
 
 public sealed class RegionPlacement

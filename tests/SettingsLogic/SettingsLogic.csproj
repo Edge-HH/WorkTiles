@@ -20,6 +20,7 @@
     <Compile Include="../../src/WorkTiles/Services/ToolbarAutoHidePolicy.cs" Link="ToolbarAutoHidePolicy.cs" />
     <Content Include="../../src/WorkTiles/Assets/Pinyin/pinyin.txt" Link="Assets/Pinyin/pinyin.txt" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../src/WorkTiles/Services/WidgetLayout.cs" Link="WidgetLayout.cs" />
+    <Compile Include="../../src/WorkTiles/Services/DesktopTileLayout.cs" Link="DesktopTileLayout.cs" />
     <Compile Include="../../src/WorkTiles/Services/GitHubUpdateService.cs" Link="GitHubUpdateService.cs" />
     <Compile Include="../../src/WorkTiles/Services/LockService.cs" Link="LockService.cs" />
     <Compile Include="../../src/WorkTiles/Services/LaunchArgs.cs" Link="LaunchArgs.cs" />

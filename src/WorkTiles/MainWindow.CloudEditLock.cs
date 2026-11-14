@@ -62,7 +62,7 @@ public sealed partial class MainWindow
     /// <summary>编辑期间续期；续期被网页拒绝说明网页强制接管了，按“请求结束编辑”处理。</summary>
     private async Task RenewEditLockAsync()
     {
-        if (!_isEditing || CurrentProject is not { } project || _editLockGranted != project.Id) { _editLockHeartbeat.Stop(); return; }
+        if ((!_isEditing && !_desktopEditing) || CurrentProject is not { } project || _editLockGranted != project.Id) { _editLockHeartbeat.Stop(); return; }
         CloudSyncService.EditLockResult result = await CloudSync.AcquireEditLockAsync(_settings.CloudSync, project.Id);
         if (!result.Acquired && _isEditing && CurrentProject?.Id == project.Id && result.HeldBy?.Holder == EditLockHolders.User)
             EndEditingForCloud(project, result.HeldBy.Name);

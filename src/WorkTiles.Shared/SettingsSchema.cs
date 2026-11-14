@@ -195,7 +195,12 @@ public static class SettingsSchema
         ["Autofill.Subject.Subjects"] = "本机补全词库",
         ["Autofill.Homework.Items"] = "本机学习的作业词库",
         ["Autofill.Homework.Blocked"] = "本机补全屏蔽词",
-        ["LocalExam"] = "本机考试安排"
+        ["LocalExam"] = "本机考试安排",
+        ["DesktopTilesEnabled"] = "本机桌面磁贴",
+        ["DesktopTileOrder"] = "本机桌面磁贴",
+        ["DesktopTilesAutoArrange"] = "本机桌面磁贴",
+        ["DesktopTilesZoom"] = "本机桌面磁贴",
+        ["DesktopTilePlacements"] = "本机桌面磁贴"
     };
 
     /// <summary>
