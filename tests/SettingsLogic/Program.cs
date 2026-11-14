@@ -658,6 +658,10 @@ Check(DesktopTileLayout.Arrange([], desktopArea).Count == 0, "没有磁贴时不
 List<string> merged = DesktopTileLayout.MergeOrder(["语文", "已删除", "数学"], ["数学", "英语", "语文"]);
 Check(merged.SequenceEqual(["语文", "数学", "英语"]), "已保存的顺序保留还在的科目，新科目接在末尾");
 Check(DesktopTileLayout.MergeOrder(["数学", "数学"], ["数学"]).SequenceEqual(["数学"]), "同名科目按出现次数对应，多出来的保存项丢掉");
+Check(MenuBarPolicy.ShowChrome(false, false) == false, "预览关闭时查看模式不显示菜单栏");
+Check(MenuBarPolicy.ShowChrome(false, true) && MenuBarPolicy.ShowChrome(true, false), "编辑模式或打开预览显示时保留菜单栏");
+Check(!MenuBarPolicy.ShowCommands(false, false) && !MenuBarPolicy.ShowCommands(true, true) && MenuBarPolicy.ShowCommands(true, false),
+    "项目和文件菜单在菜单栏可见且不在设置页、班级页时显示");
 Check(IslandScroll.Slot(200, 400) == 202, "放得下的浮岛多留两个像素，避免滚动条凭空出现");
 Check(IslandScroll.Slot(200, 201) == 201, "可用空间不够多留时槽位不超过可用空间");
 Check(!IslandScroll.Clipped(200, IslandScroll.Slot(200, 400)), "放得下时不显示滚动条");

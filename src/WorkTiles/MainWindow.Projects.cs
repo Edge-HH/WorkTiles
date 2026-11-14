@@ -134,9 +134,13 @@ public sealed partial class MainWindow
         ProjectSyncIcon.Visibility = exists && _settings.CloudSync.Enabled && CloudSyncService.IsSynced(_library, CurrentProject!)
             ? Visibility.Visible : Visibility.Collapsed;
         bool overlayOpen = SettingsRoot.Visibility == Visibility.Visible || CloudControlRoot.Visibility == Visibility.Visible;
-        // 菜单栏默认只在编辑模式显示；开启“预览下显示菜单栏”后查看模式也显示，设置页与班级页始终隐藏。
-        ProjectCommands.Visibility = overlayOpen || (!_isEditing && !_settings.ShowMenuBarInPreview)
-            ? Visibility.Collapsed : Visibility.Visible;
+        // 菜单栏默认只在编辑模式显示；开启“预览下显示菜单栏”后查看模式也显示整条，包括左侧品牌。
+        // 设置页与班级页始终收起项目、文件菜单。
+        bool showChrome = MenuBarPolicy.ShowChrome(_isEditing, _settings.ShowMenuBarInPreview);
+        if (TopBarHost is not null)
+            TopBarHost.Visibility = showChrome ? Visibility.Visible : Visibility.Collapsed;
+        ProjectCommands.Visibility = MenuBarPolicy.ShowCommands(showChrome, overlayOpen)
+            ? Visibility.Visible : Visibility.Collapsed;
         RenameProjectMenu.IsEnabled = DeleteProjectMenu.IsEnabled = SaveProjectMenu.IsEnabled = ExportProjectMenu.IsEnabled = exists && _storageReady;
         GlobalPenButton.IsEnabled = exists;
         EmptyProjectPanel.Visibility = !exists && SettingsRoot.Visibility != Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;

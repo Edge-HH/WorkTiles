@@ -11,7 +11,9 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <Grid x:Name="TopBar" Grid.Row="0" Height="68" VerticalAlignment="Top" Padding="28,0" Background="{ThemeResource BoardSurfaceBrush}" BorderBrush="{ThemeResource BoardLineBrush}" BorderThickness="0,0,0,1" ColumnSpacing="16">
+        <!-- 避让距离加在菜单栏上边距，这一层用同一块背景把空出来的区域填上。 -->
+        <Grid x:Name="TopBarHost" Grid.Row="0" Background="{ThemeResource BoardSurfaceBrush}">
+        <Grid x:Name="TopBar" Height="68" VerticalAlignment="Bottom" Padding="28,0" Background="{ThemeResource BoardSurfaceBrush}" BorderBrush="{ThemeResource BoardLineBrush}" BorderThickness="0,0,0,1" ColumnSpacing="16">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -58,6 +60,7 @@
             <Grid Grid.Column="2" Margin="0,0,140,0">
                 <Grid x:Name="DragRegion" Background="Transparent" />
             </Grid>
+        </Grid>
         </Grid>
 
         <Grid x:Name="DisplayRoot" Grid.Row="1" Background="{ThemeResource BoardBackgroundBrush}">

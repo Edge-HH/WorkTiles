@@ -1028,6 +1028,20 @@ public sealed partial class MainWindow
             "leaving edit mode does not leave a tile title focused");
         check(focusedTile.TitleEditor.Resources["TextControlBackgroundFocused"] is SolidColorBrush titleFill && titleFill.Color.A == 0,
             "view mode title does not keep the focused input fill");
+        check(TopBarHost.Visibility == Visibility.Collapsed, "view mode hides the whole menu bar when preview display is off");
+        _settings.ShowMenuBarInPreview = true;
+        _settings.MenuBarAvoidDistance = 48;
+        UpdateProjectCommands();
+        ApplyMenuBarOffset();
+        await NextLayoutAsync();
+        check(TopBarHost.Visibility == Visibility.Visible && ProjectCommands.Visibility == Visibility.Visible,
+            "preview display shows the menu bar and its commands");
+        check(TopBar.Margin.Top == 48 && TopBarHost.Background is SolidColorBrush hostFill && TopBar.Background is SolidColorBrush barFill && hostFill.Color.Equals(barFill.Color),
+            $"menu bar avoidance is filled with the menu bar background ({TopBar.Margin.Top:0.#})");
+        _settings.ShowMenuBarInPreview = false;
+        _settings.MenuBarAvoidDistance = 0;
+        ApplyMenuBarOffset();
+        UpdateProjectCommands();
         check(ZoomIsland.Visibility == Visibility.Collapsed, "view mode hides the zoom island");
         check(Math.Abs(BoardScroller.ZoomFactor - 1.5) < .01 && BoardScroller.ZoomMode == ZoomMode.Enabled,
             $"view mode keeps the applied zoom and stays pannable ({BoardScroller.ZoomFactor:0.##})");

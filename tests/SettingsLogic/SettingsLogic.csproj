@@ -19,6 +19,7 @@
     <Compile Include="../../src/WorkTiles/Services/AutofillService.cs" Link="AutofillService.cs" />
     <Compile Include="../../src/WorkTiles/Services/ToolbarAutoHidePolicy.cs" Link="ToolbarAutoHidePolicy.cs" />
     <Compile Include="../../src/WorkTiles/Services/IslandScroll.cs" Link="IslandScroll.cs" />
+    <Compile Include="../../src/WorkTiles/Services/MenuBarPolicy.cs" Link="MenuBarPolicy.cs" />
     <Content Include="../../src/WorkTiles/Assets/Pinyin/pinyin.txt" Link="Assets/Pinyin/pinyin.txt" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../src/WorkTiles/Services/WidgetLayout.cs" Link="WidgetLayout.cs" />
     <Compile Include="../../src/WorkTiles/Services/DesktopTileLayout.cs" Link="DesktopTileLayout.cs" />
