@@ -477,7 +477,7 @@ public sealed partial class MainWindow
 
     private UIElement PreviewClock()
     {
-        // 时间区与看板 ClockContentView 同构：秒数右侧留空多少，左侧就补多少，时间数字落在中轴线上。
+        // 时间区与看板 ClockContentView 同构：时间和秒数排成一行，整行与日期居中，左侧不留等宽空白。
         StackPanel timeContent = new()
         {
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Spacing = 18
@@ -485,15 +485,12 @@ public sealed partial class MainWindow
         Grid time = new() { ColumnSpacing = 7, HorizontalAlignment = HorizontalAlignment.Center };
         time.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         time.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        time.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         TextBlock timeText = BindLiveText(MainTimeText, MainTimeText.FontSize);
         TextBlock seconds = BindLiveText(SecondsText, 28);
         seconds.Margin = new Thickness(0, 17, 0, 0);
         seconds.VerticalAlignment = VerticalAlignment.Top;
-        Border mirror = new();
-        mirror.SetBinding(FrameworkElement.WidthProperty, new Binding { Source = seconds, Path = new PropertyPath("ActualWidth"), Mode = BindingMode.OneWay });
-        Grid.SetColumn(mirror, 0); Grid.SetColumn(timeText, 1); Grid.SetColumn(seconds, 2);
-        time.Children.Add(mirror); time.Children.Add(timeText); time.Children.Add(seconds);
+        Grid.SetColumn(timeText, 0); Grid.SetColumn(seconds, 1);
+        time.Children.Add(timeText); time.Children.Add(seconds);
         timeContent.Children.Add(time);
         TextBlock dateText = BindLiveText(ClockDateText, 20);
         timeContent.Children.Add(dateText);
@@ -504,16 +501,22 @@ public sealed partial class MainWindow
         // 组件栏与看板 ClockComponents 同构：卡片外壳 + 图标，而不是裸文本。
         Border WidgetCard(string symbol, bool warning, TextBlock source, TextBlock? suffix = null, double horizontalPadding = 16)
         {
-            StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 9 };
-            row.Children.Add(new FluentIcon { Symbol = symbol, Foreground = new SolidColorBrush(WidgetIconColor(warning)) });
+            StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 9, VerticalAlignment = VerticalAlignment.Center };
+            row.Children.Add(new FluentIcon { Symbol = symbol, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(WidgetIconColor(warning)) });
             // 真机文本定宽（如噪音读数的 30px 数字框）时预览跟随同宽，组件卡不随读数位数呼吸。
             TextBlock text = BindLiveText(source, 14);
+            text.VerticalAlignment = VerticalAlignment.Center;
             if (!double.IsNaN(source.Width)) text.SetBinding(FrameworkElement.WidthProperty,
                 new Binding { Source = source, Path = new PropertyPath("Width"), Mode = BindingMode.OneWay });
             text.TextAlignment = source.TextAlignment;
             row.Children.Add(text);
             // 噪音卡的单位与状态是独立文本：预览同样拆成两段，镜像真机“数字定宽居中 + 状态紧随”的结构。
-            if (suffix is not null) row.Children.Add(BindLiveText(suffix, 14));
+            if (suffix is not null)
+            {
+                TextBlock suffixText = BindLiveText(suffix, 14);
+                suffixText.VerticalAlignment = VerticalAlignment.Center;
+                row.Children.Add(suffixText);
+            }
             return new Border
             {
                 Padding = new Thickness(horizontalPadding, 10, horizontalPadding, 10),
@@ -652,7 +655,7 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// 时钟页预览：底图上按真机结构镜像时间块（秒数等宽占位镜像 + 日期），文本实时绑定真机时间，
+    /// 时钟页预览：底图上按真机结构镜像时间块（时间与秒数同一行 + 日期），文本实时绑定真机时间，
     /// 字体、粗细与颜色跟随当前设置，每次调整重建场景即可看到效果。
     /// </summary>
     private void BuildClockPreview(Grid scene)
@@ -673,15 +676,12 @@ public sealed partial class MainWindow
         Grid time = new() { ColumnSpacing = 7, HorizontalAlignment = HorizontalAlignment.Center };
         time.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         time.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        time.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         TextBlock timeText = BindLiveText(MainTimeText, MainTimeText.FontSize);
         TextBlock seconds = BindLiveText(SecondsText, 28);
         seconds.Margin = new Thickness(0, 17, 0, 0);
         seconds.VerticalAlignment = VerticalAlignment.Top;
-        Border mirror = new();
-        mirror.SetBinding(FrameworkElement.WidthProperty, new Binding { Source = seconds, Path = new PropertyPath("ActualWidth"), Mode = BindingMode.OneWay });
-        Grid.SetColumn(mirror, 0); Grid.SetColumn(timeText, 1); Grid.SetColumn(seconds, 2);
-        time.Children.Add(mirror); time.Children.Add(timeText); time.Children.Add(seconds);
+        Grid.SetColumn(timeText, 0); Grid.SetColumn(seconds, 1);
+        time.Children.Add(timeText); time.Children.Add(seconds);
         TextBlock date = BindLiveText(ClockDateText, 20);
         StackPanel content = new()
         {

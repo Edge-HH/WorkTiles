@@ -1271,11 +1271,23 @@ public sealed partial class MainWindow
                     .Where(thumb => thumb.HorizontalAlignment == HorizontalAlignment.Right && thumb.VerticalAlignment == VerticalAlignment.Bottom).ToList();
                 check(resizeThumbs.Count == interactions.Count && resizeThumbs.All(thumb => FindVisuals<FontIcon>(thumb).Any(icon => icon.Glyph == FluentGlyphs.ArrowDownRight)),
                     mode + " resize boxes render the down-right arrow glyph");
-                // 秒数占位不能把大号时间挤偏：时间数字要和日期、组件栏共用同一条中轴线。
+                // 时间和秒数作为一整行居中，左侧不再用空白列把大号数字单独拉回中轴。
                 Rect timeBounds = MainTimeText.TransformToVisual(ClockPanel)
                     .TransformBounds(new Rect(0, 0, MainTimeText.ActualWidth, MainTimeText.ActualHeight));
-                check(Math.Abs(timeBounds.X + timeBounds.Width / 2 - ClockPanel.ActualWidth / 2) < 3,
-                    mode + " time digits stay on the same center axis as the component row");
+                Rect secondsBounds = SecondsText.TransformToVisual(ClockPanel)
+                    .TransformBounds(new Rect(0, 0, SecondsText.ActualWidth, SecondsText.ActualHeight));
+                double rowMid = (timeBounds.X + Math.Max(timeBounds.Right, secondsBounds.Right)) / 2;
+                check(Math.Abs(rowMid - ClockPanel.ActualWidth / 2) < 3,
+                    mode + " clock row stays on the center axis");
+                check(timeBounds.X - clock.X < secondsBounds.Width * 0.45 + 12,
+                    mode + " clock does not keep a leading blank as wide as the seconds");
+                Rect weatherBounds = WeatherWidget.TransformToVisual(ClockPanel)
+                    .TransformBounds(new Rect(0, 0, WeatherWidget.ActualWidth, WeatherWidget.ActualHeight));
+                Rect noiseBounds = NoiseWidget.TransformToVisual(ClockPanel)
+                    .TransformBounds(new Rect(0, 0, NoiseWidget.ActualWidth, NoiseWidget.ActualHeight));
+                double widgetsMid = (weatherBounds.X + noiseBounds.Right) / 2;
+                check(Math.Abs(widgetsMid - ClockPanel.ActualWidth / 2) < 4,
+                    mode + " weather and noise stay centered in the component row");
             }
             if (mode is "Clock" or "Board")
             {

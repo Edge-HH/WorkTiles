@@ -49,7 +49,7 @@ public sealed partial class MainWindow
     }
 
     private const double DockedClockFallbackAspectRatio = 1.8;
-    private const double DockedComponentsAspectRatio = 6.5;
+    private const double DockedComponentsFallbackAspectRatio = 6.5;
     private readonly Dictionary<string, Viewbox> _freeWidgets = [];
     private Thumb? _splitter;
     private bool _layingOut;
@@ -199,6 +199,18 @@ public sealed partial class MainWindow
         UpdateLayoutHandles();
     }
 
+    private double DockedComponentsAspectRatio
+    {
+        get
+        {
+            // 按天气和噪音卡片的真实尺寸定框，固定 6.5 会在框里留下一侧空白，内容就看起来不居中。
+            double contentWidth = ClockComponentsView.Child?.DesiredSize.Width ?? 0;
+            double contentHeight = ClockComponentsView.Child?.DesiredSize.Height ?? 0;
+            return contentWidth > 1 && contentHeight > 1
+                ? Math.Clamp(contentWidth / contentHeight, 2, 20)
+                : DockedComponentsFallbackAspectRatio;
+        }
+    }
     private double DockedClockAspectRatio
     {
         get
