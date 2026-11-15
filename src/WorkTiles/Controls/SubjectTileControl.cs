@@ -58,6 +58,7 @@ public sealed class SubjectTileControl : Grid
     private uint? _inkPointerId;
     public event Action<SubjectBoard>? InkActivated;
     private bool _isEditing;
+    private bool _clampingSelection;
     private bool _lockBoardGeometry;
     private bool _applyingModel;
     private string _modelStamp = "";
@@ -707,6 +708,7 @@ public sealed class SubjectTileControl : Grid
                 _contentChanged));
         }
 
+        editor.SelectionChanged += (_, _) => ClampSelectionAwayFromParagraphMark(editor);
         return editor;
     }
 
@@ -771,6 +773,20 @@ public sealed class SubjectTileControl : Grid
         {
             if (readOnly) editor.IsReadOnly = true;
         }
+    }
+
+    /// <summary>行末那一格是控件自己的段落标记，选区和光标都停在最后一个字上。</summary>
+    private void ClampSelectionAwayFromParagraphMark(RichEditBox editor)
+    {
+        if (_clampingSelection) return;
+        ITextSelection selection = editor.Document.Selection;
+        int end = editor.Document.GetRange(0, int.MaxValue).EndPosition;
+        if (end <= 0) return;
+        int limit = end - 1;
+        if (selection.StartPosition <= limit && selection.EndPosition <= limit) return;
+        _clampingSelection = true;
+        try { selection.SetRange(Math.Min(selection.StartPosition, limit), Math.Min(selection.EndPosition, limit)); }
+        finally { _clampingSelection = false; }
     }
 
     private StackPanel BuildFormattingToolbar(RichEditBox editor, HomeworkEntry homework)
