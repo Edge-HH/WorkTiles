@@ -1127,8 +1127,15 @@ public sealed partial class MainWindow
     private StackPanel ToolbarSettings()
     {
         StackPanel panel = SettingsStack();
-        panel.Children.Add(CreateToolbarPositionPicker());
-        panel.Children.Add(CreateAppearancePreview("Toolbar"));
+        Grid placement = new() { ColumnSpacing = 12 };
+        placement.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        placement.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        FrameworkElement positionPicker = (FrameworkElement)CreateToolbarPositionPicker();
+        FrameworkElement toolbarPreview = (FrameworkElement)CreateAppearancePreview("Toolbar");
+        Grid.SetColumn(toolbarPreview, 1);
+        placement.Children.Add(positionPicker);
+        placement.Children.Add(toolbarPreview);
+        panel.Children.Add(placement);
         panel.Children.Add(SurfaceColorEditor(_settings.ToolbarBackgroundColor, _settings.ToolbarBackgroundOpacity,
             () => _settings.ToolbarBackgroundColorCleared,
             (value, cleared) => { _settings.ToolbarBackgroundColor = value; _settings.ToolbarBackgroundColorCleared = cleared; },

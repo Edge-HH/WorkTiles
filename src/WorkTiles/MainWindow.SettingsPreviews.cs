@@ -840,7 +840,7 @@ public sealed partial class MainWindow
 
     private UIElement CreateToolbarPositionPicker()
     {
-        Grid screen = new() { Height = 210, Padding = new Thickness(12) };
+        Grid screen = new() { Height = 156, Padding = new Thickness(8) };
         for (int index = 0; index < 3; index++)
         {
             screen.RowDefinitions.Add(new RowDefinition());
@@ -848,8 +848,8 @@ public sealed partial class MainWindow
         }
         Border frame = new()
         {
-            Name = "ToolbarPositionPicker", MaxWidth = 640, HorizontalAlignment = HorizontalAlignment.Stretch,
-            BorderThickness = new Thickness(8), CornerRadius = new CornerRadius(12), Child = screen
+            Name = "ToolbarPositionPicker", HorizontalAlignment = HorizontalAlignment.Stretch,
+            BorderThickness = new Thickness(4), CornerRadius = new CornerRadius(12), Child = screen
         };
         var positions = new[]
         {

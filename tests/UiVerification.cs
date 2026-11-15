@@ -2077,6 +2077,11 @@ public sealed partial class MainWindow
             await SaveVisualAsync(scene, Path.Combine(output, "toolbar-crop-" + position + ".png"), 640, 300);
         }
         Border positionPicker = FindVisuals<Border>(_settingsPages["AppearanceToolbar"].Content).Single(border => border.Name == "ToolbarPositionPicker");
+        Grid placementRow = (Grid)positionPicker.Parent;
+        Border toolbarPreviewHost = placementRow.Children.OfType<Border>().Single(border => border.Name == "ToolbarAppearancePreview");
+        check(Grid.GetColumn(positionPicker) == 0 && Grid.GetColumn(toolbarPreviewHost) == 1
+            && Math.Abs(positionPicker.ActualWidth - toolbarPreviewHost.ActualWidth) < 48,
+            "toolbar position picker and preview are narrow and on the same row");
         positionPicker.StartBringIntoView(); await NextLayoutAsync();
         await SaveVisualAsync(positionPicker, Path.Combine(output, "toolbar-position-picker.png"), 640, 226);
         _settings.ToolbarScale = originalToolbarScale; _settings.ToolbarIconOnly = originalIconOnly;
