@@ -13,7 +13,13 @@ public static class BoardLayout
         if (!double.IsFinite(width) || !double.IsFinite(height) || width <= 0 || height <= 0)
             throw new InvalidOperationException("画布没有足够的磁贴空间。");
         gap = double.IsFinite(gap) ? Math.Max(0, gap) : 0;
-        double Round(double value) => grid > 0 ? Math.Ceiling(value / grid) * grid : value;
+        double Round(double value)
+        {
+            // 间隔可以是半格。按整格向上取整会把 1.5 格收成 2 格。
+            if (grid <= 0) return value;
+            double step = grid / 2;
+            return Math.Ceiling((value / step) - 1e-9) * step;
+        }
         if (tiles.Any(t => !double.IsFinite(t.Width) || !double.IsFinite(t.Height) || t.Width <= 0 || t.Height <= 0))
             throw new InvalidOperationException("磁贴尺寸无效。");
         if (align)
