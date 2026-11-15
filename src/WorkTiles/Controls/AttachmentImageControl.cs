@@ -172,27 +172,6 @@ public sealed class AttachmentImageControl : Grid
                     _contentChanged();
                 }
                 ApplyTransforms();
-                if (_attachment.Rotation % 180 != 0)
-                {
-                    (double visW, double visH) = GetVisualContentSize();
-                    double frameAspect = _imageFrame.Width / Math.Max(1, _imageFrame.Height);
-                    double visualAspect = visW / Math.Max(1, visH);
-                    if (visW > 1 && visH > 1 && Math.Abs(frameAspect - visualAspect) > 0.08)
-                    {
-                        double centerX = _attachment.PositionX + _imageFrame.Width / 2;
-                        double centerY = _attachment.PositionY + _imageFrame.Height / 2;
-                        _imageFrame.Width = visW;
-                        _imageFrame.Height = visH;
-                        _attachment.FrameWidth = visW;
-                        _attachment.ViewportHeight = visH;
-                        _attachment.AspectRatio = visW / visH;
-                        _attachment.PositionX = centerX - visW / 2;
-                        _attachment.PositionY = centerY - visH / 2;
-                        _attachment.OffsetX = 0;
-                        _attachment.OffsetY = 0;
-                        ApplyTransforms();
-                    }
-                }
             }
             _imageReady.TrySetResult(true);
         }
@@ -419,21 +398,27 @@ public sealed class AttachmentImageControl : Grid
 
     private void RotateImage(double degrees)
     {
+        bool quarter = Math.Abs(degrees) % 180 != 0;
         _attachment.Rotation = (_attachment.Rotation + degrees + 360) % 360;
-        EnsureImageBase();
-        (double visW, double visH) = GetVisualContentSize();
-        double centerX = _attachment.PositionX + _imageFrame.Width / 2;
-        double centerY = _attachment.PositionY + _imageFrame.Height / 2;
-        // 取景框改成旋转后的外框，画面完整落在框里，不再一边被裁掉、另一边留灰边。
-        _imageFrame.Width = Math.Max(MinimumWidth, visW);
-        _imageFrame.Height = Math.Max(MinimumHeight, visH);
-        _attachment.FrameWidth = _imageFrame.Width;
-        _attachment.ViewportHeight = _imageFrame.Height;
-        _attachment.AspectRatio = _imageFrame.Width / _imageFrame.Height;
-        _attachment.PositionX = centerX - _imageFrame.Width / 2;
-        _attachment.PositionY = centerY - _imageFrame.Height / 2;
-        _attachment.OffsetX = 0;
-        _attachment.OffsetY = 0;
+        if (quarter)
+        {
+            // 转的是当前取景，不是整张原图。框跟着转，裁切偏移也跟着转。
+            double centerX = _attachment.PositionX + _imageFrame.Width / 2;
+            double centerY = _attachment.PositionY + _imageFrame.Height / 2;
+            double width = _imageFrame.Height;
+            double height = _imageFrame.Width;
+            _imageFrame.Width = Math.Max(MinimumWidth, width);
+            _imageFrame.Height = Math.Max(MinimumHeight, height);
+            _attachment.FrameWidth = _imageFrame.Width;
+            _attachment.ViewportHeight = _imageFrame.Height;
+            _attachment.AspectRatio = _imageFrame.Width / _imageFrame.Height;
+            _attachment.PositionX = centerX - _imageFrame.Width / 2;
+            _attachment.PositionY = centerY - _imageFrame.Height / 2;
+            (double offsetX, double offsetY) = ImageCropGeometry.RotateOffset(_attachment.OffsetX, _attachment.OffsetY, degrees);
+            _attachment.OffsetX = offsetX;
+            _attachment.OffsetY = offsetY;
+        }
+        ClampCropOffsets();
         ApplyTransforms();
         Area?.InvalidateMeasure();
         _contentChanged();
