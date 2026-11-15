@@ -454,7 +454,7 @@ public sealed partial class MainWindow
         double pixelRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, outer, outer);
         double radius = MatchToolbarButtonRadius(pixelRadius, padding, button, button).TopLeft;
         _desktopCommands.ApplyToolbarChrome(
-            CreateToolbarBackground(),
+            CreateToolbarBackground(FloatingToolbar?.Background),
             CreateToolbarBorder(_settings.ToolbarBorderColor),
             IslandBorderThickness,
             pixelRadius,

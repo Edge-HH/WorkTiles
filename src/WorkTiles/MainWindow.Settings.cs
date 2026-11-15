@@ -1166,7 +1166,7 @@ public sealed partial class MainWindow
         return panel;
     }
 
-    private Brush CreateToolbarBackground() => SurfaceBackground.Create(
+    private Brush CreateToolbarBackground(Brush? current = null) => SurfaceBackground.Apply(current,
         _settings.ToolbarBackgroundColor, _settings.ToolbarBackgroundOpacity,
         _settings.ToolbarBackgroundColorCleared, _settings.ToolbarGlass, _settings.ToolbarBlur);
 
@@ -1189,14 +1189,14 @@ public sealed partial class MainWindow
     }
 
     /// <summary>组件卡背景与控制窗同一套合成规则；两个卡片各自持有画笔实例。</summary>
-    private Brush CreateWidgetBackground() => SurfaceBackground.Create(
+    private Brush CreateWidgetBackground(Brush? current = null) => SurfaceBackground.Apply(current,
         _settings.WidgetBackgroundColor, _settings.WidgetBackgroundOpacity,
         _settings.WidgetBackgroundColorCleared, _settings.WidgetGlass, _settings.WidgetBlur);
 
     private void ApplyWidgetBackground()
     {
-        WeatherWidget.Background = CreateWidgetBackground();
-        NoiseWidget.Background = CreateWidgetBackground();
+        WeatherWidget.Background = CreateWidgetBackground(WeatherWidget.Background);
+        NoiseWidget.Background = CreateWidgetBackground(NoiseWidget.Background);
     }
 
     /// <summary>外观 → 时钟：时钟块的字体、时间数字粗细与文字颜色。</summary>
@@ -1367,8 +1367,9 @@ public sealed partial class MainWindow
             ApplyBackgroundVisuals();
             if (FloatingToolbar is not null)
             {
-                FloatingToolbar.Background = CreateToolbarBackground();
-                GlobalInkToolbar.Background = CreateToolbarBackground();
+                Brush toolbar = CreateToolbarBackground(FloatingToolbar.Background);
+                FloatingToolbar.Background = toolbar;
+                GlobalInkToolbar.Background = toolbar;
             }
             ApplyDesktopCommandChrome();
             ForEachDesktopTile(tile => tile.ApplyAppearance(_settings, applyBodyDefaults: false));
@@ -1533,8 +1534,9 @@ public sealed partial class MainWindow
         GlobalInkToolbar.Padding = new Thickness(inkToolbarPadding);
         ApplyToolbarBorder(FloatingToolbar);
         ApplyToolbarBorder(GlobalInkToolbar);
-        FloatingToolbar.Background = CreateToolbarBackground();
-        GlobalInkToolbar.Background = CreateToolbarBackground();
+        Brush toolbar = CreateToolbarBackground(FloatingToolbar.Background);
+        FloatingToolbar.Background = toolbar;
+        GlobalInkToolbar.Background = toolbar;
         ApplyDesktopCommandChrome();
         FloatingToolbar.HorizontalAlignment = position.EndsWith("Left") ? HorizontalAlignment.Left : position.EndsWith("Right") ? HorizontalAlignment.Right : HorizontalAlignment.Center;
         FloatingToolbar.VerticalAlignment = position.StartsWith("Top") ? VerticalAlignment.Top : vertical ? VerticalAlignment.Center : VerticalAlignment.Bottom;

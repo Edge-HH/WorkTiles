@@ -553,9 +553,12 @@ internal sealed class DesktopCommandWindow
         {
             segment.Frame.CornerRadius = new CornerRadius(radius);
             segment.SetClipRadius(radius);
-            segment.Frame.Background = glass
-                ? new DesktopGlassBrush(blur, tint) { FallbackColor = tint }
-                : background;
+            if (glass)
+            {
+                if (segment.Frame.Background is DesktopGlassBrush existing) existing.Update(blur, tint);
+                else segment.Frame.Background = new DesktopGlassBrush(blur, tint) { FallbackColor = tint };
+            }
+            else segment.Frame.Background = background;
             segment.Frame.BorderBrush = borderBrush;
             // 系统亚克力只提供桌面模糊，颜色和模糊程度画在圆角背景上。窗口区域再裁成同一个圆角。
             if (glass)

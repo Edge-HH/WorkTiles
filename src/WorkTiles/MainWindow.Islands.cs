@@ -319,7 +319,7 @@ public sealed partial class MainWindow
         double padding = 7 * scale;
         double contentSize = ToolbarContentSize(scale);
         double crossSize = ToolbarCrossSize(contentSize, padding);
-        Brush background = CreateToolbarBackground();
+        Brush background = CreateToolbarBackground(RichTextIsland.Background);
         double pixelRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, crossSize, crossSize);
         CornerRadius corner = new(pixelRadius);
         foreach (Border island in new[] { RichTextIsland, ZoomIsland })

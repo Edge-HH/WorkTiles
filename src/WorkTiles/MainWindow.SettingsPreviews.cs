@@ -245,8 +245,9 @@ public sealed partial class MainWindow
             else if (scene.Parent is Viewbox { Parent: Border frame }) frame.BorderBrush = BoardTheme.LineBrush;
             string key = kind switch
             {
-                "Toolbar" => $"{BoardTheme.IsLight}|{RootShell.ActualWidth}|{RootShell.ActualHeight}|{_settings.ToolbarPosition}|{_settings.ToolbarScale}|{_settings.ToolbarIconOnly}|{_settings.ToolbarRadius}|{_settings.ToolbarGlass}|{_settings.ToolbarBlur}|{_settings.ToolbarHorizontalInset}|{_settings.ToolbarVerticalInset}|{_settings.ToolbarBorderThickness}|{_settings.ToolbarBorderColor}",
-                "Components" => $"{BoardTheme.IsLight}|{_settings.WidgetGlass}|{_settings.WidgetBlur:0.####}|{_settings.WidgetBackgroundColor}|{_settings.WidgetBackgroundOpacity:0.####}|{_settings.WidgetBackgroundColorCleared}",
+                "Toolbar" => $"{BoardTheme.IsLight}|{RootShell.ActualWidth}|{RootShell.ActualHeight}|{_settings.ToolbarPosition}|{_settings.ToolbarScale}|{_settings.ToolbarIconOnly}|{_settings.ToolbarRadius}|{_settings.ToolbarHorizontalInset}|{_settings.ToolbarVerticalInset}|{_settings.ToolbarBorderThickness}|{_settings.ToolbarBorderColor}",
+                // 模糊、透明度和颜色只改卡片上已有的画笔，不把整张预览拆掉重建。
+                "Components" => $"{BoardTheme.IsLight}",
                 "Clock" => $"{BoardTheme.IsLight}|{_settings.ClockFontFamily}|{_settings.ClockFontWeight}|{_settings.ClockColor}",
                 // 磁贴示例的主题色与高光色都取自当前色系，主题或色系变化必须重建示例才和真实磁贴一致。
                 "Tile" => $"{BoardTheme.IsLight}|{ColorPalette.IsMacaron}",
@@ -538,8 +539,8 @@ public sealed partial class MainWindow
         // 组件卡样式在“外观 → 组件”调整；缓存命中只走刷新器时卡片背景也要跟随当前设置。
         _buildingPreviewRefreshers?.Add(() =>
         {
-            weatherCard.Background = CreateWidgetBackground();
-            noiseCard.Background = CreateWidgetBackground();
+            weatherCard.Background = CreateWidgetBackground(weatherCard.Background);
+            noiseCard.Background = CreateWidgetBackground(noiseCard.Background);
         });
 
         // 真机把时间和组件放在两个独立 Viewbox 上按停靠比例排布，预览保持同样结构。
@@ -630,13 +631,15 @@ public sealed partial class MainWindow
         StackPanel row = new() { Orientation = Orientation.Horizontal, Spacing = 9 };
         row.Children.Add(new FluentIcon { Symbol = symbol, Foreground = new SolidColorBrush(WidgetIconColor(warning)) });
         row.Children.Add(new TextBlock { Text = text, FontSize = 14, Foreground = BoardTheme.TextBrush });
-        return new Border
+        Border card = new()
         {
             Padding = new Thickness(16, 10, 16, 10),
             Background = CreateWidgetBackground(),
             CornerRadius = new CornerRadius(8),
             Child = row
         };
+        _buildingPreviewRefreshers?.Add(() => card.Background = CreateWidgetBackground(card.Background));
+        return card;
     }
 
     private static Windows.UI.Color WidgetIconColor(bool warning) => BoardTheme.IsLight
@@ -923,7 +926,7 @@ public sealed partial class MainWindow
                 CornerRadius = MatchToolbarButtonRadius(frameRadius, 7 * scale, buttonWidth, buttonHeight),
                 Style = SettingsButton.Style, Content = content, IsTabStop = false });
         }
-        viewport.Children.Add(new Border
+        Border frame = new()
         {
             Name = "ToolbarPreviewFrame", Child = buttons, Padding = new Thickness(7 * scale), CornerRadius = new CornerRadius(frameRadius),
             Background = CreateToolbarBackground(),
@@ -931,7 +934,9 @@ public sealed partial class MainWindow
             HorizontalAlignment = position.EndsWith("Left") ? HorizontalAlignment.Left : position.EndsWith("Right") ? HorizontalAlignment.Right : HorizontalAlignment.Center,
             VerticalAlignment = position.StartsWith("Top") ? VerticalAlignment.Top : vertical ? VerticalAlignment.Center : VerticalAlignment.Bottom,
             Margin = new Thickness(_settings.ToolbarHorizontalInset, _settings.ToolbarVerticalInset, _settings.ToolbarHorizontalInset, _settings.ToolbarVerticalInset)
-        });
+        };
+        _buildingPreviewRefreshers?.Add(() => frame.Background = CreateToolbarBackground(frame.Background));
+        viewport.Children.Add(frame);
         double centerX = position.EndsWith("Left") ? _settings.ToolbarHorizontalInset + toolbarWidth / 2
             : position.EndsWith("Right") ? viewport.Width - _settings.ToolbarHorizontalInset - toolbarWidth / 2 : viewport.Width / 2;
         double centerY = position.StartsWith("Top") ? _settings.ToolbarVerticalInset + toolbarHeight / 2

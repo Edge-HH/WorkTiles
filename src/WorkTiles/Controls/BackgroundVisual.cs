@@ -135,15 +135,24 @@ public sealed class BackgroundVisual : Grid
         {
             _overlayKey = overlayKey;
             _overlaySurface = surface;
-            _surfaceOverlay.Background = surface && style.Glass
-                ? SurfaceBackground.Create(style.Color, style.ColorOpacity, style.ColorCleared, true, style.Blur)
-                : null;
-            _blurOverlay.Background = !surface && style.Glass ? new BlurBackdropBrush(effectiveBlur) : null;
-            _glassTintOverlay.Background = !surface && style.Glass
-                ? new SolidColorBrush(BoardTheme.IsLight
+            if (surface && style.Glass)
+                _surfaceOverlay.Background = SurfaceBackground.Apply(_surfaceOverlay.Background, style.Color, style.ColorOpacity, style.ColorCleared, true, style.Blur);
+            else _surfaceOverlay.Background = null;
+            if (!surface && style.Glass)
+            {
+                if (_blurOverlay.Background is BlurBackdropBrush blur) blur.Update(effectiveBlur);
+                else _blurOverlay.Background = new BlurBackdropBrush(effectiveBlur);
+                Windows.UI.Color tint = BoardTheme.IsLight
                     ? Windows.UI.Color.FromArgb(36, 255, 255, 255)
-                    : Windows.UI.Color.FromArgb(36, 0, 0, 0))
-                : null;
+                    : Windows.UI.Color.FromArgb(36, 0, 0, 0);
+                if (_glassTintOverlay.Background is SolidColorBrush solid) solid.Color = tint;
+                else _glassTintOverlay.Background = new SolidColorBrush(tint);
+            }
+            else
+            {
+                _blurOverlay.Background = null;
+                _glassTintOverlay.Background = null;
+            }
         }
         _surfaceOverlay.Visibility = _overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         _blurOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;

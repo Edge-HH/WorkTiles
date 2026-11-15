@@ -1908,6 +1908,31 @@ public sealed partial class MainWindow
             .Select(border => border.Background).OfType<BlurBackdropBrush>().ToList();
         check(previewBlurBrushes.Any(brush => Math.Abs(brush.Amount - expectedPreviewBlur) < .01) && expectedPreviewBlur < _settings.ClockBackground.Blur,
             $"background preview scales blur to the current display ({expectedPreviewBlur:0.##} from {_settings.ClockBackground.Blur:0.##})");
+        BlurBackdropBrush stablePreviewBlur = previewBlurBrushes.First(brush => Math.Abs(brush.Amount - expectedPreviewBlur) < .01);
+        _settings.ClockBackground.Blur = 55;
+        ApplyExtendedSettings(); await NextLayoutAsync();
+        check(ReferenceEquals(stablePreviewBlur, FindVisuals<Border>(backgroundPreviewScene).Select(border => border.Background).OfType<BlurBackdropBrush>().FirstOrDefault(brush => ReferenceEquals(brush, stablePreviewBlur)))
+            && Math.Abs(stablePreviewBlur.Amount - _settings.ClockBackground.Blur * GetBackgroundPreviewBlurScale()) < .01,
+            "background preview updates blur on the same brush");
+        _settings.ClockBackground.Blur = 35;
+        bool originalWidgetGlass = _settings.WidgetGlass;
+        double originalWidgetBlur = _settings.WidgetBlur;
+        ShowSettingsPage("AppearanceComponents"); await NextLayoutAsync();
+        _settings.WidgetGlass = true;
+        _settings.WidgetBlur = 18;
+        ApplyExtendedSettings(); await NextLayoutAsync();
+        List<BlurBackdropBrush> componentBrushes = FindVisuals<Border>(_appearancePreviews["Components"])
+            .Select(border => border.Background).OfType<BlurBackdropBrush>().ToList();
+        _settings.WidgetBlur = 72;
+        ApplyExtendedSettings(); await NextLayoutAsync();
+        List<BlurBackdropBrush> updatedComponentBrushes = FindVisuals<Border>(_appearancePreviews["Components"])
+            .Select(border => border.Background).OfType<BlurBackdropBrush>().ToList();
+        check(componentBrushes.Count == 2 && componentBrushes.All(updatedComponentBrushes.Contains)
+            && updatedComponentBrushes.All(brush => Math.Abs(brush.Amount - 72) < .01),
+            "component preview keeps its glass brushes while blur changes");
+        _settings.WidgetGlass = originalWidgetGlass;
+        _settings.WidgetBlur = originalWidgetBlur;
+        ApplyExtendedSettings();
         check(FindVisuals<TextBlock>(_appearancePreviews["Background"]).Any(text => text.Text == MainTimeText.Text), "clock preview uses the live time");
         ShowSettingsPage("AppearanceToolbar"); await NextLayoutAsync();
         ShowSettingsPage("AppearanceBackground"); await NextLayoutAsync();
@@ -1919,6 +1944,20 @@ public sealed partial class MainWindow
         _settings.ClockBackground.ImagePath = "";
         _settings.ClockBackground.Glass = false;
         ShowSettingsPage("AppearanceToolbar");
+        bool originalToolbarGlass = _settings.ToolbarGlass;
+        double originalToolbarBlur = _settings.ToolbarBlur;
+        _settings.ToolbarGlass = true;
+        _settings.ToolbarBlur = 16;
+        ApplyExtendedSettings(); await NextLayoutAsync();
+        Border toolbarGlassPreview = FindVisuals<Border>(_appearancePreviews["Toolbar"]).Single(border => border.Name == "ToolbarPreviewFrame");
+        BlurBackdropBrush toolbarBrush = (BlurBackdropBrush)toolbarGlassPreview.Background;
+        _settings.ToolbarBlur = 64;
+        ApplyExtendedSettings(); await NextLayoutAsync();
+        check(ReferenceEquals(toolbarGlassPreview.Background, toolbarBrush) && Math.Abs(toolbarBrush.Amount - 64) < .01,
+            "toolbar preview updates glass in place");
+        _settings.ToolbarGlass = originalToolbarGlass;
+        _settings.ToolbarBlur = originalToolbarBlur;
+        ApplyExtendedSettings(); await NextLayoutAsync();
         var positionButtons = FindVisuals<RadioButton>(_settingsPages["AppearanceToolbar"].Content)
             .Where(button => button.GroupName == "ToolbarPosition").ToList();
         check(positionButtons.Count == 8, "toolbar screen picker retains all eight positions");
