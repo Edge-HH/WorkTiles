@@ -541,8 +541,8 @@ public sealed partial class MainWindow : Window
         if (!_isEditing || ViewModel.Subjects.Count == 0) return;
         try
         {
-            ArrangeTiles(BoardScroller.ActualWidth > 1 ? BoardScroller.ActualWidth : 1100,
-                BoardScroller.ActualHeight > 1 ? BoardScroller.ActualHeight : 780);
+            var visible = VisibleBoardRect();
+            ArrangeTiles(visible.Width, visible.Height, visible.X, visible.Y);
         }
         catch (Exception exception)
         {
@@ -550,8 +550,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    /// <summary>按给定作业板尺寸自动排列磁贴；空间不足时抛出异常，由调用方决定如何提示。</summary>
-    private void ArrangeTiles(double width, double height)
+    /// <summary>按给定作业板尺寸自动排列磁贴；空间不足时抛出异常，由调用方决定如何提示。原点用来把结果放到缩放后正在看的那一块。</summary>
+    private void ArrangeTiles(double width, double height, double originX = 0, double originY = 0)
     {
         bool aligned = _settings.AutoLayoutResize && _settings.AutoLayoutAlign;
         double grid = IsGridSnappingEnabled && _settings.AutoLayoutAlign ? GridSize : 0;
@@ -610,7 +610,7 @@ public sealed partial class MainWindow : Window
             for (int index = 0; index < values.Count; index++)
             {
                 var subject = ViewModel.Subjects[index];
-                subject.X = values[index].X; subject.Y = values[index].Y;
+                subject.X = originX + values[index].X; subject.Y = originY + values[index].Y;
                 subject.TileWidth = values[index].Width; subject.TileHeight = values[index].Height;
                 // 先套用到现有磁贴上，让下面的强制布局把富文本换行刷新到目标宽度。
                 tiles[index].ApplyModelLayout();
@@ -728,7 +728,16 @@ public sealed partial class MainWindow : Window
             _infiniteHeight = Math.Max(_infiniteHeight, Math.Max(height, (BoardScroller.VerticalOffset + BoardScroller.ActualHeight) / BoardScroller.ZoomFactor + 600));
             width = _infiniteWidth; height = _infiniteHeight;
         }
-        else { _infiniteWidth = _infiniteHeight = 0; }
+        else
+        {
+            _infiniteWidth = _infiniteHeight = 0;
+            // 缩小后看得见的范围比 100% 画板大。画板不跟着变大的话，多出来的一圈就是放不进磁贴的墙。
+            // 放大不把画板裁小，已经排好的磁贴还留在原来的板上；自动排列另按当前可见范围来排。
+            double zoom = Math.Max(0.05, _boardZoom);
+            width = Math.Max(width, width / zoom);
+            height = Math.Max(height, height / zoom);
+        }
+        double previousWidth = BoardCanvas.Width, previousHeight = BoardCanvas.Height;
         BoardSurface.Width = width;
         BoardSurface.Height = height;
         BoardCanvas.Width = width;
@@ -748,6 +757,19 @@ public sealed partial class MainWindow : Window
             _renderedGridHeight = height;
             _renderedGridWindow = gridWindow;
             _renderedGridAppearance = gridAppearance;
+        }
+        if (!_settings.InfiniteBoard && (width + 1 < previousWidth || height + 1 < previousHeight))
+        {
+            foreach (SubjectBoard subject in ViewModel.Subjects.ToList())
+            {
+                ClampSubjectToViewport(subject);
+                if (FindTile(subject) is { } tile)
+                {
+                    Canvas.SetLeft(tile, subject.X);
+                    Canvas.SetTop(tile, subject.Y);
+                    tile.ApplyModelLayout();
+                }
+            }
         }
         }
         finally { _updatingBoardBounds = false; }
@@ -769,10 +791,22 @@ public sealed partial class MainWindow : Window
         }
         double viewportWidth = BoardScroller.ActualWidth > 1 ? BoardScroller.ActualWidth : 1100;
         double viewportHeight = BoardScroller.ActualHeight > 1 ? BoardScroller.ActualHeight : 780;
-        subject.TileWidth = Math.Clamp(subject.TileWidth, Math.Min(280, viewportWidth), viewportWidth);
-        subject.TileHeight = Math.Clamp(subject.TileHeight, Math.Min(SubjectTileControl.MinimumTileHeight, viewportHeight), viewportHeight);
-        subject.X = Math.Clamp(subject.X, 0, Math.Max(0, viewportWidth - subject.TileWidth));
-        subject.Y = Math.Clamp(subject.Y, 0, Math.Max(0, viewportHeight - subject.TileHeight));
+        // 缩小后画板比视口大，边界要跟画板走，不能停在缩放前的视口边上。
+        double limitWidth = BoardCanvas.Width > 1 ? BoardCanvas.Width : viewportWidth / Math.Max(0.05, _boardZoom);
+        double limitHeight = BoardCanvas.Height > 1 ? BoardCanvas.Height : viewportHeight / Math.Max(0.05, _boardZoom);
+        subject.TileWidth = Math.Clamp(subject.TileWidth, Math.Min(280, limitWidth), limitWidth);
+        subject.TileHeight = Math.Clamp(subject.TileHeight, Math.Min(SubjectTileControl.MinimumTileHeight, limitHeight), limitHeight);
+        subject.X = Math.Clamp(subject.X, 0, Math.Max(0, limitWidth - subject.TileWidth));
+        subject.Y = Math.Clamp(subject.Y, 0, Math.Max(0, limitHeight - subject.TileHeight));
+    }
+
+    /// <summary>缩放后眼睛里的作业板范围：宽高按比例换算，原点是当前滚到的位置。</summary>
+    private (double X, double Y, double Width, double Height) VisibleBoardRect()
+    {
+        double viewportWidth = BoardScroller.ActualWidth > 1 ? BoardScroller.ActualWidth : 1100;
+        double viewportHeight = BoardScroller.ActualHeight > 1 ? BoardScroller.ActualHeight : 780;
+        double zoom = Math.Max(0.05, _boardZoom);
+        return (BoardScroller.HorizontalOffset / zoom, BoardScroller.VerticalOffset / zoom, viewportWidth / zoom, viewportHeight / zoom);
     }
 
     /// <summary>

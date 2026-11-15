@@ -1037,6 +1037,26 @@ public sealed partial class MainWindow
         Invoke(zoomButtons[1]); await NextLayoutAsync();
         check(Math.Abs(zoomSlider.Value - 100) < .01 && Math.Abs(BoardScroller.ZoomFactor - 1) < .001,
             "restoring 100% also moves the slider back");
+        if (!_settings.InfiniteBoard && ViewModel.Subjects.FirstOrDefault() is { } zoomSubject)
+        {
+            double keptX = zoomSubject.X, keptY = zoomSubject.Y, keptWidth = zoomSubject.TileWidth;
+            SetBoardZoom(0.5); await NextLayoutAsync();
+            check(BoardCanvas.Width > BoardScroller.ActualWidth * 1.5,
+                $"zoomed-out board grows to the visible area ({BoardCanvas.Width:0.#} / {BoardScroller.ActualWidth:0.#})");
+            zoomSubject.TileWidth = Math.Min(keptWidth, Math.Max(280, BoardCanvas.Width / 4));
+            zoomSubject.X = Math.Max(0, BoardCanvas.Width - zoomSubject.TileWidth);
+            zoomSubject.Y = 0;
+            LayoutChanged(zoomSubject);
+            check(zoomSubject.X > BoardScroller.ActualWidth,
+                "zoomed-out board lets a tile pass the old unscaled edge");
+            SetBoardZoom(2); await NextLayoutAsync();
+            var visible = VisibleBoardRect();
+            check(visible.Width < BoardScroller.ActualWidth * 0.6 && visible.Width > 10,
+                $"zoomed-in arrange area is the visible slice ({visible.Width:0.#} / {BoardScroller.ActualWidth:0.#})");
+            zoomSubject.X = keptX; zoomSubject.Y = keptY; zoomSubject.TileWidth = keptWidth;
+            LayoutChanged(zoomSubject);
+            SetBoardZoom(1); await NextLayoutAsync();
+        }
         // 查看模式：缩放岛收起，但缩放结果保留，作业板仍可平移。
         SetBoardZoom(1.5); await NextLayoutAsync();
         SubjectTileControl focusedTile = BoardCanvas.Children.OfType<SubjectTileControl>().First();

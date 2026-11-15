@@ -63,6 +63,8 @@ public sealed partial class MainWindow
             if (_applyingBoardZoom || _pendingBoardViewReset || Math.Abs(BoardScroller.ZoomFactor - _boardZoom) < .005) return;
             _boardZoom = Math.Clamp(BoardScroller.ZoomFactor, MinimumBoardZoom, MaximumBoardZoom);
             UpdateZoomLevelText();
+            // 捏合改了比例后，固定作业板要按新的可见范围伸缩，否则缩小后四周是放不进磁贴的空墙。
+            UpdateBoardBounds();
         };
         BuildZoomIsland();
     }
