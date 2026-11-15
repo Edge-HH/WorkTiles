@@ -12,7 +12,7 @@ internal static class ImeCandidateFix
 {
     private const int GwlpWndProc = -4;
     private const int GwlExStyle = -20;
-    private const uint WmDestroy = 0x0002;
+    private const uint WmNcDestroy = 0x0082;
     private const uint WmImeSetContext = 0x0281;
     private const int IscShowUiAll = unchecked((int)0xC000000F);
     private const int IaceChildren = 0x0001;
@@ -71,12 +71,12 @@ internal static class ImeCandidateFix
         if (msg == WmImeSetContext && wParam != 0)
             lParam |= IscShowUiAll;
         nint old;
-        lock (Gate)
-        {
-            if (msg == WmDestroy) Previous.Remove(hwnd, out old);
-            else Previous.TryGetValue(hwnd, out old);
-        }
-        return old != 0 ? CallWindowProc(old, hwnd, msg, wParam, lParam) : DefWindowProc(hwnd, msg, wParam, lParam);
+        lock (Gate) { Previous.TryGetValue(hwnd, out old); }
+        nint result = old != 0 ? CallWindowProc(old, hwnd, msg, wParam, lParam) : DefWindowProc(hwnd, msg, wParam, lParam);
+        // WM_NCDESTROY 才是窗口的最后一条消息。提前在 WM_DESTROY 摘掉子类化，后面的收尾会落到 DefWindowProc。
+        if (msg == WmNcDestroy)
+            lock (Gate) { Previous.Remove(hwnd); }
+        return result;
     }
 
     private delegate nint WndProcDelegate(nint hwnd, uint msg, nint wParam, nint lParam);
