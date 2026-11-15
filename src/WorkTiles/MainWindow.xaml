@@ -169,18 +169,18 @@
                         <NavigationViewItem Content="主题" Tag="AppearanceTheme"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Color" /></NavigationViewItem.Icon></NavigationViewItem>
                         <NavigationViewItem Content="网格" Tag="AppearanceGrid"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Grid" /></NavigationViewItem.Icon></NavigationViewItem>
                         <NavigationViewItem Content="控制窗" Tag="AppearanceToolbar"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Settings" /></NavigationViewItem.Icon></NavigationViewItem>
-                        <NavigationViewItem Content="组件" Tag="AppearanceComponents"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Components" /></NavigationViewItem.Icon></NavigationViewItem>
-                        <NavigationViewItem Content="时钟" Tag="AppearanceClock"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Clock" /></NavigationViewItem.Icon></NavigationViewItem>
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
                 <NavigationViewItem x:Name="ComponentsNavigationGroup" Content="组件" SelectsOnInvoked="False">
                     <NavigationViewItem.Icon><icons:FluentIcon Symbol="Components" /></NavigationViewItem.Icon>
                     <NavigationViewItem.MenuItems>
+                        <NavigationViewItem Content="外观" Tag="AppearanceComponents"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Color" /></NavigationViewItem.Icon></NavigationViewItem>
+                        <NavigationViewItem Content="时钟" Tag="AppearanceClock"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Clock" /></NavigationViewItem.Icon></NavigationViewItem>
                         <NavigationViewItem Content="天气" Tag="ComponentsWeather"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Weather" /></NavigationViewItem.Icon></NavigationViewItem>
                         <NavigationViewItem Content="噪音检测" Tag="ComponentsNoise"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Microphone" /></NavigationViewItem.Icon></NavigationViewItem>
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="AutofillNavigationGroup" Content="自动填充" SelectsOnInvoked="False">
+                <NavigationViewItem x:Name="AutofillNavigationGroup" Content="自动填充" SelectsOnInvoked="False" Visibility="Collapsed">
                     <NavigationViewItem.Icon><icons:FluentIcon Symbol="TextGrammarWand" /></NavigationViewItem.Icon>
                     <NavigationViewItem.MenuItems>
                         <NavigationViewItem Content="学科补全" Tag="AutofillSubject"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Board" /></NavigationViewItem.Icon></NavigationViewItem>
@@ -188,7 +188,7 @@
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
                 <NavigationViewItem Content="考试" Tag="Exam"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Clock" /></NavigationViewItem.Icon></NavigationViewItem>
-                <NavigationViewItem Content="集控" Tag="CloudSync"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Cloud" /></NavigationViewItem.Icon></NavigationViewItem>
+                <NavigationViewItem x:Name="CloudSyncNavItem" Content="集控" Tag="CloudSync" Visibility="Collapsed"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Cloud" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="数据" Tag="Data"><NavigationViewItem.Icon><icons:FluentIcon Symbol="ArrowDownload" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="锁定" Tag="Lock"><NavigationViewItem.Icon><icons:FluentIcon Symbol="LockClosed" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem x:Name="AboutNavigationGroup" Content="关于" Tag="About">

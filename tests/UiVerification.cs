@@ -1648,6 +1648,20 @@ public sealed partial class MainWindow
         check(repoLinks.All(link => (link.Background as SolidColorBrush)?.Color == Windows.UI.Color.FromArgb(255, 255, 255, 255)) &&
             repoText.Count == 4 && repoText.All(color => color == Windows.UI.Color.FromArgb(255, 0, 0, 0)),
             "repository cards keep a light surface and black labels in light mode");
+        check(!AppearanceNavigationGroup.MenuItems.OfType<NavigationViewItem>().Any(item => Equals(item.Content, "时钟") || Equals(item.Content, "组件"))
+            && ComponentsNavigationGroup.MenuItems.OfType<NavigationViewItem>().Any(item => Equals(item.Content, "外观"))
+            && ComponentsNavigationGroup.MenuItems.OfType<NavigationViewItem>().Any(item => Equals(item.Content, "时钟")),
+            "clock and component appearance live under components");
+        check(CloudSyncNavItem.Visibility == Visibility.Collapsed && AutofillNavigationGroup.Visibility == Visibility.Collapsed,
+            "cloud control and autofill stay hidden until enabled");
+        _settings.ShowExperimentalCloud = true;
+        _settings.ShowExperimentalAutofill = true;
+        ApplyExperimentalNavigation();
+        check(CloudSyncNavItem.Visibility == Visibility.Visible && AutofillNavigationGroup.Visibility == Visibility.Visible,
+            "experimental switches reveal cloud control and autofill");
+        _settings.ShowExperimentalCloud = false;
+        _settings.ShowExperimentalAutofill = false;
+        ApplyExperimentalNavigation();
         RootShell.RequestedTheme = originalAboutTheme;
         await NextLayoutAsync();
         foreach (string page in new[] { "AppearanceTile", "AppearanceBackground", "AppearanceGrid", "AppearanceToolbar" })

@@ -168,9 +168,9 @@ public sealed partial class MainWindow
         RegisterSettingsPage("AppearanceTheme", AppearanceSettingsPanel, ThemeSettingsCard, "主题", "调整界面主题和看板色系。");
         RegisterSettingsPage("AppearanceGrid", AppearanceSettingsPanel, grid, "网格", "设置网格的显示样式，不改变吸附逻辑。");
         RegisterSettingsPage("AppearanceToolbar", AppearanceSettingsPanel, ToolbarSettings(), "控制窗", "调整控制窗的显示、位置和外观。");
-        RegisterSettingsPage("AppearanceComponents", AppearanceSettingsPanel, ComponentLookSettings(), "组件", "调整天气与噪音组件卡的背景和毛玻璃效果。");
-        RegisterSettingsPage("AppearanceClock", AppearanceSettingsPanel, ClockLookSettings(), "时钟", "调整时钟的字体、粗细与颜色。");
         ComponentSettingsPanel.Children.Clear();
+        RegisterSettingsPage("AppearanceComponents", ComponentSettingsPanel, ComponentLookSettings(), "外观", "调整天气与噪音组件卡的背景和毛玻璃效果。");
+        RegisterSettingsPage("AppearanceClock", ComponentSettingsPanel, ClockLookSettings(), "时钟", "调整时钟的字体、粗细与颜色。");
         ((StackPanel)NoiseSettingsCard.Child).Children.Insert(2,
             Toggle("最小化时暂停监测", _settings.PauseNoiseWhenMinimized, value =>
             { _settings.PauseNoiseWhenMinimized = value; RefreshNoiseSuspension(); }, read: () => _settings.PauseNoiseWhenMinimized));
@@ -195,6 +195,19 @@ public sealed partial class MainWindow
             about.Children.Add(child);
         }
         RegisterSettingsPage("About", AboutSettingsPanel, about, "关于", "查看版本、访问仓库与检查更新。");
+        about.Children.Add(Heading("实验性功能"));
+        about.Children.Add(Toggle("显示集控", _settings.ShowExperimentalCloud, value =>
+        {
+            _settings.ShowExperimentalCloud = value;
+            ApplyExperimentalNavigation();
+        }, read: () => _settings.ShowExperimentalCloud));
+        about.Children.Add(Toggle("显示自动填充", _settings.ShowExperimentalAutofill, value =>
+        {
+            _settings.ShowExperimentalAutofill = value;
+            ApplyExperimentalNavigation();
+        }, read: () => _settings.ShowExperimentalAutofill));
+        about.Children.Add(Note("默认关闭。打开后，设置侧栏会显示集控或自动填充。"));
+        ApplyExperimentalNavigation();
         UpdateSourceComboBox.SelectedIndex = _settings.UpdateSource == "Gitee" ? 1 : 0;
         UpdateSourceComboBox.SelectionChanged += async (_, _) =>
         {
@@ -1374,6 +1387,14 @@ public sealed partial class MainWindow
         BoardBackgroundVisual.Apply(_settings.LayoutMode == "Free" ? new() : _settings.BoardBackground, BoardTheme.SurfaceBrush, UseSharedBackground);
     }
 
+    private void ApplyExperimentalNavigation()
+    {
+        if (CloudSyncNavItem is not null)
+            CloudSyncNavItem.Visibility = _settings.ShowExperimentalCloud ? Visibility.Visible : Visibility.Collapsed;
+        if (AutofillNavigationGroup is not null)
+            AutofillNavigationGroup.Visibility = _settings.ShowExperimentalAutofill ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     /// <summary>标题栏向下避让：给顶栏加上边距，上方留空给 ClassIsland 主界面等窗口。</summary>
     private void ApplyMenuBarOffset()
     {
@@ -1387,6 +1408,7 @@ public sealed partial class MainWindow
         foreach (Action refresh in _refreshSettingAvailability) refresh();
         ApplyDisplayLayout();
         ApplyMenuBarOffset();
+        ApplyExperimentalNavigation();
         // 布局模式切换会改变编辑工具栏可用项和整屏笔迹的显示状态。
         UpdateEditingToolbarVisibility();
         RefreshClockInk();

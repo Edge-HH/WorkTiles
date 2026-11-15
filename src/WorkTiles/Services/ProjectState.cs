@@ -99,6 +99,10 @@ public sealed class BoardSettingsState
     public string SecondLaunchAction { get; set; } = "Foreground";
     /// <summary>预览（查看模式）下显示顶部菜单栏；默认关闭，菜单栏只在编辑模式显示。</summary>
     public bool ShowMenuBarInPreview { get; set; }
+    /// <summary>关于页实验功能：打开后设置侧栏显示集控。默认关闭。</summary>
+    public bool ShowExperimentalCloud { get; set; }
+    /// <summary>关于页实验功能：打开后设置侧栏显示自动填充。默认关闭。</summary>
+    public bool ShowExperimentalAutofill { get; set; }
     /// <summary>标题栏向下避让的距离（px），用于避让 ClassIsland 主界面等窗口。</summary>
     public double MenuBarAvoidDistance { get; set; }
     public AutofillSettings Autofill { get; set; } = new();
