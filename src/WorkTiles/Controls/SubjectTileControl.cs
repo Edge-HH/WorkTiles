@@ -10,7 +10,10 @@ using Microsoft.UI.Xaml.Shapes;
 using WorkTiles.Models;
 using WorkTiles.ViewModels;
 using Windows.Foundation;
+using Microsoft.UI.Input;
 using Microsoft.UI.Text;
+using Windows.System;
+using Windows.UI.Core;
 using Windows.ApplicationModel.DataTransfer;
 
 namespace WorkTiles.Controls;
@@ -59,6 +62,7 @@ public sealed class SubjectTileControl : Grid
     public event Action<SubjectBoard>? InkActivated;
     private bool _isEditing;
     private bool _clampingSelection;
+    private bool _aligningParagraph;
     private bool _lockBoardGeometry;
     private bool _applyingModel;
     private string _modelStamp = "";
@@ -669,7 +673,7 @@ public sealed class SubjectTileControl : Grid
         bool documentReady = false;
         editor.TextChanged += (_, _) =>
         {
-            if (!documentReady) return;
+            if (!documentReady || _aligningParagraph) return;
             CaptureRichText(editor, homework);
         };
         editor.Loaded += (_, _) =>
@@ -709,6 +713,26 @@ public sealed class SubjectTileControl : Grid
         }
 
         editor.SelectionChanged += (_, _) => ClampSelectionAwayFromParagraphMark(editor);
+        editor.TextChanged += (_, _) =>
+        {
+            if (_aligningParagraph) return;
+            AlignTrailingParagraphMark(editor);
+        };
+        editor.PreviewKeyDown += (_, args) =>
+        {
+            if (args.Key is not (VirtualKey.Right or VirtualKey.End or VirtualKey.Down)) return;
+            int end = editor.Document.GetRange(0, int.MaxValue).EndPosition;
+            if (end <= 0) return;
+            int limit = end - 1;
+            var selection = editor.Document.Selection;
+            bool extending = args.Key == VirtualKey.End || Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            if (!extending && args.Key != VirtualKey.End) return;
+            if (selection.EndPosition < limit && args.Key != VirtualKey.End) return;
+            _clampingSelection = true;
+            try { selection.SetRange(extending ? Math.Min(selection.StartPosition, limit) : limit, limit); }
+            finally { _clampingSelection = false; }
+            args.Handled = true;
+        };
         return editor;
     }
 
@@ -747,11 +771,13 @@ public sealed class SubjectTileControl : Grid
         }
     }
 
-    /// <summary>行末段落标记沿用前一个字的格式，避免光标再往后一格时字号跳回控件默认的 15。</summary>
-    private static void AlignTrailingParagraphMark(RichEditBox editor)
+    /// <summary>行末段落标记沿用前一个字的格式，并藏起来，避免光标再往后一格时字号跳回 15 或闪一下。</summary>
+    private void AlignTrailingParagraphMark(RichEditBox editor)
     {
         bool readOnly = editor.IsReadOnly;
         if (readOnly) editor.IsReadOnly = false;
+        // 已经对齐过就立刻返回。每次按键都重写格式会让 RichEdit 连续重排，输入会卡到无法使用。
+        _aligningParagraph = true;
         try
         {
             ITextRange story = editor.Document.GetRange(0, int.MaxValue);
@@ -763,14 +789,22 @@ public sealed class SubjectTileControl : Grid
             ITextRange sample = editor.Document.GetRange(end - 2, end - 1);
             sample.GetText(TextGetOptions.None, out string sampleText);
             if (sampleText is "\r" or "\n" || sample.CharacterFormat.Size is < 8 or > 96) return;
-            mark.CharacterFormat.Name = sample.CharacterFormat.Name;
-            mark.CharacterFormat.Size = sample.CharacterFormat.Size;
-            mark.CharacterFormat.Bold = sample.CharacterFormat.Bold;
-            mark.CharacterFormat.Italic = sample.CharacterFormat.Italic;
-            mark.CharacterFormat.Underline = sample.CharacterFormat.Underline;
+            bool sizeMatches = Math.Abs(mark.CharacterFormat.Size - sample.CharacterFormat.Size) < 0.1;
+            if (sizeMatches && mark.CharacterFormat.Hidden == FormatEffect.On) return;
+            if (!sizeMatches)
+            {
+                mark.CharacterFormat.Name = sample.CharacterFormat.Name;
+                mark.CharacterFormat.Size = sample.CharacterFormat.Size;
+                mark.CharacterFormat.Bold = sample.CharacterFormat.Bold;
+                mark.CharacterFormat.Italic = sample.CharacterFormat.Italic;
+                mark.CharacterFormat.Underline = sample.CharacterFormat.Underline;
+            }
+            if (mark.CharacterFormat.Hidden != FormatEffect.On)
+                mark.CharacterFormat.Hidden = FormatEffect.On;
         }
         finally
         {
+            _aligningParagraph = false;
             if (readOnly) editor.IsReadOnly = true;
         }
     }
