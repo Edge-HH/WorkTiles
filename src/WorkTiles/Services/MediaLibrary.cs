@@ -40,6 +40,20 @@ public sealed class MediaLibrary(string dataDirectory)
         return name.Length > 17 && name[16] == '_' && name.Take(16).All(Uri.IsHexDigit) ? name[17..] : name;
     }
 
+    /// <summary>浏览时显示壁纸名。没有单独记下名字时退回文件名。</summary>
+    public string DisplayTitle(string path)
+    {
+        MediaLabel? label = ReadLabels().GetValueOrDefault(path);
+        return string.IsNullOrWhiteSpace(label?.Title) ? DisplayName(path) : label.Title;
+    }
+
+    /// <summary>动态壁纸的静态预览图。毛玻璃和最近列表都用它，避免去采样网页或视频合成层。</summary>
+    public static string? PreviewFile(string path)
+    {
+        string beside = path + ".preview.png";
+        return File.Exists(beside) ? beside : null;
+    }
+
     public IReadOnlyList<string> RecentImages()
     {
         try { return (JsonSerializer.Deserialize<List<string>>(File.ReadAllText(HistoryPath(MediaScope.Images))) ?? [])
@@ -152,7 +166,12 @@ public sealed class MediaLibrary(string dataDirectory)
     public async Task<string> ImportWallpaperAsync(WallpaperProject project, MediaScope scope)
     {
         if (scope == MediaScope.Images) throw new InvalidDataException("图片入口不能导入动态壁纸。");
-        if (project.Kind != "web") return await ImportAsync(project.Path, scope);
+        if (project.Kind != "web")
+        {
+            string video = await ImportAsync(project.Path, scope);
+            await RememberWallpaperAsync(video, project);
+            return video;
+        }
         // 网页需要完整相对目录；先在临时目录复制完成，再发布入口，避免队列读到半个项目。
         string directory = Path.Combine(dataDirectory, "web-wallpapers");
         string destination = Path.Combine(directory, Guid.NewGuid().ToString("N"));
@@ -179,8 +198,48 @@ public sealed class MediaLibrary(string dataDirectory)
         await RecordRecentAsync(owned, scope);
         }
         finally { _gate.Release(); }
+        await RememberWallpaperAsync(owned, project);
         Changed?.Invoke();
         return owned;
+    }
+
+    private async Task RememberWallpaperAsync(string owned, WallpaperProject project)
+    {
+        string preview = "";
+        if (IsImage(project.PreviewPath) && File.Exists(project.PreviewPath))
+        {
+            preview = owned + ".preview.png";
+            if (!File.Exists(preview))
+            {
+                string source = project.PreviewPath;
+                await Task.Run(() => File.Copy(source, preview, true));
+            }
+        }
+        await _gate.WaitAsync();
+        try
+        {
+            Dictionary<string, MediaLabel> labels = ReadLabels();
+            labels[owned] = new MediaLabel { Title = project.Title, Preview = preview };
+            Directory.CreateDirectory(_directory);
+            string temporary = LabelsPath() + ".tmp";
+            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(labels));
+            File.Move(temporary, LabelsPath(), true);
+        }
+        finally { _gate.Release(); }
+    }
+
+    private string LabelsPath() => Path.Combine(_directory, "media-labels.json");
+
+    private Dictionary<string, MediaLabel> ReadLabels()
+    {
+        try { return JsonSerializer.Deserialize<Dictionary<string, MediaLabel>>(File.ReadAllText(LabelsPath())) ?? []; }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return []; }
+    }
+
+    private sealed class MediaLabel
+    {
+        public string Title { get; set; } = "";
+        public string Preview { get; set; } = "";
     }
 
     private static void CopyDirectory(string source, string destination)

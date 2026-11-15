@@ -158,6 +158,8 @@ public sealed class BackgroundVisual : Grid
         _surfaceOverlay.Visibility = _overlaySurface && (style.Glass || (hasMedia && !style.ColorCleared)) ? Visibility.Visible : Visibility.Collapsed;
         _blurOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         _glassTintOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
+        if (_web is not null)
+            _web.Visibility = style.Glass && _image is not null ? Visibility.Collapsed : Visibility.Visible;
         UpdateTimer();
     }
 
@@ -176,10 +178,22 @@ public sealed class BackgroundVisual : Grid
                 {
                     if (MediaLibrary.IsWeb(path))
                     {
+                        string? preview = MediaLibrary.PreviewFile(path) ?? WebPreview(path);
+                        if (preview is not null)
+                        {
+                            _image = new Image
+                            {
+                                Stretch = Stretch.UniformToFill,
+                                Source = new BitmapImage(new Uri(preview)) { DecodePixelWidth = 1280, AutoPlay = false }
+                            };
+                            _media.Children.Add(_image);
+                        }
                         WebWallpaperView web = new(path);
                         _web = web;
                         web.Failed += () => { if (ReferenceEquals(_web, web)) Failed(); };
                         _media.Children.Add(web);
+                        // 网页是独立合成层，毛玻璃采到的是一块黑。开着毛玻璃时改显示预览图，模糊才有画面。
+                        web.Visibility = _style.Glass ? Visibility.Collapsed : Visibility.Visible;
                     }
                     else if (MediaLibrary.IsVideo(path))
                     {
@@ -232,6 +246,20 @@ public sealed class BackgroundVisual : Grid
         if (_video is not null) _video.Stretch = stretch;
         if (_videoFrames is not null) _videoFrames.Stretch = stretch;
         if (_player is not null) _player.IsLoopingEnabled = !_style.PlaylistEnabled || !_style.SwitchOnMediaEnded;
+    }
+
+    private static string? WebPreview(string path)
+    {
+        try
+        {
+            WebWallpaperPackage package = WebWallpaperPackage.Load(path);
+            WallpaperProject? project = WallpaperEngineLibrary.ReadProject(package.Directory);
+            return project is not null && MediaLibrary.IsImage(project.PreviewPath) && File.Exists(project.PreviewPath) ? project.PreviewPath : null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            return null;
+        }
     }
 
     private void Advance()

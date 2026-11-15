@@ -231,11 +231,15 @@ try
     string webEntry = Path.Combine(webRoot, "index.html");
     File.WriteAllText(webEntry, "<html>wallpaper</html>");
     File.WriteAllText(Path.Combine(webRoot, "resource.js"), "// resource");
-    File.WriteAllText(Path.Combine(webRoot, "project.json"), "{\"type\":\"web\",\"file\":\"index.html\"}");
+    string preview = Path.Combine(webRoot, "cover.png");
+    File.WriteAllText(preview, "preview");
+    File.WriteAllText(Path.Combine(webRoot, "project.json"), "{\"type\":\"web\",\"file\":\"index.html\",\"title\":\"网页\",\"preview\":\"cover.png\"}");
     int changes = 0;
     library.Changed += () => changes++;
-    string ownedWeb = await library.ImportWallpaperAsync(new("网页", webEntry, "web", webRoot, ""), MediaScope.Background);
+    string ownedWeb = await library.ImportWallpaperAsync(new("网页", webEntry, "web", webRoot, preview), MediaScope.Background);
     Check(changes == 1 && library.RecentMedia(MediaScope.Background)[0] == ownedWeb, "网页完整导入后更新最近媒体并通知视图");
+    Check(library.DisplayTitle(ownedWeb) == "网页", "导入的壁纸按壁纸名浏览，而不是入口文件名");
+    Check(MediaLibrary.PreviewFile(ownedWeb) == ownedWeb + ".preview.png" && File.Exists(ownedWeb + ".preview.png"), "动态壁纸留下一帧静态预览");
     Check(!library.RecentMedia(MediaScope.Tile).Contains(ownedWeb), "背景板的动态壁纸不出现在磁贴最近媒体");
     File.Delete(webEntry);
     await library.UseRecentAsync(ownedVideo, MediaScope.Tile);

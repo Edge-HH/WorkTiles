@@ -111,7 +111,7 @@ public sealed partial class MainWindow
                 Grid row = new() { ColumnSpacing = 6 };
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
                 row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-                row.Children.Add(new TextBlock { Text = $"{index + 1}. {MediaLibrary.DisplayName(path)}" + (File.Exists(path) ? "" : "（文件缺失）"),
+                row.Children.Add(new TextBlock { Text = $"{index + 1}. {MediaLibraryStore.DisplayTitle(path)}" + (File.Exists(path) ? "" : "（文件缺失）"),
                     TextTrimming = TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center });
                 StackPanel commands = new() { Orientation = Orientation.Horizontal, Spacing = 4 };
                 void Command(string label, bool enabled, Action action)

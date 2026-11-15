@@ -35,15 +35,17 @@ public sealed class RecentImagesView : StackPanel
         _images.Children.Clear();
         foreach (string path in _library.RecentMedia(_scope).Where(path => !_imagesOnly || MediaLibrary.IsImage(path)))
         {
-            bool image = MediaLibrary.IsImage(path);
-            // 历史列表只展示静态封面/类型标签，不能为每个视频或网页启动播放器。
-            object preview = image
-                ? new Image { Source = new BitmapImage(new Uri(path)) { DecodePixelWidth = 176, AutoPlay = false }, Stretch = Stretch.UniformToFill }
-                : new TextBlock { Text = (MediaLibrary.IsVideo(path) ? "视频" : "网页壁纸") + "\n" + MediaLibrary.DisplayName(path),
+            string title = _library.DisplayTitle(path);
+            string? preview = MediaLibrary.PreviewFile(path);
+            bool image = MediaLibrary.IsImage(path) || preview is not null;
+            // 历史列表只展示静态封面。视频和网页用导入时留下的预览图，不为每一项启动播放器。
+            object content = image
+                ? new Image { Source = new BitmapImage(new Uri(preview ?? path)) { DecodePixelWidth = 176, AutoPlay = false }, Stretch = Stretch.UniformToFill }
+                : new TextBlock { Text = (MediaLibrary.IsVideo(path) ? "视频" : "网页壁纸") + "\n" + title,
                     TextWrapping = TextWrapping.Wrap, MaxLines = 3, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6) };
             Button button = new() { Width = 88, Height = 88, Padding = new Thickness(0), CornerRadius = new CornerRadius(6),
-                Content = preview };
-            AutomationProperties.SetName(button, "使用最近媒体 " + MediaLibrary.DisplayName(path));
+                Content = content };
+            AutomationProperties.SetName(button, "使用最近媒体 " + title);
             ToolTipService.SetToolTip(button, path);
             button.Click += async (_, _) => await _select(path);
             _images.Children.Add(button);
