@@ -409,24 +409,42 @@ public sealed class SubjectTileControl : Grid
 
     /// <summary>
     /// 查看模式的标题不能再接收焦点，也不能留下聚焦时的白底和强调色下划线。
-    /// 主题画刷写在控件资源里，视觉状态切回普通态时才会读到透明色。
+    /// 编辑时同样保持透明：悬停、聚焦和禁用会改用主题填充色，挡住磁贴底图和毛玻璃。
     /// </summary>
     private static void ApplyInlineEditorChrome(TextBox editor, bool editing)
     {
         editor.IsReadOnly = !editing;
         editor.IsTabStop = editing;
         editor.IsHitTestVisible = editing;
-        if (editing)
-        {
-            foreach (string key in InlineEditorChromeKeys)
-                editor.Resources.Remove(key);
-            return;
-        }
-
-        SolidColorBrush clear = new(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-        foreach (string key in InlineEditorChromeKeys)
-            editor.Resources[key] = clear;
+        ApplyTransparentInputChrome(editor);
     }
+
+    /// <summary>
+    /// 学科标题和作业正文直接铺在磁贴背景上。输入框模板在悬停、聚焦和禁用时会改用主题填充色，
+    /// 设置页预览、导出预览和桌面透明磁贴都会被这块底色挡住。这些状态改为全透明；
+    /// 控件自身保留几乎全透明的背景，空白处仍能点中。
+    /// </summary>
+    internal static void ApplyTransparentInputChrome(Control editor)
+    {
+        editor.Background = InvisibleHitBrush();
+        editor.BorderBrush = InvisibleHitBrush();
+        editor.BorderThickness = new Thickness(0);
+        foreach (string theme in new[] { "Light", "Dark", "HighContrast" })
+        {
+            ResourceDictionary dictionary = new();
+            foreach (string key in InlineEditorChromeKeys)
+                dictionary[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            dictionary["TextControlBorderThemeThickness"] = new Thickness(0);
+            dictionary["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+            editor.Resources.ThemeDictionaries[theme] = dictionary;
+        }
+        foreach (string key in InlineEditorChromeKeys)
+            editor.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        editor.Resources["TextControlBorderThemeThickness"] = new Thickness(0);
+        editor.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+    }
+
+    private static SolidColorBrush InvisibleHitBrush() => new(Windows.UI.Color.FromArgb(1, 0, 0, 0));
 
     private static readonly string[] InlineEditorChromeKeys =
     [
@@ -645,8 +663,6 @@ public sealed class SubjectTileControl : Grid
             FontSize = Math.Clamp(_settings.TileBodyFontSize, 12, 72),
             FontWeight = _settings.TileBodyBold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
             FontStyle = _settings.TileBodyItalic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)),
-            BorderThickness = new Thickness(0),
             Padding = new Thickness(2, 0, 2, 0),
             MinHeight = 42,
             TextWrapping = TextWrapping.Wrap,
@@ -659,6 +675,7 @@ public sealed class SubjectTileControl : Grid
             PlaceholderText = _isEditing ? HomeworkState.PlaceholderText : string.Empty,
             Tag = homework
         };
+        ApplyTransparentInputChrome(editor);
         editor.Paste += async (_, args) =>
         {
             if (!_settings.PastePlainTextOnly) return;
@@ -713,6 +730,13 @@ public sealed class SubjectTileControl : Grid
         }
 
         editor.SelectionChanged += (_, _) => ClampSelectionAwayFromParagraphMark(editor);
+        // 鼠标拖选时 SelectionChanged 总在画完选区后才纠正，行末那一格会闪一下。拖动过程中持续收选区，松开再收一次。
+        editor.PointerMoved += (_, args) =>
+        {
+            if (args.GetCurrentPoint(editor).Properties.IsLeftButtonPressed)
+                ClampSelectionAwayFromParagraphMark(editor);
+        };
+        editor.PointerReleased += (_, _) => ClampSelectionAwayFromParagraphMark(editor);
         editor.TextChanged += (_, _) =>
         {
             if (_aligningParagraph) return;
@@ -720,12 +744,24 @@ public sealed class SubjectTileControl : Grid
         };
         editor.PreviewKeyDown += (_, args) =>
         {
-            if (args.Key is not (VirtualKey.Right or VirtualKey.End or VirtualKey.Down)) return;
+            bool ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            bool shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            // 全选和到行末的方向键都会把选区推进段落标记，提前停在最后一个字，免得选中那一格闪一下。
+            bool selectAll = ctrl && args.Key == VirtualKey.A;
+            if (!selectAll && args.Key is not (VirtualKey.Right or VirtualKey.End or VirtualKey.Down)) return;
             int end = editor.Document.GetRange(0, int.MaxValue).EndPosition;
             if (end <= 0) return;
             int limit = end - 1;
             var selection = editor.Document.Selection;
-            bool extending = args.Key == VirtualKey.End || Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
+            if (selectAll)
+            {
+                _clampingSelection = true;
+                try { selection.SetRange(0, limit); }
+                finally { _clampingSelection = false; }
+                args.Handled = true;
+                return;
+            }
+            bool extending = args.Key == VirtualKey.End || shift;
             if (!extending && args.Key != VirtualKey.End) return;
             if (selection.EndPosition < limit && args.Key != VirtualKey.End) return;
             _clampingSelection = true;
@@ -1011,21 +1047,25 @@ public sealed class SubjectTileControl : Grid
     private static ColorSwatchButton CreateColorSwatch(string hex, double size) =>
         new(BoardTheme.DisplayContentColor(MainViewModel.BrushFromHex(hex).Color), size);
 
-    private static TextBox CreateInlineEditor(string text, double fontSize, Brush foreground, bool singleLine) => new()
+    private static TextBox CreateInlineEditor(string text, double fontSize, Brush foreground, bool singleLine)
     {
-        Text = text, FontSize = fontSize, Foreground = foreground,
-        Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)),
-        BorderThickness = new Thickness(0), Padding = new Thickness(2, 0, 2, 0), MinHeight = 34,
-        AcceptsReturn = !singleLine,
-        TextWrapping = singleLine ? TextWrapping.NoWrap : TextWrapping.Wrap
-    };
+        TextBox editor = new()
+        {
+            Text = text, FontSize = fontSize, Foreground = foreground,
+            Padding = new Thickness(2, 0, 2, 0), MinHeight = 34,
+            AcceptsReturn = !singleLine,
+            TextWrapping = singleLine ? TextWrapping.NoWrap : TextWrapping.Wrap
+        };
+        ApplyTransparentInputChrome(editor);
+        return editor;
+    }
 
     private static Button CreateIconButton(string glyph, string tooltip, RoutedEventHandler click, bool danger = false)
     {
         Button button = new()
         {
             Width = 38, Height = 38, Padding = new Thickness(8),
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)), BorderThickness = new Thickness(0),
+            Background = BoardTheme.ButtonClearBrush, BorderThickness = new Thickness(0),
             Content = new FontIcon
             {
                 Glyph = glyph, FontSize = 15,
@@ -1042,7 +1082,7 @@ public sealed class SubjectTileControl : Grid
         ToggleButton button = new()
         {
             Width = 38, Height = 38, Padding = new Thickness(8),
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)), BorderThickness = new Thickness(0),
+            Background = BoardTheme.ButtonClearBrush, BorderThickness = new Thickness(0),
             Content = new FontIcon
             {
                 Glyph = glyph, FontSize = 16,

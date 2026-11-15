@@ -859,8 +859,8 @@ public sealed partial class MainWindow
 
     private UIElement CreateToolbarPositionPicker()
     {
-        // 点本身就是 16 像素的圆，画在边框内侧。单选框模板会画出控件边界，贴边时下沿会被裁掉。
-        Grid screen = new() { Height = 148 };
+        // 沿用原来的单选框样式；矩形加高、八个点贴到四边。内边距只留 6，单选框完整落在框内不会被裁切。
+        Grid screen = new() { Height = 200, Padding = new Thickness(6) };
         for (int index = 0; index < 3; index++)
         {
             screen.RowDefinitions.Add(new RowDefinition());
@@ -869,10 +869,9 @@ public sealed partial class MainWindow
         Border frame = new()
         {
             Name = "ToolbarPositionPicker", HorizontalAlignment = HorizontalAlignment.Stretch,
-            BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(10),
-            Padding = new Thickness(4), Child = screen
+            BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(12), Child = screen
         };
-        List<Border> dots = [];
+        List<RadioButton> buttons = [];
         var positions = new[]
         {
             ("TopLeft", "左上", 0, 0), ("TopCenter", "上居中", 0, 1), ("TopRight", "右上", 0, 2),
@@ -881,36 +880,31 @@ public sealed partial class MainWindow
         };
         void Paint()
         {
-            Brush brand = Application.Current.Resources["BoardBrandBrush"] as Brush ?? BoardTheme.TextBrush;
-            foreach (Border dot in dots)
-            {
-                bool selected = (string)dot.Tag == _settings.ToolbarPosition;
-                dot.Background = selected ? brand : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-                dot.BorderBrush = selected ? brand : BoardTheme.TextBrush;
-            }
+            foreach (RadioButton button in buttons)
+                button.IsChecked = (string)button.Tag == _settings.ToolbarPosition;
             frame.BorderBrush = BoardTheme.TextBrush;
             frame.Background = BoardTheme.SurfaceBrush;
         }
         foreach (var (position, label, row, column) in positions)
         {
-            Border dot = new()
+            RadioButton button = new()
             {
-                Name = "ToolbarPosition" + position, Tag = position,
-                Width = 16, Height = 16, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2),
+                Name = "ToolbarPosition" + position, GroupName = "ToolbarPosition", Tag = position,
+                MinWidth = 0, MinHeight = 0, Width = 28, Height = 28, Padding = new Thickness(0), Margin = new Thickness(0),
                 HorizontalAlignment = column == 0 ? HorizontalAlignment.Left : column == 2 ? HorizontalAlignment.Right : HorizontalAlignment.Center,
-                VerticalAlignment = row == 0 ? VerticalAlignment.Top : row == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Center
+                VerticalAlignment = row == 0 ? VerticalAlignment.Top : row == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Center,
+                IsChecked = _settings.ToolbarPosition == position
             };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(dot, label);
-            ToolTipService.SetToolTip(dot, label);
-            dot.Tapped += (_, _) =>
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
+            ToolTipService.SetToolTip(button, label);
+            button.Checked += (_, _) =>
             {
                 if (_settings.ToolbarPosition == position) return;
                 _settings.ToolbarPosition = position;
-                Paint();
                 SettingChanged();
             };
-            Grid.SetRow(dot, row); Grid.SetColumn(dot, column); screen.Children.Add(dot);
-            dots.Add(dot);
+            Grid.SetRow(button, row); Grid.SetColumn(button, column); screen.Children.Add(button);
+            buttons.Add(button);
         }
         _refreshSettingAvailability.Add(Paint);
         Paint();

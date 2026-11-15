@@ -112,6 +112,32 @@ if ($xaml -notmatch 'x:Name="SettingsContentHost"' -or
     $previews -notmatch 'ColorPalette\.IsMacaron\}"') {
     $failures.Add('磁贴设置页缺少右侧固定预览、放大铺满的背景、浅色提亮，或示例文案与配色没有跟随当前色系。')
 }
+$exportTiles = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\ExportTileVisual.cs'))
+$desktopHost = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\DesktopWidgetHost.cs'))
+if (([regex]::Matches($tiles, 'ApplyTransparentInputChrome\(')).Count -lt 2 -or
+    $exportTiles -notmatch 'ApplyTransparentInputChrome\(' -or
+    $tiles -notmatch '"TextControlBackground"' -or
+    $tiles -notmatch '"TextControlBackgroundPointerOver"' -or
+    $tiles -notmatch '"TextControlBackgroundFocused"' -or
+    $tiles -notmatch '"TextControlBackgroundDisabled"' -or
+    $tiles -notmatch 'ThemeDictionaries\[theme\]') {
+    $failures.Add('学科标题和作业输入框在悬停、聚焦或禁用时仍会用主题底色挡住磁贴预览。')
+}
+# 悬停过渡不插值透明度。静止色若是透明白，第一帧会铺成浅灰，然后才落到深灰。
+if ($theme -notmatch 'BoardButtonClearBrush" Color="#002F2F33"' -or
+    $theme -notmatch 'BoardButtonClearBrush" Color="#00D6D6D6"' -or
+    $theme -notmatch 'ButtonBackgroundPointerOver" Color="#2F2F33"' -or
+    $theme -notmatch 'MenuFlyoutItemBackgroundPointerOver" Color="#2F2F33"' -or
+    $theme -notmatch 'NavigationViewItemBackgroundPointerOver" Color="#2F2F33"' -or
+    $theme -notmatch 'MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush"') {
+    $failures.Add('菜单栏和设置按钮的悬停色与静止色不是同一套灰，悬停时会先闪浅灰。')
+}
+if ($desktopHost -notmatch 'DwmwaColorNone' -or
+    $desktopHost -notmatch 'GetStockObject\(HollowBrush\)' -or
+    $desktopHost -notmatch 'WmNcPaint' -or
+    $desktopHost -notmatch 'DwmwaSystemBackdropType') {
+    $failures.Add('桌面磁贴或控制窗在显示、改尺寸之后没有清掉系统白边。')
+}
 
 # 编辑模式的富文本 / 画笔悬浮岛、作业板缩放悬浮岛都挂在控制窗旁边，尺寸与样式跟随控制窗。
 $islands = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\MainWindow.Islands.cs'))

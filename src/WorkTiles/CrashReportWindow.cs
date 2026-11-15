@@ -11,6 +11,11 @@ namespace WorkTiles;
 internal sealed class CrashReportWindow : Window
 {
     private static bool _open;
+    private readonly Grid _root;
+    private readonly nint _hwnd;
+    private bool _positioned;
+    private bool _loaded;
+    private bool _fitted;
 
     public static void Present(Exception exception)
     {
@@ -26,7 +31,7 @@ internal sealed class CrashReportWindow : Window
     {
         Title = "WorkTiles 遇到错误";
         SystemBackdrop = new MicaBackdrop();
-        Grid root = new() { Background = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 0, 0, 0)) };
+        Grid root = new() { RequestedTheme = ElementTheme.Dark, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 0, 0, 0)) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
@@ -80,10 +85,31 @@ internal sealed class CrashReportWindow : Window
             Spacing = 8,
             HorizontalAlignment = HorizontalAlignment.Right
         };
-        Button copy = new() { Content = "复制错误信息", Style = (Style)Application.Current.Resources["BoardSecondaryButtonStyle"] };
-        Button ignore = new() { Content = "忽略", Style = (Style)Application.Current.Resources["BoardSecondaryButtonStyle"] };
-        Button exit = new() { Content = "退出", Style = (Style)Application.Current.Resources["BoardSecondaryButtonStyle"] };
-        Button restart = new() { Content = "重启", Style = (Style)Application.Current.Resources["BoardPrimaryButtonStyle"] };
+        // 底栏按钮和“已在运行”提示同一套：低调深色圆角、无边框。悬停走统一主题画刷，重启用强调色样式悬停。
+        Button FooterButton(string text, bool primary)
+        {
+            Brush idle = primary
+                ? (Brush)Application.Current.Resources["BoardBrandBrush"]
+                : new SolidColorBrush(Windows.UI.Color.FromArgb(255, 45, 48, 60));
+            Button button = new()
+            {
+                Content = text,
+                MinWidth = 96,
+                MinHeight = 36,
+                Padding = new Thickness(16, 8, 16, 8),
+                CornerRadius = new CornerRadius(6),
+                BorderThickness = new Thickness(0),
+                Background = idle,
+                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 240, 240, 244)),
+                HorizontalContentAlignment = HorizontalAlignment.Center
+            };
+            if (primary) button.Style = (Style)Application.Current.Resources["AccentButtonStyle"];
+            return button;
+        }
+        Button copy = FooterButton("复制错误信息", false);
+        Button ignore = FooterButton("忽略", false);
+        Button exit = FooterButton("退出", false);
+        Button restart = FooterButton("重启", true);
         copy.Click += (_, _) =>
         {
             DataPackage package = new();
@@ -113,16 +139,58 @@ internal sealed class CrashReportWindow : Window
         Grid.SetRow(footer, 1);
         root.Children.Add(footer);
         Content = root;
+        _root = root;
+        _hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        WindowChrome.Round(_hwnd);
+        // 先按当前模板摆一次，Loaded 后再量。按钮模板展开后会更高；外框还含标题栏，只按内容高度设窗口会裁掉底栏。
+        root.Loaded += (_, _) =>
+        {
+            _loaded = true;
+            DispatcherQueue.TryEnqueue(PlaceOnScreen);
+        };
+        PlaceOnScreen();
+    }
 
-        nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        WindowChrome.Round(hwnd);
-        double scale = WindowChrome.Dpi(hwnd) / 96d;
+    private void PlaceOnScreen()
+    {
+        if (_fitted) return;
+        double scale = WindowChrome.Dpi(_hwnd) / 96d;
         int width = (int)Math.Round(680 * scale);
-        int height = (int)Math.Round(420 * scale);
-        AppWindow.Resize(new SizeInt32(width, height));
-        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
-        AppWindow.Move(new PointInt32(
-            area.WorkArea.X + Math.Max(0, (area.WorkArea.Width - width) / 2),
-            area.WorkArea.Y + Math.Max(0, (area.WorkArea.Height - height) / 2)));
+        if (AppWindow.Size.Width != width)
+            AppWindow.Resize(new SizeInt32(width, Math.Max(AppWindow.Size.Height, (int)Math.Round(360 * scale))));
+
+        // 按客户区宽度测量，文字换行和最终窗口一致。
+        double measureWidth = 680;
+        if (scale > 0 && AppWindow.ClientSize.Width > 0)
+        {
+            double clientDip = AppWindow.ClientSize.Width / scale;
+            if (clientDip > 480 && clientDip <= 680) measureWidth = clientDip;
+        }
+        _root.Measure(new Windows.Foundation.Size(measureWidth, double.PositiveInfinity));
+        double content = _root.DesiredSize.Height;
+        if (content < 1) return;
+
+        int contentPx = (int)Math.Ceiling(Math.Min(content, 720) * scale);
+        int frame = AppWindow.Size.Height - AppWindow.ClientSize.Height;
+        bool measuredFrame = frame > 0;
+        if (!measuredFrame)
+        {
+            frame = WindowChrome.NonClientHeight(_hwnd);
+            measuredFrame = frame > 0;
+        }
+        if (!measuredFrame) frame = (int)Math.Ceiling(32 * scale);
+        int height = contentPx + frame;
+        if (AppWindow.Size.Width != width || AppWindow.Size.Height != height)
+            AppWindow.Resize(new SizeInt32(width, height));
+        if (!_positioned)
+        {
+            DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+            AppWindow.Move(new PointInt32(
+                area.WorkArea.X + Math.Max(0, (area.WorkArea.Width - width) / 2),
+                area.WorkArea.Y + Math.Max(0, (area.WorkArea.Height - height) / 2)));
+            _positioned = true;
+        }
+        // 模板还没展开时先不锁定，否则 Loaded 那次测量会被跳过，按钮仍然高出窗口。
+        if (measuredFrame && _loaded) _fitted = true;
     }
 }

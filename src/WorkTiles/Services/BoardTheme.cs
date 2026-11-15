@@ -22,4 +22,18 @@ public static class BoardTheme
 
     public static Color DisplayContentColor(Color color) => IsLight && DefaultContentColors.IsDefaultWhite(color.R, color.G, color.B)
         ? Color.FromArgb(color.A, 0, 0, 0) : color;
+
+    /// <summary>
+    /// 幽灵按钮的静止底色。与主题里的悬停色同一 RGB、完全透明。
+    /// WinUI 的画刷过渡不插值透明度，从透明白过渡到深灰时第一帧会先闪出浅灰。
+    /// </summary>
+    public static SolidColorBrush ButtonClearBrush => ButtonClearBrushFor(IsLight);
+
+    public static SolidColorBrush ButtonClearBrushFor(bool light)
+    {
+        Color hover = light
+            ? Color.FromArgb(255, 0xD6, 0xD6, 0xD6)
+            : Color.FromArgb(255, 0x2F, 0x2F, 0x33);
+        return new SolidColorBrush(Color.FromArgb(0, hover.R, hover.G, hover.B));
+    }
 }

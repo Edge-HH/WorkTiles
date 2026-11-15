@@ -243,7 +243,7 @@ public sealed partial class MainWindow
     private static StackPanel SettingsStack() => new() { Spacing = 18, Margin = new Thickness(0, 16, 0, 0) };
     private static TextBlock Heading(string text) => new() { Text = text, FontSize = 22 };
 
-    /// <summary>连点十次后抛出异常，用来打开错误窗口。平时看起来就是一行标题。</summary>
+    /// <summary>连点十次后打开错误窗口。异常在点击处理里接住，调试器不会在 WinRT 边界把它当成未处理异常打断。</summary>
     private TextBlock ExperimentalHeading()
     {
         int clicks = 0;
@@ -251,7 +251,16 @@ public sealed partial class MainWindow
         heading.Tapped += (_, _) =>
         {
             if (++clicks < 10) return;
-            throw new InvalidOperationException("实验性功能标题被连续点击 10 次，用于测试错误窗口。");
+            clicks = 0;
+            try
+            {
+                throw new InvalidOperationException("实验性功能标题被连续点击 10 次，用于测试错误窗口。");
+            }
+            catch (Exception ex)
+            {
+                App.WriteCrashLog(ex);
+                CrashReportWindow.Present(ex);
+            }
         };
         return heading;
     }

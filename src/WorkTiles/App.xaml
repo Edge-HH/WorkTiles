@@ -8,33 +8,6 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="Themes/ThemeResources.xaml" />
             </ResourceDictionary.MergedDictionaries>
-            <ResourceDictionary.ThemeDictionaries>
-                <ResourceDictionary x:Key="Dark">
-                    <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="SystemControlHighlightListLowRevealBackgroundBrush" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="MenuFlyoutItemRevealBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="MenuBarItemBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#34343A" />
-                    <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#3A3A3E" />
-                    <SolidColorBrush x:Key="ComboBoxItemRevealBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ListViewItemRevealBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#2F2F33" />
-                    <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#3A3A3E" />
-                </ResourceDictionary>
-            </ResourceDictionary.ThemeDictionaries>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

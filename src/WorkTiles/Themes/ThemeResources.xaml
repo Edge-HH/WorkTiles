@@ -4,17 +4,70 @@
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
-            <!-- 明确导航选中背景，避免系统色回退时白色底与白色标题重合。 -->
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#2A2A32" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#32323A" />
+            <!-- 交互态统一中性灰，是唯一来源：悬停 #2F2F33、按下 #3A3A3E、选中 #2C2C2C、选中悬停 #34343C。
+                 按钮、开关、导航选项卡、菜单、列表全部取同一套值，不再各写各的。
+                 必须放在合并字典的主题里：根级 Application.Resources 主题按 Application.RequestedTheme 解析，
+                 而本程序按元素 RequestedTheme 切深色，根级覆盖永远不生效。运行时不再重复涂色，避免先浅后深的闪烁。 -->
+            <!-- 基础填充画刷：WinUI 多数控件模板直接引用这些共享实例，只改别名盖不住，必须一起改。 -->
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="#2F2F33" />
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="ControlAltFillColorSecondaryBrush" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ControlAltFillColorTertiaryBrush" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#2F2F33" />
+            <SolidColorBrush x:Key="SystemControlHighlightListLowRevealBackgroundBrush" Color="#2F2F33" />
+            <SolidColorBrush x:Key="SystemControlHighlightListMediumBrush" Color="#3A3A3E" />
+            <!-- 普通按钮 -->
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#3A3A3E" />
+            <!-- 开关按钮（控制窗自动排列等）：补齐悬停/按下/选中，不再回退系统淡灰。 -->
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#2C2C2C" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#34343C" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#34343C" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminate" Color="#2C2C2C" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminatePointerOver" Color="#34343C" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminatePressed" Color="#34343C" />
+            <!-- 导航选项卡：与按钮同一套悬停/按下值。 -->
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#3A3A3E" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#2C2C2C" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#34343C" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#34343C" />
-            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#2A2A32" />
-            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#32323A" />
-            <SolidColorBrush x:Key="MenuBarItemBackgroundPointerOver" Color="#2A2A32" />
-            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#2A2A32" />
-            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#2A2A32" />
+            <!-- 菜单 / 菜单栏 -->
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="MenuFlyoutItemRevealBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="#2F2F33" />
+            <SolidColorBrush x:Key="MenuBarItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="MenuBarItemBackgroundPressed" Color="#3A3A3E" />
+            <!-- 下拉框 -->
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#2C2C2C" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#34343C" />
+            <SolidColorBrush x:Key="ComboBoxItemRevealBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBackgroundPointerOver" Color="#2F2F33" />
+            <!-- 列表 / 网格 -->
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ListViewItemRevealBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="GridViewItemRevealBackgroundPointerOver" Color="#2F2F33" />
+            <!-- 其它控件 -->
+            <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="ScrollBarButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#3A3A3E" />
+            <SolidColorBrush x:Key="DateTimePickerFlyoutButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="LoopingSelectorItemBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#F0F0F5" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#0E0E12" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#16161E" />
@@ -35,12 +88,77 @@
             <SolidColorBrush x:Key="BoardWarningBrush" Color="#FBBF24" />
             <SolidColorBrush x:Key="BoardDangerBrush" Color="#F87171" />
             <SolidColorBrush x:Key="BoardPaperBrush" Color="#FFFDF7" />
+            <!-- 悬停过渡不插值透明度。静止色若是透明白，第一帧会按白色铺满。
+                 幽灵按钮的静止色用悬停色 #2F2F33 的 RGB，透明度设为 0。 -->
+            <SolidColorBrush x:Key="BoardButtonClearBrush" Color="#002F2F33" />
+            <StaticResource x:Key="HyperlinkButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuBarItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuBarItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
+            <!-- 浅色交互态：悬停 #D6D6D6、按下 #C4C4C4、选中 #E6E6E6，与深色一套逻辑。 -->
+            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#000000" />
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ControlAltFillColorSecondaryBrush" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ControlAltFillColorTertiaryBrush" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="SystemControlHighlightListLowBrush" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="SystemControlHighlightListLowRevealBackgroundBrush" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="SystemControlHighlightListMediumBrush" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#E6E6E6" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundCheckedPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminate" Color="#E6E6E6" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminatePointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ToggleButtonBackgroundIndeterminatePressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#C4C4C4" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#E6E6E6" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#D6D6D6" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#D6D6D6" />
-            <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#000000" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="MenuFlyoutItemRevealBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="MenuBarItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="MenuBarItemBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ComboBoxBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelected" Color="#E6E6E6" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundSelectedPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ComboBoxItemRevealBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ComboBoxDropDownBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ListViewItemRevealBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="GridViewItemBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="GridViewItemRevealBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="ScrollBarButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#C4C4C4" />
+            <SolidColorBrush x:Key="DateTimePickerFlyoutButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="LoopingSelectorItemBackgroundPointerOver" Color="#D6D6D6" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="BoardSurfaceSecondaryBrush" Color="#FFFFFF" />
@@ -59,6 +177,20 @@
             <SolidColorBrush x:Key="BoardWarningBrush" Color="#B45309" />
             <SolidColorBrush x:Key="BoardDangerBrush" Color="#DC2626" />
             <SolidColorBrush x:Key="BoardPaperBrush" Color="#FFFFFF" />
+            <!-- 浅色悬停是 #D6D6D6。静止色用同一 RGB、透明度为 0，避免悬停第一帧闪白。 -->
+            <SolidColorBrush x:Key="BoardButtonClearBrush" Color="#00D6D6D6" />
+            <StaticResource x:Key="HyperlinkButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuBarItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuBarItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -88,7 +220,7 @@
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="10" />
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Background" Value="{ThemeResource BoardButtonClearBrush}" />
         <!-- 底部工具栏的所有可用操作使用同一高对比度颜色，避免前两个图标被误解为禁用状态。 -->
         <Setter Property="Foreground" Value="{ThemeResource BoardTextBrush}" />
         <Setter Property="BorderThickness" Value="0" />

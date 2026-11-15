@@ -24,7 +24,6 @@ public sealed partial class MainWindow : Window
     // 网格大小只取整数：旧配置里的小数值（例如拖动过旧版滑块留下的 48.37）在这里统一收敛。
     private double GridSize => Math.Clamp(Math.Round(_settings.GridSize), LayoutMetrics.MinimumGridSize, LayoutMetrics.MaximumGridSize);
     private static readonly Brush FullScreenHintBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 220, 38, 38));
-    private static readonly Brush ToolbarButtonBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _fullScreenLabelTimer = new() { Interval = TimeSpan.FromSeconds(2.2) };
     private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(10) };
@@ -125,6 +124,8 @@ public sealed partial class MainWindow : Window
         SystemBackdrop = new PersistentMicaBackdrop();
         InitializeAppWindow();
         ImeCandidateFix.Attach(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        // 输入子窗口延迟创建，激活时再补一次重定向位图与输入法上下文（不再用全局焦点钩子）。
+        Activated += (_, _) => ImeCandidateFix.Refresh(WinRT.Interop.WindowNative.GetWindowHandle(this));
         InitializeDesktopTiles();
         InitializeTimersAndServices();
         InitializePresentationBehavior();
@@ -1148,6 +1149,7 @@ public sealed partial class MainWindow : Window
                 case TrayIcon.CommandOpen:
                     AppWindow.Show();
                     Activate();
+                    SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
                     break;
                 case TrayIcon.CommandShowTiles:
                     _settings.DesktopTilesEnabled = true;
@@ -1176,6 +1178,7 @@ public sealed partial class MainWindow : Window
             case TrayIcon.CommandOpen:
                 AppWindow.Show();
                 Activate();
+                SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
                 break;
             case TrayIcon.CommandShowTiles:
                 _settings.DesktopTilesEnabled = true;
@@ -1671,7 +1674,7 @@ public sealed partial class MainWindow : Window
     {
         _fullScreenLabelTimer.Stop();
         _showFullScreenExitHint = false;
-        FullScreenButton.Background = ToolbarButtonBrush;
+        FullScreenButton.ClearValue(Control.BackgroundProperty);
         FullScreenButton.Foreground = BoardTheme.TextBrush;
         ApplyToolbarSettings();
     }

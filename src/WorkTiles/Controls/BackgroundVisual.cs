@@ -6,6 +6,7 @@ using WorkTiles.Services;
 using WorkTiles.ViewModels;
 using Windows.Media.Core;
 using Windows.Media.Playback;
+using Windows.Storage;
 
 namespace WorkTiles.Controls;
 
@@ -37,6 +38,7 @@ public sealed class BackgroundVisual : Grid
     private string _overlayKey = "";
     private string _backgroundKey = "";
     private int _mediaRestoreEpoch;
+    private int _imageLoadToken;
     private string _snapshotPath = "";
     private bool _snapshotRunning;
     /// <summary>别的表面开了毛玻璃时，网页不能再占着合成层，否则那些毛玻璃会采到一块黑。</summary>
@@ -242,8 +244,8 @@ public sealed class BackgroundVisual : Grid
                         _image = new Image();
                         Image current = _image;
                         current.ImageFailed += (_, _) => { if (ReferenceEquals(_image, current)) Failed(); };
-                        current.Source = new BitmapImage(new Uri(path));
                         _media.Children.Add(current);
+                        ShowImage(current, path);
                     }
                 }
                 catch (Exception) { Failed(); }
@@ -360,6 +362,7 @@ public sealed class BackgroundVisual : Grid
 
     private void ReleaseMedia()
     {
+        _imageLoadToken++;
         MediaPlayer? player = _player;
         _player = null;
         _videoFrames?.Dispose();
@@ -370,6 +373,37 @@ public sealed class BackgroundVisual : Grid
         _image = null;
         _path = "";
         _media.Children.Clear();
+    }
+
+    /// <summary>先用 Uri 立即贴图，再看守解码是否真正完成。切换或搬动预览时旧图会在解码途中被拆下，
+    /// 同一路径的 Uri 解码可能被静默取消（不开图也不报错），画面就停在空白上；超时未开图改用独立文件流重解码。</summary>
+    private void ShowImage(Image target, string path)
+    {
+        int token = ++_imageLoadToken;
+        bool opened = false;
+        target.ImageOpened += (_, _) => { if (ReferenceEquals(_image, target)) opened = true; };
+        target.Source = new BitmapImage(new Uri(path));
+        _ = RecoverAsync();
+
+        async Task RecoverAsync()
+        {
+            await Task.Delay(1200);
+            // 令牌与引用核对：切换、卸载或已经正常开图后，这次兜底都不能再盖回画面。
+            if (opened || token != _imageLoadToken || !ReferenceEquals(_image, target)) return;
+            try
+            {
+                StorageFile file = await StorageFile.GetFileFromPathAsync(path);
+                using var stream = await file.OpenReadAsync();
+                BitmapImage bitmap = new();
+                await bitmap.SetSourceAsync(stream);
+                if (opened || token != _imageLoadToken || !ReferenceEquals(_image, target)) return;
+                target.Source = bitmap;
+            }
+            catch
+            {
+                if (token == _imageLoadToken && ReferenceEquals(_image, target)) Failed();
+            }
+        }
     }
 
     private static Brush SafeColor(string value, Brush fallback)
