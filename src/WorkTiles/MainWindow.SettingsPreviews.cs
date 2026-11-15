@@ -122,7 +122,13 @@ public sealed partial class MainWindow
     {
         if (_tilePreviewInlineFrame is null || _tilePreviewStickyFrame is null ||
             _backgroundPreviewInlineFrame is null || _backgroundPreviewStickyFrame is null) return;
-        double available = SettingsContentHost.ActualWidth;
+        double hostWidth = SettingsContentHost.ActualWidth;
+        double windowWidth = RootShell.ActualWidth;
+        double available = hostWidth;
+        // 刚打开设置时内容区往往还没排开，宽度会停在一个很小的值，预览就挤在页内而不是左右分屏。
+        if (hostWidth < 480 && windowWidth >= 800)
+            available = Math.Max(windowWidth - 280, hostWidth);
+        if (available < 1) available = Math.Max(windowWidth, 1200);
         double panelWidth = Math.Clamp(available * .42, StickyPreviewMinWidth, StickyPreviewMaxWidth);
         bool tilePage = _selectedSettingsPage == "AppearanceTile";
         bool backgroundPage = _selectedSettingsPage == "AppearanceBackground";
@@ -141,6 +147,9 @@ public sealed partial class MainWindow
             MovePreviewScene(tileScene, _tilePreviewInlineViewbox, _tilePreviewStickyFrame, sticky, PreviewSceneHeight);
         if (backgroundPage && _appearancePreviews.TryGetValue("Background", out Grid? backgroundScene))
             MoveBackgroundPreviewScene(backgroundScene, sticky);
+        if (tilePage) _tileAppearancePreview?.ApplyAppearance(_settings, applyBodyDefaults: false);
+        if (backgroundPage && _previewScenes.TryGetValue("Background", out var backgroundPreview))
+            foreach (Action refresh in backgroundPreview.Refresh) refresh();
     }
 
     /// <summary>
@@ -850,7 +859,8 @@ public sealed partial class MainWindow
 
     private UIElement CreateToolbarPositionPicker()
     {
-        Grid screen = new() { Height = 200, Padding = new Thickness(20) };
+        // 点本身就是 16 像素的圆，画在边框内侧。单选框模板会画出控件边界，贴边时下沿会被裁掉。
+        Grid screen = new() { Height = 148 };
         for (int index = 0; index < 3; index++)
         {
             screen.RowDefinitions.Add(new RowDefinition());
@@ -859,40 +869,51 @@ public sealed partial class MainWindow
         Border frame = new()
         {
             Name = "ToolbarPositionPicker", HorizontalAlignment = HorizontalAlignment.Stretch,
-            BorderThickness = new Thickness(4), CornerRadius = new CornerRadius(12), Child = screen
+            BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(10),
+            Padding = new Thickness(4), Child = screen
         };
+        List<Border> dots = [];
         var positions = new[]
         {
             ("TopLeft", "左上", 0, 0), ("TopCenter", "上居中", 0, 1), ("TopRight", "右上", 0, 2),
             ("CenterLeft", "左居中（竖置）", 1, 0), ("CenterRight", "右居中（竖置）", 1, 2),
             ("BottomLeft", "左下", 2, 0), ("BottomCenter", "下居中", 2, 1), ("BottomRight", "右下", 2, 2)
         };
+        void Paint()
+        {
+            Brush brand = Application.Current.Resources["BoardBrandBrush"] as Brush ?? BoardTheme.TextBrush;
+            foreach (Border dot in dots)
+            {
+                bool selected = (string)dot.Tag == _settings.ToolbarPosition;
+                dot.Background = selected ? brand : new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                dot.BorderBrush = selected ? brand : BoardTheme.TextBrush;
+            }
+            frame.BorderBrush = BoardTheme.TextBrush;
+            frame.Background = BoardTheme.SurfaceBrush;
+        }
         foreach (var (position, label, row, column) in positions)
         {
-            RadioButton button = new()
+            Border dot = new()
             {
-                Name = "ToolbarPosition" + position, GroupName = "ToolbarPosition", Tag = position,
-                MinWidth = 0, MinHeight = 0, Width = 28, Height = 28, Padding = new Thickness(0), Margin = new Thickness(6),
+                Name = "ToolbarPosition" + position, Tag = position,
+                Width = 16, Height = 16, CornerRadius = new CornerRadius(8), BorderThickness = new Thickness(2),
                 HorizontalAlignment = column == 0 ? HorizontalAlignment.Left : column == 2 ? HorizontalAlignment.Right : HorizontalAlignment.Center,
-                VerticalAlignment = row == 0 ? VerticalAlignment.Top : row == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Center,
-                IsChecked = _settings.ToolbarPosition == position
+                VerticalAlignment = row == 0 ? VerticalAlignment.Top : row == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Center
             };
-            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(button, label);
-            ToolTipService.SetToolTip(button, label);
-            button.Checked += (_, _) =>
+            Microsoft.UI.Xaml.Automation.AutomationProperties.SetName(dot, label);
+            ToolTipService.SetToolTip(dot, label);
+            dot.Tapped += (_, _) =>
             {
                 if (_settings.ToolbarPosition == position) return;
                 _settings.ToolbarPosition = position;
+                Paint();
                 SettingChanged();
             };
-            Grid.SetRow(button, row); Grid.SetColumn(button, column); screen.Children.Add(button);
-            _refreshSettingAvailability.Add(() => button.IsChecked = _settings.ToolbarPosition == position);
+            Grid.SetRow(dot, row); Grid.SetColumn(dot, column); screen.Children.Add(dot);
+            dots.Add(dot);
         }
-        _refreshSettingAvailability.Add(() =>
-        {
-            frame.BorderBrush = BoardTheme.TextBrush;
-            frame.Background = BoardTheme.SurfaceBrush;
-        });
+        _refreshSettingAvailability.Add(Paint);
+        Paint();
         return frame;
     }
 
