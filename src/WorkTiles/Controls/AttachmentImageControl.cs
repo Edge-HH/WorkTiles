@@ -28,6 +28,7 @@ public sealed class AttachmentImageControl : Grid
     private readonly Grid _imageFrame;
     private readonly Grid _overlay;
     private readonly Image _image;
+    private readonly Canvas _imageCanvas;
     private readonly Border _selectionBorder;
     private readonly StackPanel _toolbar;
     private readonly CompositeTransform _imageTransform = new();
@@ -55,7 +56,9 @@ public sealed class AttachmentImageControl : Grid
         _interactionChanged = interactionChanged;
 
         double initialWidth = Math.Max(MinimumWidth, attachment.FrameWidth);
-        double initialHeight = attachment.AspectRatio > 0 ? initialWidth / attachment.AspectRatio : 240;
+        double initialHeight = attachment.ViewportHeight > 0
+            ? Math.Max(MinimumHeight, attachment.ViewportHeight)
+            : attachment.AspectRatio > 0 ? initialWidth / attachment.AspectRatio : 240;
         HorizontalAlignment = HorizontalAlignment.Left;
         VerticalAlignment = VerticalAlignment.Top;
         RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -76,12 +79,12 @@ public sealed class AttachmentImageControl : Grid
         _image = new Image
         {
             Stretch = Stretch.Fill,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
             RenderTransformOrigin = new Point(0.5, 0.5),
             RenderTransform = _imageTransform
         };
-        _imageFrame.Children.Add(_image);
+        _imageCanvas = new Canvas { IsHitTestVisible = false };
+        _imageCanvas.Children.Add(_image);
+        _imageFrame.Children.Add(_imageCanvas);
 
         _selectionBorder = new Border
         {
@@ -169,6 +172,27 @@ public sealed class AttachmentImageControl : Grid
                     _contentChanged();
                 }
                 ApplyTransforms();
+                if (_attachment.Rotation % 180 != 0)
+                {
+                    (double visW, double visH) = GetVisualContentSize();
+                    double frameAspect = _imageFrame.Width / Math.Max(1, _imageFrame.Height);
+                    double visualAspect = visW / Math.Max(1, visH);
+                    if (visW > 1 && visH > 1 && Math.Abs(frameAspect - visualAspect) > 0.08)
+                    {
+                        double centerX = _attachment.PositionX + _imageFrame.Width / 2;
+                        double centerY = _attachment.PositionY + _imageFrame.Height / 2;
+                        _imageFrame.Width = visW;
+                        _imageFrame.Height = visH;
+                        _attachment.FrameWidth = visW;
+                        _attachment.ViewportHeight = visH;
+                        _attachment.AspectRatio = visW / visH;
+                        _attachment.PositionX = centerX - visW / 2;
+                        _attachment.PositionY = centerY - visH / 2;
+                        _attachment.OffsetX = 0;
+                        _attachment.OffsetY = 0;
+                        ApplyTransforms();
+                    }
+                }
             }
             _imageReady.TrySetResult(true);
         }
@@ -230,7 +254,6 @@ public sealed class AttachmentImageControl : Grid
         ((Border)sender).ReleasePointerCapture(e.Pointer);
         _pointerId = null;
         _activeResizeHandle = null;
-        if (_isCropping) SnapCropTowardTopLeft();
         EndInteraction();
         e.Handled = true;
     }
@@ -256,14 +279,37 @@ public sealed class AttachmentImageControl : Grid
 
         if (_isCropping)
         {
-            if (left) newWidth = start.Width - dx;
-            if (right) newWidth = start.Width + dx;
-            if (top) newHeight = start.Height - dy;
-            if (bottom) newHeight = start.Height + dy;
-            newWidth = Math.Clamp(newWidth, MinimumWidth, maxWidth);
-            newHeight = Math.Clamp(newHeight, MinimumHeight, maxHeight);
+            // 裁切时画面停在页面上的原处，只移动取景框，并且框不能跑到画面外面留出空白。
+            (double imageLeft, double imageTop, double imageWidth, double imageHeight) = ImagePageRect();
+            double leftEdge = start.X;
+            double topEdge = start.Y;
+            double rightEdge = start.X + start.Width;
+            double bottomEdge = start.Y + start.Height;
+            if (left) leftEdge += dx;
+            if (right) rightEdge += dx;
+            if (top) topEdge += dy;
+            if (bottom) bottomEdge += dy;
+            leftEdge = Math.Clamp(leftEdge, imageLeft, imageLeft + imageWidth - MinimumWidth);
+            rightEdge = Math.Clamp(rightEdge, leftEdge + MinimumWidth, imageLeft + imageWidth);
+            topEdge = Math.Clamp(topEdge, imageTop, imageTop + imageHeight - MinimumHeight);
+            bottomEdge = Math.Clamp(bottomEdge, topEdge + MinimumHeight, imageTop + imageHeight);
+            if (leftEdge < 0) leftEdge = 0;
+            if (double.IsFinite(areaWidth) && rightEdge > areaWidth) rightEdge = areaWidth;
+            if (rightEdge - leftEdge < MinimumWidth) rightEdge = leftEdge + MinimumWidth;
+            newWidth = Math.Max(MinimumWidth, rightEdge - leftEdge);
+            newHeight = Math.Max(MinimumHeight, bottomEdge - topEdge);
+            _imageFrame.Width = newWidth;
+            _imageFrame.Height = newHeight;
+            _attachment.FrameWidth = newWidth;
+            _attachment.ViewportHeight = newHeight;
+            _attachment.AspectRatio = newWidth / newHeight;
+            _attachment.PositionX = leftEdge;
+            _attachment.PositionY = topEdge;
+            KeepImagePagePosition(imageLeft, imageTop);
+            ApplyTransforms();
+            Area?.InvalidateMeasure();
+            return;
         }
-        else
         {
             double aspect = GetAspectRatio();
             double widthFromX = start.Width + (left ? -dx : dx);
@@ -283,12 +329,7 @@ public sealed class AttachmentImageControl : Grid
         _attachment.ViewportHeight = newHeight;
         _attachment.PositionX = left ? start.X + start.Width - newWidth : start.X;
         _attachment.PositionY = top ? start.Y + start.Height - newHeight : start.Y;
-        if (_isCropping)
-        {
-            // 拖动时不挪画面。取景框单独变化，松手后再把露出的空白收到左上角。
-            _attachment.AspectRatio = newWidth / newHeight;
-        }
-        else if (oldFrameWidth > 0)
+        if (oldFrameWidth > 0)
         {
             // 普通缩放连同画面和已有裁切一起变大变小。
             double factor = newWidth / oldFrameWidth;
@@ -379,30 +420,20 @@ public sealed class AttachmentImageControl : Grid
     private void RotateImage(double degrees)
     {
         _attachment.Rotation = (_attachment.Rotation + degrees + 360) % 360;
-        if (Math.Abs(degrees) % 180 != 0)
-        {
-            // 90 度只交换取景框的宽高。按原宽高比反算会把高度乘成原来的很多倍，画面也被转出框外。
-            double width = _imageFrame.Width;
-            double height = _imageFrame.Height;
-            _imageFrame.Width = height;
-            _imageFrame.Height = width;
-            _attachment.FrameWidth = height;
-            _attachment.ViewportHeight = width;
-            if (width > 0 && height > 0) _attachment.AspectRatio = height / width;
-            double offsetX = _attachment.OffsetX;
-            double offsetY = _attachment.OffsetY;
-            if (degrees > 0)
-            {
-                _attachment.OffsetX = offsetY;
-                _attachment.OffsetY = -offsetX;
-            }
-            else
-            {
-                _attachment.OffsetX = -offsetY;
-                _attachment.OffsetY = offsetX;
-            }
-        }
-        ClampCropOffsets();
+        EnsureImageBase();
+        (double visW, double visH) = GetVisualContentSize();
+        double centerX = _attachment.PositionX + _imageFrame.Width / 2;
+        double centerY = _attachment.PositionY + _imageFrame.Height / 2;
+        // 取景框改成旋转后的外框，画面完整落在框里，不再一边被裁掉、另一边留灰边。
+        _imageFrame.Width = Math.Max(MinimumWidth, visW);
+        _imageFrame.Height = Math.Max(MinimumHeight, visH);
+        _attachment.FrameWidth = _imageFrame.Width;
+        _attachment.ViewportHeight = _imageFrame.Height;
+        _attachment.AspectRatio = _imageFrame.Width / _imageFrame.Height;
+        _attachment.PositionX = centerX - _imageFrame.Width / 2;
+        _attachment.PositionY = centerY - _imageFrame.Height / 2;
+        _attachment.OffsetX = 0;
+        _attachment.OffsetY = 0;
         ApplyTransforms();
         Area?.InvalidateMeasure();
         _contentChanged();
@@ -437,28 +468,32 @@ public sealed class AttachmentImageControl : Grid
     // 等比缩放下取宽高的共同下限，避免一边贴近最小值时另一边缩到不可见。
     private static double MinUniformWidth(double aspect) => Math.Max(MinimumWidth, MinimumHeight * aspect);
 
-    /// <summary>松手后把画面往左上收，消掉裁切拖动留在上边或左边的空白。</summary>
-    private void SnapCropTowardTopLeft()
+    /// <summary>画面在页面上的位置。裁切拖边时用它把画面钉住。</summary>
+    private (double Left, double Top, double Width, double Height) ImagePageRect()
     {
-        (double contentWidth, double contentHeight) = GetVisualContentSize();
-        double imageLeft = (_imageFrame.Width - contentWidth) / 2 + _attachment.OffsetX;
-        double imageTop = (_imageFrame.Height - contentHeight) / 2 + _attachment.OffsetY;
-        if (imageLeft > 0) _attachment.OffsetX -= imageLeft;
-        if (imageTop > 0) _attachment.OffsetY -= imageTop;
-        ClampCropOffsets();
-        ApplyTransforms();
+        (double visW, double visH) = GetVisualContentSize();
+        double centerX = _attachment.PositionX + _imageFrame.Width / 2 + _attachment.OffsetX;
+        double centerY = _attachment.PositionY + _imageFrame.Height / 2 + _attachment.OffsetY;
+        return (centerX - visW / 2, centerY - visH / 2, visW, visH);
+    }
+
+    private void KeepImagePagePosition(double imageLeft, double imageTop)
+    {
+        (double visW, double visH) = GetVisualContentSize();
+        double centerX = imageLeft + visW / 2;
+        double centerY = imageTop + visH / 2;
+        _attachment.OffsetX = centerX - (_attachment.PositionX + _imageFrame.Width / 2);
+        _attachment.OffsetY = centerY - (_attachment.PositionY + _imageFrame.Height / 2);
     }
 
     private void ClampCropOffsets()
     {
-        // 画面可以移到只剩一角还在框里，裁切才能露出空白边，而不是被迫始终铺满。
-        (double contentWidth, double contentHeight) = GetVisualContentSize();
-        double keepX = Math.Min(24, Math.Max(1, contentWidth / 2));
-        double keepY = Math.Min(24, Math.Max(1, contentHeight / 2));
-        double maxX = Math.Max(0, (contentWidth + _imageFrame.Width) / 2 - keepX);
-        double maxY = Math.Max(0, (contentHeight + _imageFrame.Height) / 2 - keepY);
-        _attachment.OffsetX = Math.Clamp(_attachment.OffsetX, -maxX, maxX);
-        _attachment.OffsetY = Math.Clamp(_attachment.OffsetY, -maxY, maxY);
+        // 取景框必须落在画面里面，裁切才不会拖出空白边。
+        (double visW, double visH) = GetVisualContentSize();
+        double limitX = Math.Max(0, (visW - _imageFrame.Width) / 2);
+        double limitY = Math.Max(0, (visH - _imageFrame.Height) / 2);
+        _attachment.OffsetX = Math.Clamp(_attachment.OffsetX, -limitX, limitX);
+        _attachment.OffsetY = Math.Clamp(_attachment.OffsetY, -limitY, limitY);
     }
 
     private (double Width, double Height) GetVisualContentSize()
@@ -497,9 +532,13 @@ public sealed class AttachmentImageControl : Grid
         _image.Height = width / Math.Max(0.01, aspect);
         _imageTransform.ScaleX = 1;
         _imageTransform.ScaleY = 1;
-        _imageTransform.TranslateX = _attachment.OffsetX;
-        _imageTransform.TranslateY = _attachment.OffsetY;
+        _imageTransform.TranslateX = 0;
+        _imageTransform.TranslateY = 0;
         _imageTransform.Rotation = _attachment.Rotation;
+        double centerX = _imageFrame.Width / 2 + _attachment.OffsetX;
+        double centerY = _imageFrame.Height / 2 + _attachment.OffsetY;
+        Canvas.SetLeft(_image, centerX - _image.Width / 2);
+        Canvas.SetTop(_image, centerY - _image.Height / 2);
     }
 
     private void BeginInteraction() { if (!_isInteracting) { _isInteracting = true; _interactionChanged(true); } }
