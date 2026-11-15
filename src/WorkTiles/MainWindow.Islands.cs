@@ -709,6 +709,8 @@ public sealed partial class MainWindow
     private void ApplyBoardZoomView(bool resetOffset)
     {
         float zoom = (float)_boardZoom;
+        bool offsetAlreadyOk = !resetOffset && !FixedBoardPanExceedsLimit();
+        if (Math.Abs(BoardScroller.ZoomFactor - zoom) < .01 && offsetAlreadyOk) return;
         int apply = ++_boardZoomApply;
         bool infinite = _settings.InfiniteBoard;
         _applyingBoardZoom = true;
