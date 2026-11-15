@@ -123,14 +123,31 @@ if (([regex]::Matches($tiles, 'ApplyTransparentInputChrome\(')).Count -lt 2 -or
     $tiles -notmatch 'ThemeDictionaries\[theme\]') {
     $failures.Add('学科标题和作业输入框在悬停、聚焦或禁用时仍会用主题底色挡住磁贴预览。')
 }
-# 悬停过渡不插值透明度。静止色若是透明白，第一帧会铺成浅灰，然后才落到深灰。
+# 悬停过渡不插值透明度。静止色若是透明白或系统淡白填充，第一帧会铺成浅灰，然后才落到深灰。
+# 普通按钮保留系统填充，改由 HoverTransition 拿掉模板里的画刷过渡。
+$hover = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\HoverTransition.cs'))
 if ($theme -notmatch 'BoardButtonClearBrush" Color="#002F2F33"' -or
     $theme -notmatch 'BoardButtonClearBrush" Color="#00D6D6D6"' -or
     $theme -notmatch 'ButtonBackgroundPointerOver" Color="#2F2F33"' -or
     $theme -notmatch 'MenuFlyoutItemBackgroundPointerOver" Color="#2F2F33"' -or
     $theme -notmatch 'NavigationViewItemBackgroundPointerOver" Color="#2F2F33"' -or
-    $theme -notmatch 'MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush"') {
-    $failures.Add('菜单栏和设置按钮的悬停色与静止色不是同一套灰，悬停时会先闪浅灰。')
+    $theme -notmatch 'MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush"' -or
+    ([regex]::Matches($theme, 'TextControlButtonBackground" ResourceKey="BoardButtonClearBrush"')).Count -lt 2 -or
+    $theme -notmatch 'TargetType="Button" BasedOn="\{StaticResource DefaultButtonStyle\}"' -or
+    $theme -notmatch 'TargetType="ToggleButton" BasedOn="\{StaticResource DefaultToggleButtonStyle\}"' -or
+    $theme -notmatch 'TargetType="controls:DropDownButton" BasedOn="\{StaticResource DefaultDropDownButtonStyle\}"' -or
+    $theme -notmatch 'HoverTransition.Suppress' -or
+    $hover -notmatch 'BackgroundTransition = null' -or
+    $hover -notmatch 'LayoutUpdated' -or
+    $projects -notmatch 'ButtonClearBrush' -or
+    $projects -notmatch 'HoverTransition\.ApplyTo\(RecentProjectsPanel\)') {
+    $failures.Add('菜单栏、最近项目或设置按钮的悬停仍会先闪浅灰。')
+}
+$tray = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\TrayMenuWindow.cs'))
+if ($tray -match 'Colors\.Transparent' -or
+    $tray -notmatch 'ButtonClearBrushFor\(false\)' -or
+    $tray -notmatch 'HoverTransition\.ApplyTo\(root\)') {
+    $failures.Add('托盘菜单条目的静止色仍是透明白，悬停时会先闪浅灰。')
 }
 if ($desktopHost -notmatch 'DwmwaColorNone' -or
     $desktopHost -notmatch 'GetStockObject\(HollowBrush\)' -or

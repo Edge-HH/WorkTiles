@@ -199,8 +199,12 @@ public sealed partial class MainWindow
                 ProjectPicker.Flyout.Hide();
                 await RunProjectAction(async () => await SwitchProjectAsync(project));
             };
+            // 静止底是系统淡白填充。条目在打开下拉时才生成，模板往往晚于第一次排版，过渡要等展开后再拆。
+            button.Background = BoardTheme.ButtonClearBrush;
             RecentProjectsPanel.Children.Add(button);
         }
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => HoverTransition.ApplyTo(RecentProjectsPanel));
     }
 
     /// <summary>enterEditing 为 false 时只切换显示（网页让大屏显示某个项目时）。</summary>

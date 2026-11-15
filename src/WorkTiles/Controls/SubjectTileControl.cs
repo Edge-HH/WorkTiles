@@ -423,8 +423,9 @@ public sealed class SubjectTileControl : Grid
     /// 学科标题和作业正文直接铺在磁贴背景上。输入框模板在悬停、聚焦和禁用时会改用主题填充色，
     /// 设置页预览、导出预览和桌面透明磁贴都会被这块底色挡住。这些状态改为全透明；
     /// 控件自身保留几乎全透明的背景，空白处仍能点中。
+    /// 系统选区会把选中字画成白色并抹掉荧光笔。选中时改由一层浅灰盖住原文，字色和高亮都透出来。
     /// </summary>
-    internal static void ApplyTransparentInputChrome(Control editor)
+    internal static void ApplyTransparentInputChrome(Control editor, bool showSelectionVeil = true)
     {
         editor.Background = InvisibleHitBrush();
         editor.BorderBrush = InvisibleHitBrush();
@@ -442,6 +443,7 @@ public sealed class SubjectTileControl : Grid
             editor.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         editor.Resources["TextControlBorderThemeThickness"] = new Thickness(0);
         editor.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+        if (showSelectionVeil) TransparentInputMarkers.Attach(editor);
     }
 
     private static SolidColorBrush InvisibleHitBrush() => new(Windows.UI.Color.FromArgb(1, 0, 0, 0));
