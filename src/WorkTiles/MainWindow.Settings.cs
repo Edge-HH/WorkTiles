@@ -26,6 +26,9 @@ public sealed partial class MainWindow
     private Action? _refreshSubjectAutofill;
     private bool _surfaceRefreshQueued;
     private bool _toolbarChromeQueued;
+    private bool _layoutPreviewQueued;
+    private bool _layoutSnapPending;
+    private bool _layoutArrangePending;
 
     private sealed record SettingsPage(StackPanel Container, UIElement Content, string Title, string Description);
 
@@ -969,23 +972,36 @@ public sealed partial class MainWindow
 
     /// <summary>
     /// 拖动网格大小只处理数据与预览：磁贴重新吸附到新网格，看板网格等回到看板时再重画。
-    /// 设置页打开时看板是折叠的，这里避开整窗重刷和不可见的看板重绘，拖动才不会卡。
+    /// 同一帧里的多次拖动合并成一次，滑块不用等预览排完才移动。
     /// </summary>
-    private void GridSizeChanged()
-    {
-        SnapTilesToGrid();
-        UpdateAutoLayoutGapStep();
-        RefreshAppearancePreviews();
-        ScheduleSave();
-    }
+    private void GridSizeChanged() => QueueLayoutPreview(snap: true, arrangeDesktop: false);
 
     /// <summary>自动排版间隔只影响自动排列与预览，拖动时同样不重刷整个界面。</summary>
-    private void AutoLayoutGapChanged()
+    private void AutoLayoutGapChanged() => QueueLayoutPreview(snap: false, arrangeDesktop: true);
+
+    private void QueueLayoutPreview(bool snap, bool arrangeDesktop)
     {
-        RefreshAppearancePreviews();
-        if (_settings.DesktopTilesEnabled && _settings.DesktopTilesAutoArrange)
-            ArrangeDesktopTiles();
-        ScheduleSave();
+        if (snap) _layoutSnapPending = true;
+        if (arrangeDesktop) _layoutArrangePending = true;
+        if (_layoutPreviewQueued) return;
+        _layoutPreviewQueued = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            _layoutPreviewQueued = false;
+            bool snapNow = _layoutSnapPending;
+            bool arrangeNow = _layoutArrangePending;
+            _layoutSnapPending = false;
+            _layoutArrangePending = false;
+            if (snapNow)
+            {
+                SnapTilesToGrid();
+                UpdateAutoLayoutGapStep();
+            }
+            RefreshAppearancePreviews();
+            if (arrangeNow && _settings.DesktopTilesEnabled && _settings.DesktopTilesAutoArrange)
+                ArrangeDesktopTiles();
+            ScheduleSave();
+        });
     }
 
     /// <summary>间隔滑块跟随网格吸附：关闭吸附按 10px 步进，开启吸附按半格步进。</summary>

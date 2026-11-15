@@ -1252,6 +1252,20 @@ public sealed partial class MainWindow
         await NextLayoutAsync();
         check(Math.Abs(_autoLayoutGapSlider.StepFrequency - GridSize / 2) < .01,
             $"gap slider steps by half a grid cell while snapping is on ({_autoLayoutGapSlider.StepFrequency})");
+        ShowSettingsPage("Layout");
+        await NextLayoutAsync();
+        double layoutGrid = _settings.GridSize;
+        double layoutGap = _settings.AutoLayoutGap;
+        _gridSizeSlider!.Value = Math.Abs(layoutGrid - 80) < .5 ? 96 : 80;
+        _autoLayoutGapSlider.Value = 40;
+        await NextLayoutAsync();
+        check(FindVisuals<TextBlock>(_appearancePreviews["Layout"]).Any(text => text.Text.StartsWith($"网格 {_settings.GridSize:0.#}")),
+            "layout preview follows the grid size slider");
+        check(FindVisuals<TextBlock>(_appearancePreviews["Layout"]).Any(text => text.Text.Contains("40")),
+            "layout preview follows the arrangement gap slider");
+        _gridSizeSlider.Value = layoutGrid;
+        _autoLayoutGapSlider.Value = layoutGap;
+        await NextLayoutAsync();
     }
 
     private async Task VerifyExtendedSettingsAsync(string output, Action<bool, string> check)
