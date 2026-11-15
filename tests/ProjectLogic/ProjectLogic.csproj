@@ -9,6 +9,7 @@
     <Compile Include="../../src/WorkTiles/Services/ExportLayout.cs" Link="ExportLayout.cs" />
     <Compile Include="../../src/WorkTiles/Services/BoardLayout.cs" Link="BoardLayout.cs" />
     <Compile Include="../../src/WorkTiles/Services/InkGeometry.cs" Link="InkGeometry.cs" />
+    <Compile Include="../../src/WorkTiles/Services/ImageCropGeometry.cs" Link="ImageCropGeometry.cs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/WorkTiles.Shared/WorkTiles.Shared.csproj" />

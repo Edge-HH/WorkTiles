@@ -69,6 +69,7 @@ public sealed partial class MainWindow : Window
 
     public MainViewModel ViewModel { get; } = new();
 
+    private bool _allowClose;
     private bool _silentStart;
     private TrayIcon? _tray;
 
@@ -209,6 +210,13 @@ public sealed partial class MainWindow : Window
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
         _appWindow?.Resize(new SizeInt32(1440, 900));
+        if (_appWindow is not null)
+            _appWindow.Closing += (_, args) =>
+            {
+                if (_allowClose || _initialView == "verification") return;
+                args.Cancel = true;
+                _appWindow.Hide();
+            };
     }
 
     /// <summary>接管窗口启动闸门：再次启动时按“已打开时再次启动的行为”唤醒本窗口，带参数时按参数行动。</summary>
@@ -216,7 +224,7 @@ public sealed partial class MainWindow : Window
     {
         _instanceGate = gate;
         gate.SecondLaunchRequested += request => DispatcherQueue.TryEnqueue(() => _ = HandleSecondLaunchAsync(request));
-        gate.QuitRequested += () => DispatcherQueue.TryEnqueue(Close);
+        gate.QuitRequested += () => DispatcherQueue.TryEnqueue(() => { _allowClose = true; Close(); });
         Closed += (_, _) => gate.Dispose();
     }
 
@@ -229,10 +237,12 @@ public sealed partial class MainWindow : Window
         if (request.Arguments is not { } arguments)
         {
             if (request.Action == SingleInstanceService.NoneAction) return;
+            AppWindow.Show();
             SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
             if (request.Action == SingleInstanceService.FullScreenAction) SetFullScreen(true);
             return;
         }
+        AppWindow.Show();
         SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
         if (arguments.Windowed is true) SetFullScreen(false);
         else if (arguments.Windowed is false) SetFullScreen(true);
@@ -370,6 +380,8 @@ public sealed partial class MainWindow : Window
         UpdateEditingToolbarVisibility();
         // 设置页里没有作业板，缩放岛随作业板一起收起。
         RefreshIslands();
+        UpdatePreviewHosting();
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => UpdatePreviewHosting());
     }
 
     private void EditBoardButton_Click(object sender, RoutedEventArgs e)
@@ -996,21 +1008,33 @@ public sealed partial class MainWindow : Window
 
     private void PaletteComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (!_isLoaded) return;
-        _settings.Palette = PaletteName(PaletteComboBox.SelectedIndex);
-        if (_settings.Palette == "Custom") EnsureCustomPalette();
+        if (!_isLoaded || _refreshingPaletteChoices) return;
+        if (PaletteComboBox.SelectedItem is not ComboBoxItem item || item.Tag is not string palette) return;
+        _settings.Palette = palette;
         RememberAppearance();
         ApplyPalette();
         BuildTiles();
         ScheduleSave();
     }
 
+    private bool _refreshingPaletteChoices;
+
     private void ApplyPalette()
     {
-        ColorPalette.Use(_settings.Palette, _settings.CustomPalette);
+        NamedPalette? named = _settings.CustomPalettes.FirstOrDefault(palette => palette.Name == _settings.Palette);
+        if (named is not null)
+        {
+            _settings.CustomPalette = named.Colors;
+            ColorPalette.Use("Custom", named.Colors);
+        }
+        else
+        {
+            if (_settings.Palette is not ("Vivid" or "Macaron")) _settings.Palette = "Vivid";
+            ColorPalette.Use(_settings.Palette, null);
+        }
+        RebuildPaletteChoices();
         RefreshPaletteSwatches();
         RefreshInkPalette();
-        // 学科色卡按当前色系解析，切换色系后重建列表即可保持显示的颜色与套用结果一致。
         _refreshSubjectAutofill?.Invoke();
         foreach (var subject in ViewModel.Subjects)
         {
@@ -1018,33 +1042,47 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static int PaletteIndex(string? palette) => palette switch { "Macaron" => 1, "Custom" => 2, _ => 0 };
-
-    private static string PaletteName(int index) => index switch { 1 => "Macaron", 2 => "Custom", _ => "Vivid" };
+    private void RebuildPaletteChoices()
+    {
+        if (PaletteComboBox is null) return;
+        _refreshingPaletteChoices = true;
+        try
+        {
+            while (PaletteComboBox.Items.Count > 2) PaletteComboBox.Items.RemoveAt(PaletteComboBox.Items.Count - 1);
+            foreach (NamedPalette palette in _settings.CustomPalettes)
+                PaletteComboBox.Items.Add(new ComboBoxItem { Content = palette.Name, Tag = palette.Name });
+            int index = 0;
+            for (int i = 0; i < PaletteComboBox.Items.Count; i++)
+                if (PaletteComboBox.Items[i] is ComboBoxItem item && item.Tag as string == _settings.Palette) index = i;
+            if (PaletteComboBox.SelectedIndex != index) PaletteComboBox.SelectedIndex = index;
+        }
+        finally { _refreshingPaletteChoices = false; }
+    }
 
     private void RefreshPaletteSwatches()
     {
         if (PaletteSwatchRow is null) return;
         PaletteSwatchRow.Children.Clear();
-        IReadOnlyList<string> colors = ColorPalette.ActiveSwatches;
-        bool custom = _settings.Palette == "Custom";
+        NamedPalette? named = _settings.CustomPalettes.FirstOrDefault(palette => palette.Name == _settings.Palette);
+        IReadOnlyList<string> colors = named?.Colors ?? ColorPalette.ActiveSwatches;
+        bool custom = named is not null;
         for (int index = 0; index < colors.Count; index++)
         {
             int slot = index;
             string hex = colors[index];
-            Button swatch = new()
+            Border swatch = new()
             {
                 Width = 28,
                 Height = 28,
-                Padding = new Thickness(0),
                 Background = MainViewModel.BrushFromHex(hex),
                 BorderThickness = new Thickness(1),
                 BorderBrush = BoardTheme.LineBrush,
-                CornerRadius = new CornerRadius(4),
-                IsEnabled = custom
+                CornerRadius = new CornerRadius(4)
             };
+            swatch.PointerEntered += (_, _) => swatch.BorderThickness = new Thickness(2);
+            swatch.PointerExited += (_, _) => swatch.BorderThickness = new Thickness(1);
             ToolTipService.SetToolTip(swatch, custom ? "修改这一色" : hex);
-            if (custom)
+            if (custom && named is { } palette)
             {
                 ColorPicker picker = new()
                 {
@@ -1052,20 +1090,26 @@ public sealed partial class MainWindow : Window
                     IsHexInputVisible = true,
                     Color = MainViewModel.BrushFromHex(hex).Color
                 };
+                Flyout flyout = new() { Content = picker };
                 picker.ColorChanged += (_, args) =>
                 {
-                    EnsureCustomPalette();
-                    _settings.CustomPalette[slot] = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";
+                    if (palette.Colors.Count <= slot) return;
+                    palette.Colors[slot] = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";
+                    _settings.CustomPalette = palette.Colors;
                     swatch.Background = new SolidColorBrush(args.NewColor);
-                    if (CurrentProject is { } project) project.CustomPalette = [.._settings.CustomPalette];
-                    ColorPalette.Use("Custom", _settings.CustomPalette);
+                    if (CurrentProject is { } project)
+                    {
+                        project.CustomPalette = [..palette.Colors];
+                        project.CustomPalettes = _settings.CustomPalettes;
+                    }
+                    ColorPalette.Use("Custom", palette.Colors);
                     foreach (SubjectBoard subject in ViewModel.Subjects)
                         subject.AccentBrush = MainViewModel.BrushFromHex(ColorPalette.ResolveAccent(subject.AccentHex, subject.IsAccentExplicit, false));
                     _refreshSubjectAutofill?.Invoke();
                     BuildTiles();
                     ScheduleSave();
                 };
-                swatch.Flyout = new Flyout { Content = picker };
+                swatch.Tapped += (_, _) => flyout.ShowAt(swatch);
             }
             PaletteSwatchRow.Children.Add(swatch);
         }
@@ -1074,20 +1118,17 @@ public sealed partial class MainWindow : Window
     private void NewCustomPalette_Click(object sender, RoutedEventArgs e)
     {
         IReadOnlyList<string> source = ColorPalette.ActiveSwatches;
-        _settings.CustomPalette = (source.Count == 9 ? source : ColorPalette.Presets).ToList();
-        _settings.Palette = "Custom";
-        if (PaletteComboBox.SelectedIndex != 2) PaletteComboBox.SelectedIndex = 2;
+        List<string> colors = (source.Count == 9 ? source : ColorPalette.Presets).ToList();
+        int number = 1;
+        while (_settings.CustomPalettes.Any(palette => palette.Name == $"自定义{number}")) number++;
+        NamedPalette created = new() { Name = $"自定义{number}", Colors = colors };
+        _settings.CustomPalettes.Add(created);
+        _settings.CustomPalette = colors;
+        _settings.Palette = created.Name;
         RememberAppearance();
         ApplyPalette();
         BuildTiles();
         ScheduleSave();
-    }
-
-    private void EnsureCustomPalette()
-    {
-        if (_settings.CustomPalette is { Count: 9 }) return;
-        IReadOnlyList<string> source = ColorPalette.Presets;
-        _settings.CustomPalette = source.Take(9).ToList();
     }
 
     private void InstallTrayIcon()
@@ -1098,10 +1139,40 @@ public sealed partial class MainWindow : Window
         _tray.Command += command => DispatcherQueue.TryEnqueue(() => HandleTrayCommand(command));
     }
 
+    private void ShowTrayMenu()
+    {
+        TrayMenuWindow.Show(_settings.DesktopTilesEnabled, command => DispatcherQueue.TryEnqueue(() =>
+        {
+            switch (command)
+            {
+                case TrayIcon.CommandOpen:
+                    AppWindow.Show();
+                    Activate();
+                    break;
+                case TrayIcon.CommandShowTiles:
+                    _settings.DesktopTilesEnabled = true;
+                    SyncDesktopTiles();
+                    ScheduleSave();
+                    break;
+                case TrayIcon.CommandHideTiles:
+                    _settings.DesktopTilesEnabled = false;
+                    SyncDesktopTiles();
+                    ScheduleSave();
+                    break;
+                default:
+                    HandleTrayCommand(command);
+                    break;
+            }
+        }));
+    }
+
     private void HandleTrayCommand(int command)
     {
         switch (command)
         {
+            case TrayIcon.CommandMenu:
+                ShowTrayMenu();
+                break;
             case TrayIcon.CommandOpen:
                 AppWindow.Show();
                 Activate();
@@ -1126,6 +1197,7 @@ public sealed partial class MainWindow : Window
                 RestartAfterRestore();
                 break;
             case TrayIcon.CommandExit:
+                _allowClose = true;
                 Close();
                 break;
         }
@@ -1506,7 +1578,6 @@ public sealed partial class MainWindow : Window
             ViewModel.ReplaceSubjects(AppDataStore.RestoreSubjects(CurrentProject?.Subjects ?? []));
             LoadClockInk();
             ThemeComboBox.SelectedIndex = _settings.Theme switch { "Light" => 1, "Default" => 2, _ => 0 };
-            PaletteComboBox.SelectedIndex = PaletteIndex(_settings.Palette);
             ColorPalette.Use(_settings.Palette, _settings.CustomPalette);
             NoiseIntervalSlider.Value = Math.Clamp(_settings.NoiseIntervalSeconds, 0.1, 2);
             _settings.NoiseIntervalSeconds = NoiseIntervalSlider.Value;

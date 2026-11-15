@@ -84,6 +84,17 @@ try
     ProjectDocument missingClockInk = ProjectStore.Clone(first);
     missingClockInk.ClockInkStrokes = null!;
     ProjectValidation.Validate(missingClockInk, false);
+    ProjectDocument customPalette = ProjectStore.Clone(first);
+    customPalette.Palette = "自定义1";
+    customPalette.CustomPalettes = [new NamedPalette { Name = "自定义1", Colors = ["#111111", "#222222", "#333333", "#444444", "#555555", "#666666", "#777777", "#888888", "#999999"] }];
+    customPalette.CustomPalette = [..customPalette.CustomPalettes[0].Colors];
+    ProjectValidation.Validate(customPalette, false);
+    customPalette.Palette = "不存在的色系";
+    Reject(() => ProjectValidation.Validate(customPalette, false), "未登记的自定义色系被接受");
+    (double cropX, double cropY) = ImageCropGeometry.RotateOffset(40, 10, 90);
+    Check(cropX == -10 && cropY == 40, "顺时针旋转后裁切偏移应跟着画面转");
+    (cropX, cropY) = ImageCropGeometry.RotateOffset(40, 10, -90);
+    Check(cropX == 10 && cropY == -40, "逆时针旋转后裁切偏移应转到另一侧");
     Check(missingClockInk.ClockInkStrokes.Count == 0, "缺少整屏笔迹字段的旧项目应补成空列表");
     SubjectState oldInk = new() { Width = 430, Height = 326, InkStrokes = [new InkStrokeState { Thickness = 5, Points = [new PointState { X = 1000, Y = 600 }] }] };
     ProjectStore.MigrateInk(oldInk);

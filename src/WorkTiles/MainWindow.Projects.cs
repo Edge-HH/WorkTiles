@@ -124,6 +124,7 @@ public sealed partial class MainWindow
         project.Theme = _settings.Theme;
         project.Palette = _settings.Palette;
         project.CustomPalette = [..(_settings.CustomPalette ?? [])];
+        project.CustomPalettes = _settings.CustomPalettes ?? [];
     }
 
     private void UpdateProjectCommands()
@@ -236,7 +237,9 @@ public sealed partial class MainWindow
     private void ApplyProjectAppearance(ProjectDocument project)
     {
         project.CustomPalette ??= [];
-        bool sameCustom = project.CustomPalette.SequenceEqual(_settings.CustomPalette ?? []);
+        project.CustomPalettes ??= [];
+        bool sameCustom = project.CustomPalette.SequenceEqual(_settings.CustomPalette ?? [])
+            && project.CustomPalettes.Count == (_settings.CustomPalettes?.Count ?? 0);
         if (project.Theme == _settings.Theme && project.Palette == _settings.Palette && sameCustom) return;
         _applyingProjectAppearance = true;
         try
@@ -244,8 +247,9 @@ public sealed partial class MainWindow
             _settings.Theme = project.Theme;
             _settings.Palette = project.Palette;
             _settings.CustomPalette = [..project.CustomPalette];
+            _settings.CustomPalettes = project.CustomPalettes;
             ThemeComboBox.SelectedIndex = project.Theme switch { "Light" => 1, "Default" => 2, _ => 0 };
-            PaletteComboBox.SelectedIndex = PaletteIndex(project.Palette);
+            RebuildPaletteChoices();
             RootShell.RequestedTheme = project.Theme switch { "Light" => ElementTheme.Light, "Default" => ElementTheme.Default, _ => ElementTheme.Dark };
         }
         finally { _applyingProjectAppearance = false; }
@@ -336,7 +340,7 @@ public sealed partial class MainWindow
             if (removeEmptyPickerFileOnFailure && File.Exists(path) && new FileInfo(path).Length == 0) File.Delete(path);
             throw;
         }
-        project.Theme = copy.Theme; project.Palette = copy.Palette; project.CustomPalette = [..(copy.CustomPalette ?? [])]; project.LinkedFile = path;
+        project.Theme = copy.Theme; project.Palette = copy.Palette; project.CustomPalette = [..(copy.CustomPalette ?? [])]; project.CustomPalettes = copy.CustomPalettes ?? []; project.LinkedFile = path;
         if (_isEditing) ViewModel.BeginEditing();
         PersistProjects();
         StorageInfoBar.Title = "已保存作业文件"; StorageInfoBar.Message = path; StorageInfoBar.Severity = InfoBarSeverity.Success; StorageInfoBar.IsOpen = true;

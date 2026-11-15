@@ -7,6 +7,12 @@ public sealed class AppState
     public List<SubjectState> Subjects { get; set; } = [];
 }
 
+public sealed class NamedPalette
+{
+    public string Name { get; set; } = "";
+    public List<string> Colors { get; set; } = [];
+}
+
 public sealed class BoardSettingsState
 {
     public const string DefaultTileBodyFontFamily = "HarmonyOS Sans SC";
@@ -76,6 +82,8 @@ public sealed class BoardSettingsState
     public string Palette { get; set; } = "Vivid";
     /// <summary>自定义色系的 9 个颜色，顺序与鲜明色系一一对应。只在色系为自定义时使用。</summary>
     public List<string> CustomPalette { get; set; } = [];
+    /// <summary>用户新建的自定义色系。名称从自定义1开始往后排，默认菜单里不出现。</summary>
+    public List<NamedPalette> CustomPalettes { get; set; } = [];
     public double NoiseIntervalSeconds { get; set; } = 0.1;
     public string MicrophoneDeviceId { get; set; } = "";
     public double NoiseThresholdDb { get; set; } = 60;

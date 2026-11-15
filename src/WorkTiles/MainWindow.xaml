@@ -231,7 +231,7 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="260" /></Grid.ColumnDefinitions>
                             <TextBlock Text="色系" VerticalAlignment="Center" FontSize="15" />
                             <ComboBox x:Name="PaletteComboBox" Grid.Column="1" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="PaletteComboBox_SelectionChanged">
-                                <ComboBoxItem Content="鲜艳" Tag="Vivid" /><ComboBoxItem Content="马卡龙" Tag="Macaron" /><ComboBoxItem Content="自定义" Tag="Custom" />
+                                <ComboBoxItem Content="鲜艳" Tag="Vivid" /><ComboBoxItem Content="马卡龙" Tag="Macaron" />
                             </ComboBox>
                         </Grid>
                         <StackPanel x:Name="PaletteSwatchRow" Orientation="Horizontal" Spacing="8" />

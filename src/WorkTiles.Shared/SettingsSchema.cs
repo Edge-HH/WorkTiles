@@ -110,6 +110,7 @@ public static class SettingsSchema
         new("Theme", "AppearanceTheme", "主题", SettingKind.Enum, "Dark", Options: [new("Dark", "深色"), new("Light", "浅色"), new("Default", "跟随系统")], Hint: "深色更接近教室黑板，强光环境可切换浅色。"),
         new("Palette", "AppearanceTheme", "色系", SettingKind.Enum, "Vivid", Options: [new("Vivid", "鲜艳"), new("Macaron", "马卡龙"), new("Custom", "自定义")], Hint: "磁贴主题色按色系一一对应切换；已设置的文字颜色与高光保持不变。自定义色系从当前色系克隆，点色卡可改其中一色。"),
         new("CustomPalette", "AppearanceTheme", "自定义色系", SettingKind.Internal, new JsonArray(), Hidden: true),
+        new("CustomPalettes", "AppearanceTheme", "自定义色系列表", SettingKind.Internal, new JsonArray(), Hidden: true),
 
         // 外观 → 网格
         new("GridStyle", "AppearanceGrid", "样式", SettingKind.Enum, "Grid", Options: [new("Grid", "网格"), new("Dots", "点阵"), new("None", "不显示")]),
@@ -221,7 +222,8 @@ public static class SettingsSchema
     {
         ["Theme"] = "随作业项目保存",
         ["Palette"] = "随作业项目保存",
-        ["CustomPalette"] = "随作业项目保存"
+        ["CustomPalette"] = "随作业项目保存",
+        ["CustomPalettes"] = "随作业项目保存"
     };
 
     private static readonly Dictionary<string, SettingDescriptor> ByKey = All.ToDictionary(x => x.Key, StringComparer.Ordinal);
