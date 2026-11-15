@@ -43,7 +43,14 @@ public sealed class MediaLibrary(string dataDirectory)
     /// <summary>浏览时显示壁纸名。没有单独记下名字时退回文件名。</summary>
     public string DisplayTitle(string path)
     {
-        MediaLabel? label = ReadLabels().GetValueOrDefault(path);
+        Dictionary<string, MediaLabel> labels = ReadLabels();
+        if (!labels.TryGetValue(path, out MediaLabel? label) || string.IsNullOrWhiteSpace(label.Title))
+        {
+            string full = Path.GetFullPath(path);
+            label = labels.FirstOrDefault(pair =>
+                string.Equals(pair.Key, path, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(pair.Key, full, StringComparison.OrdinalIgnoreCase)).Value;
+        }
         return string.IsNullOrWhiteSpace(label?.Title) ? DisplayName(path) : label.Title;
     }
 

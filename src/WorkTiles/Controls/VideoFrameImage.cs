@@ -70,8 +70,10 @@ internal sealed class VideoFrameImage : Grid, IDisposable
                 double copyPixels = nativeWidth * copyScale * nativeHeight * copyScale;
                 double pixelLimit = boxW * (double)boxH * 4;
                 if (copyPixels > pixelLimit && copyPixels > 0) copyScale *= Math.Sqrt(pixelLimit / copyPixels);
-                int width = Even(nativeWidth * copyScale);
-                int height = Even(nativeHeight * copyScale);
+                int width = Math.Max(2, (int)Math.Round(nativeWidth * copyScale));
+                if ((width & 1) != 0) width++;
+                int height = Math.Max(2, (int)Math.Round(nativeHeight * width / (double)nativeWidth));
+                if ((height & 1) != 0) height++;
                 if (_frame is null || _frame.SizeInPixels.Width != width || _frame.SizeInPixels.Height != height
                     || _source is null || _source.SizeInPixels.Width != boxW || _source.SizeInPixels.Height != boxH)
                 {

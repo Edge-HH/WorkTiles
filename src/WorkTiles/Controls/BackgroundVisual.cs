@@ -25,7 +25,6 @@ public sealed class BackgroundVisual : Grid
     private BackgroundSettings _style = new();
     private string _path = "";
     private MediaPlayer? _player;
-    private MediaPlayerElement? _video;
     private VideoFrameImage? _videoFrames;
     private Image? _image;
     private WebWallpaperView? _web;
@@ -33,6 +32,7 @@ public sealed class BackgroundVisual : Grid
     private bool _failed;
     private bool _inViewport = true;
     private bool _active;
+    private bool _viewportKnown;
     private bool _overlaySurface;
     private string _overlayKey = "";
     private string _backgroundKey = "";
@@ -69,8 +69,10 @@ public sealed class BackgroundVisual : Grid
         };
         EffectiveViewportChanged += (_, args) =>
         {
-            // 滚出可见区域时暂停解码和定时器，避免不可见内容继续消耗资源。
-            bool visible = args.EffectiveViewport.Width > 0 && args.EffectiveViewport.Height > 0;
+            // 刚挂上时有效视口经常是空的，不能据此把图片停掉，否则磁贴背景会一直不出现。
+            bool visible = args.EffectiveViewport.Width > 1 && args.EffectiveViewport.Height > 1;
+            if (!visible && !_viewportKnown) return;
+            if (visible) _viewportKnown = true;
             if (_inViewport == visible) return;
             _inViewport = visible;
             EvaluateActivity();
@@ -159,13 +161,13 @@ public sealed class BackgroundVisual : Grid
         _blurOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         _glassTintOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         if (_web is not null)
-            _web.Visibility = style.Glass && _image is not null ? Visibility.Collapsed : Visibility.Visible;
+            _web.Visibility = Visibility.Visible;
         UpdateTimer();
     }
 
     private void ShowCurrent()
     {
-        if (_shared || !IsLoaded || !_active || _failed) return;
+        if (_shared || !IsLoaded || _failed) return;
         string path = _playlist.Current;
         if (_path != path)
         {
@@ -191,30 +193,16 @@ public sealed class BackgroundVisual : Grid
                         WebWallpaperView web = new(path);
                         _web = web;
                         web.Failed += () => { if (ReferenceEquals(_web, web)) Failed(); };
-                        _media.Children.Add(web);
-                        // 网页是独立合成层，毛玻璃采到的是一块黑。开着毛玻璃时改显示预览图，模糊才有画面。
-                        web.Visibility = _style.Glass ? Visibility.Collapsed : Visibility.Visible;
+                        // 网页是独立合成层，毛玻璃采到的是一块黑。开着毛玻璃时不挂网页，只留预览图。
+                        if (!_style.Glass) _media.Children.Add(web);
                     }
                     else if (MediaLibrary.IsVideo(path))
                     {
                         MediaPlayer player = new() { IsMuted = true, AutoPlay = true };
                         _player = player;
                         player.CommandManager.IsEnabled = false;
-                        _video = new MediaPlayerElement
-                        {
-                            AreTransportControlsEnabled = false,
-                            IsHitTestVisible = false,
-                            // 播放器自己的画面会按适应方式填黑边，而且合成层盖在帧图像上面。
-                            // 真正显示的是按图片同一规则摆好的帧；播放器只负责解码，缩成一点并不画出来。
-                            Opacity = 0,
-                            Width = 1,
-                            Height = 1,
-                            HorizontalAlignment = HorizontalAlignment.Left,
-                            VerticalAlignment = VerticalAlignment.Top
-                        };
-                        _video.SetMediaPlayer(player);
-                        _media.Children.Add(_video);
-                        // MediaPlayerElement 的视频合成层不能被背景模糊采样；帧服务模式由 XAML 图像呈现。
+                        // 播放器自己的画面会按适应方式填黑边，而且合成层盖在帧图像上面、不听 Opacity。
+                        // 帧服务不需要把 MediaPlayerElement 放进界面。
                         _videoFrames = new VideoFrameImage(player);
                         _videoFrames.Failed += () => { if (ReferenceEquals(_player, player)) Failed(); };
                         _media.Children.Add(_videoFrames);
@@ -243,9 +231,20 @@ public sealed class BackgroundVisual : Grid
         }
         Stretch stretch = MediaStretchOverride ?? (_style.ImageMode switch { "Stretch" => Stretch.Fill, "Fit" => Stretch.Uniform, _ => Stretch.UniformToFill });
         if (_image is not null) _image.Stretch = stretch;
-        if (_video is not null) _video.Stretch = stretch;
         if (_videoFrames is not null) _videoFrames.Stretch = stretch;
-        if (_player is not null) _player.IsLoopingEnabled = !_style.PlaylistEnabled || !_style.SwitchOnMediaEnded;
+        if (_web is not null)
+        {
+            bool showWeb = !_style.Glass;
+            bool inTree = _media.Children.Contains(_web);
+            if (showWeb && !inTree) _media.Children.Add(_web);
+            else if (!showWeb && inTree) _media.Children.Remove(_web);
+        }
+        if (_player is not null)
+        {
+            _player.IsLoopingEnabled = !_style.PlaylistEnabled || !_style.SwitchOnMediaEnded;
+            if (_active) _player.Play();
+            else _player.Pause();
+        }
     }
 
     private static string? WebPreview(string path)
@@ -297,9 +296,7 @@ public sealed class BackgroundVisual : Grid
         _player = null;
         _videoFrames?.Dispose();
         _videoFrames = null;
-        _video?.SetMediaPlayer(null);
         player?.Dispose();
-        _video = null;
         _web?.Dispose();
         _web = null;
         _image = null;

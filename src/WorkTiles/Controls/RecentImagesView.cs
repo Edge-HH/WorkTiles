@@ -38,15 +38,33 @@ public sealed class RecentImagesView : StackPanel
             string title = _library.DisplayTitle(path);
             string? preview = MediaLibrary.PreviewFile(path);
             bool image = MediaLibrary.IsImage(path) || preview is not null;
-            // 历史列表只展示静态封面。视频和网页用导入时留下的预览图，不为每一项启动播放器。
-            object content = image
-                ? new Image { Source = new BitmapImage(new Uri(preview ?? path)) { DecodePixelWidth = 176, AutoPlay = false }, Stretch = Stretch.UniformToFill }
-                : new TextBlock { Text = (MediaLibrary.IsVideo(path) ? "视频" : "网页壁纸") + "\n" + title,
-                    TextWrapping = TextWrapping.Wrap, MaxLines = 3, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(6) };
+            Grid face = new();
+            TextBlock caption = new()
+            {
+                Text = title,
+                TextWrapping = TextWrapping.Wrap,
+                MaxLines = 3,
+                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(6),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            if (image)
+            {
+                Image picture = new()
+                {
+                    Stretch = Stretch.UniformToFill,
+                    Source = new BitmapImage(new Uri(preview ?? path)) { DecodePixelWidth = 176, AutoPlay = false }
+                };
+                picture.ImageOpened += (_, _) => caption.Visibility = Visibility.Collapsed;
+                picture.ImageFailed += (_, _) => caption.Visibility = Visibility.Visible;
+                face.Children.Add(picture);
+            }
+            face.Children.Add(caption);
             Button button = new() { Width = 88, Height = 88, Padding = new Thickness(0), CornerRadius = new CornerRadius(6),
-                Content = content };
+                Content = face };
             AutomationProperties.SetName(button, "使用最近媒体 " + title);
-            ToolTipService.SetToolTip(button, path);
+            ToolTipService.SetToolTip(button, title);
             button.Click += async (_, _) => await _select(path);
             _images.Children.Add(button);
         }
