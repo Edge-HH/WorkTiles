@@ -189,6 +189,15 @@ public sealed partial class MainWindow
                 ExportOverlay.Children.Clear(); ExportOverlay.Visibility = Visibility.Collapsed;
                 english.Entries[0].Attachments.Add(new AttachmentItem { Name = "attachment.png", Kind = "图片", Path = _projectStore.CopyAttachment(project.Id, imagePath), FrameWidth = 260, AspectRatio = 260d / 120, Scale = 1.3, Rotation = 90, OffsetX = 10, PositionY = 8 });
                 BuildTiles(); EnterEditing(); await NextLayoutAsync();
+                AttachmentImageControl photo = FindVisuals<AttachmentImageControl>(BoardCanvas).Single();
+                double frameWidth = photo.FrameWidth, frameHeight = photo.FrameHeight;
+                photo.RotateAttachedImage(90);
+                Check(Math.Abs(photo.FrameWidth - frameHeight) < 1 && Math.Abs(photo.FrameHeight - frameWidth) < 1
+                    && photo.FrameHeight * frameHeight < frameWidth * frameWidth,
+                    "rotating an image swaps the frame instead of stretching it");
+                photo.RotateAttachedImage(-90);
+                Check(Math.Abs(photo.FrameWidth - frameWidth) < 1 && Math.Abs(photo.FrameHeight - frameHeight) < 1,
+                    "rotating an image back restores the original frame");
                 Check(ProjectCommands.Visibility == Visibility.Visible && ProjectNameText.Text == project.Name, "project commands visible in editor");
                 Check(Title == "WorkTiles", "window title is only WorkTiles");
                 List<string> fileMenu = FileMenuFlyout.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).ToList();

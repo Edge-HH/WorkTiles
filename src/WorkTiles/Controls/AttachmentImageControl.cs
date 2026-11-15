@@ -43,6 +43,7 @@ public sealed class AttachmentImageControl : Grid
     private Point _dragStartPointer;
     private Rect _dragStartFrame;
     private double _imageAspect;
+    private double _imageBaseWidth;
     private readonly TaskCompletionSource<bool> _imageReady = new();
     public Task<bool> ImageReady => _imageReady.Task;
 
@@ -74,9 +75,9 @@ public sealed class AttachmentImageControl : Grid
         _imageFrame.SizeChanged += (_, e) => ((RectangleGeometry)_imageFrame.Clip).Rect = new Rect(0, 0, e.NewSize.Width, e.NewSize.Height);
         _image = new Image
         {
-            Stretch = Stretch.UniformToFill,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
+            Stretch = Stretch.Fill,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
             RenderTransformOrigin = new Point(0.5, 0.5),
             RenderTransform = _imageTransform
         };
@@ -159,6 +160,7 @@ public sealed class AttachmentImageControl : Grid
             if (bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0)
             {
                 _imageAspect = (double)bitmap.PixelWidth / bitmap.PixelHeight;
+                _imageBaseWidth = 0;
                 if (_attachment.AspectRatio <= 0)
                 {
                     _attachment.AspectRatio = _imageAspect;
@@ -166,6 +168,7 @@ public sealed class AttachmentImageControl : Grid
                     Area?.InvalidateMeasure();
                     _contentChanged();
                 }
+                ApplyTransforms();
             }
             _imageReady.TrySetResult(true);
         }
@@ -274,7 +277,6 @@ public sealed class AttachmentImageControl : Grid
 
         double oldFrameWidth = _imageFrame.Width;
         double oldFrameHeight = _imageFrame.Height;
-        (double oldContentWidth, double oldContentHeight) = _isCropping ? GetVisualContentSize() : (0, 0);
         _imageFrame.Width = newWidth;
         _imageFrame.Height = newHeight;
         _attachment.FrameWidth = newWidth;
@@ -283,19 +285,21 @@ public sealed class AttachmentImageControl : Grid
         _attachment.PositionY = top ? start.Y + start.Height - newHeight : start.Y;
         if (_isCropping)
         {
-            // 取景框比例随裁切结果更新并持久化，避免退出裁切或重启后按原图比例弹回。
+            // 裁切只改取景框。图片停在原地，拖哪条边就只露出或藏起那一侧。
             _attachment.AspectRatio = newWidth / newHeight;
-            // 补偿取景框尺寸变化造成的画面滑动，让静止一侧的画面保持不动。
-            (double contentWidth, double contentHeight) = GetVisualContentSize();
-            if (left)
-                _attachment.OffsetX += (newWidth - oldFrameWidth) / 2 + (oldContentWidth - contentWidth) / 2;
-            else if (right)
-                _attachment.OffsetX += (oldFrameWidth - newWidth) / 2 + (contentWidth - oldContentWidth) / 2;
-            if (top)
-                _attachment.OffsetY += (newHeight - oldFrameHeight) / 2 + (oldContentHeight - contentHeight) / 2;
-            else if (bottom)
-                _attachment.OffsetY += (oldFrameHeight - newHeight) / 2 + (contentHeight - oldContentHeight) / 2;
+            if (left) _attachment.OffsetX += (newWidth - oldFrameWidth) / 2;
+            else if (right) _attachment.OffsetX -= (newWidth - oldFrameWidth) / 2;
+            if (top) _attachment.OffsetY += (newHeight - oldFrameHeight) / 2;
+            else if (bottom) _attachment.OffsetY -= (newHeight - oldFrameHeight) / 2;
             ClampCropOffsets();
+        }
+        else if (oldFrameWidth > 0)
+        {
+            // 普通缩放连同画面和已有裁切一起变大变小。
+            double factor = newWidth / oldFrameWidth;
+            _attachment.Scale *= factor;
+            _attachment.OffsetX *= factor;
+            _attachment.OffsetY *= factor;
         }
         ApplyTransforms();
         Area?.InvalidateMeasure();
@@ -375,13 +379,34 @@ public sealed class AttachmentImageControl : Grid
 
     private void ToggleCropMode() { _isCropping = !_isCropping; UpdateSelectionVisuals(); }
 
+    internal void RotateAttachedImage(double degrees) => RotateImage(degrees);
+
     private void RotateImage(double degrees)
     {
         _attachment.Rotation = (_attachment.Rotation + degrees + 360) % 360;
-        double ratio = GetAspectRatio();
-        _attachment.AspectRatio = 1 / ratio;
-        _imageFrame.Height = _imageFrame.Width / GetAspectRatio();
-        _attachment.ViewportHeight = _imageFrame.Height;
+        if (Math.Abs(degrees) % 180 != 0)
+        {
+            // 90 度只交换取景框的宽高。按原宽高比反算会把高度乘成原来的很多倍，画面也被转出框外。
+            double width = _imageFrame.Width;
+            double height = _imageFrame.Height;
+            _imageFrame.Width = height;
+            _imageFrame.Height = width;
+            _attachment.FrameWidth = height;
+            _attachment.ViewportHeight = width;
+            if (width > 0 && height > 0) _attachment.AspectRatio = height / width;
+            double offsetX = _attachment.OffsetX;
+            double offsetY = _attachment.OffsetY;
+            if (degrees > 0)
+            {
+                _attachment.OffsetX = offsetY;
+                _attachment.OffsetY = -offsetX;
+            }
+            else
+            {
+                _attachment.OffsetX = -offsetY;
+                _attachment.OffsetY = offsetX;
+            }
+        }
         ClampCropOffsets();
         ApplyTransforms();
         Area?.InvalidateMeasure();
@@ -419,34 +444,52 @@ public sealed class AttachmentImageControl : Grid
 
     private void ClampCropOffsets()
     {
-        // 可移动范围 = 画面按 UniformToFill 填充（含旋转）后超出取景框的部分，保证画面始终覆盖取景框。
+        // 画面可以移到只剩一角还在框里，裁切才能露出空白边，而不是被迫始终铺满。
         (double contentWidth, double contentHeight) = GetVisualContentSize();
-        double maxX = Math.Max(0, (contentWidth - _imageFrame.Width) / 2);
-        double maxY = Math.Max(0, (contentHeight - _imageFrame.Height) / 2);
+        double keepX = Math.Min(24, Math.Max(1, contentWidth / 2));
+        double keepY = Math.Min(24, Math.Max(1, contentHeight / 2));
+        double maxX = Math.Max(0, (contentWidth + _imageFrame.Width) / 2 - keepX);
+        double maxY = Math.Max(0, (contentHeight + _imageFrame.Height) / 2 - keepY);
         _attachment.OffsetX = Math.Clamp(_attachment.OffsetX, -maxX, maxX);
         _attachment.OffsetY = Math.Clamp(_attachment.OffsetY, -maxY, maxY);
     }
 
     private (double Width, double Height) GetVisualContentSize()
     {
-        double frameWidth = _imageFrame.Width;
-        double frameHeight = _imageFrame.Height;
-        if (frameWidth <= 0 || frameHeight <= 0) return (0, 0);
-        // 图片未加载成功时按无溢出处理，此时裁切拖动中央不产生位移。
-        double imageAspect = _imageAspect > 0 ? _imageAspect : frameWidth / frameHeight;
-        bool widthOverflow = imageAspect >= frameWidth / frameHeight;
-        double fillWidth = widthOverflow ? frameHeight * imageAspect : frameWidth;
-        double fillHeight = widthOverflow ? frameHeight : frameWidth / imageAspect;
+        EnsureImageBase();
+        double aspect = _imageAspect > 0 ? _imageAspect : GetAspectRatio();
+        double width = _imageBaseWidth * Math.Max(0.01, _attachment.Scale);
+        double height = width / Math.Max(0.01, aspect);
         bool rotated = _attachment.Rotation % 180 is not 0;
-        return rotated
-            ? (fillHeight * _attachment.Scale, fillWidth * _attachment.Scale)
-            : (fillWidth * _attachment.Scale, fillHeight * _attachment.Scale);
+        return rotated ? (height, width) : (width, height);
+    }
+
+    private void EnsureImageBase()
+    {
+        if (_imageBaseWidth > 0) return;
+        double aspect = _imageAspect > 0 ? _imageAspect : GetAspectRatio();
+        bool quarter = _attachment.Rotation % 180 is not 0;
+        double targetWidth = quarter ? _imageFrame.Height : _imageFrame.Width;
+        double targetHeight = quarter ? _imageFrame.Width : _imageFrame.Height;
+        if (targetWidth <= 0 || targetHeight <= 0 || aspect <= 0)
+        {
+            _imageBaseWidth = Math.Max(MinimumWidth, _imageFrame.Width);
+            return;
+        }
+        // 现有文件按当时的铺满尺寸还原，打开后不会突然变样。之后裁切不再跟着框缩放。
+        double cover = Math.Max(targetWidth / aspect, targetHeight);
+        _imageBaseWidth = aspect * cover / Math.Max(0.01, _attachment.Scale);
     }
 
     private void ApplyTransforms()
     {
-        _imageTransform.ScaleX = _attachment.Scale;
-        _imageTransform.ScaleY = _attachment.Scale;
+        EnsureImageBase();
+        double aspect = _imageAspect > 0 ? _imageAspect : GetAspectRatio();
+        double width = _imageBaseWidth * Math.Max(0.01, _attachment.Scale);
+        _image.Width = width;
+        _image.Height = width / Math.Max(0.01, aspect);
+        _imageTransform.ScaleX = 1;
+        _imageTransform.ScaleY = 1;
         _imageTransform.TranslateX = _attachment.OffsetX;
         _imageTransform.TranslateY = _attachment.OffsetY;
         _imageTransform.Rotation = _attachment.Rotation;
