@@ -37,6 +37,10 @@ public sealed class BackgroundVisual : Grid
     private string _overlayKey = "";
     private string _backgroundKey = "";
     private int _mediaRestoreEpoch;
+    private string _snapshotPath = "";
+    private bool _snapshotRunning;
+    /// <summary>别的表面开了毛玻璃时，网页不能再占着合成层，否则那些毛玻璃会采到一块黑。</summary>
+    internal static bool BlockLiveWeb { get; set; }
 
     // 局部外观预览可要求铺满；不改变项目保存的图片显示模式。
     internal Stretch? MediaStretchOverride { get; init; }
@@ -65,7 +69,16 @@ public sealed class BackgroundVisual : Grid
             _timer.Stop();
             ReleaseMedia();
             _active = false;
+            _viewportKnown = false;
+            _inViewport = true;
             QueueMediaRestore();
+        };
+        SizeChanged += (_, args) =>
+        {
+            if (args.NewSize.Width <= 1 || args.NewSize.Height <= 1) return;
+            if (_media.Children.Count == 0 && !string.IsNullOrEmpty(_playlist.Current))
+                _path = "";
+            if (IsLoaded) ShowCurrent();
         };
         EffectiveViewportChanged += (_, args) =>
         {
@@ -131,7 +144,8 @@ public sealed class BackgroundVisual : Grid
         // 共享区域本身不承载媒体；只有从独立媒体切换到共享层时才需要释放旧播放器。
         if (shared && !wasShared) ReleaseMedia();
         else if (IsLoaded && !_failed) ShowCurrent();
-        string overlayKey = $"{surface}|{style.Glass}|{hasMedia}|{style.Color}|{style.ColorOpacity:0.####}|{style.ColorCleared}|{effectiveBlur:0.####}|{BoardTheme.IsLight}";
+        bool liveWeb = WebIsLive;
+        string overlayKey = $"{surface}|{style.Glass}|{liveWeb}|{hasMedia}|{style.Color}|{style.ColorOpacity:0.####}|{style.ColorCleared}|{effectiveBlur:0.####}|{BoardTheme.IsLight}";
         if (_overlayKey != overlayKey)
         {
             _overlayKey = overlayKey;
@@ -141,24 +155,25 @@ public sealed class BackgroundVisual : Grid
             else if (surface && hasMedia && !style.ColorCleared)
                 _surfaceOverlay.Background = SurfaceBackground.Apply(_surfaceOverlay.Background, style.Color, style.ColorOpacity, false, false, 0);
             else _surfaceOverlay.Background = null;
-            if (!surface && style.Glass)
+            // 网页还挂在树上时，背景模糊采到的是黑，这时不铺模糊。网页拿掉之后模糊的是预览图。
+            if (!surface && style.Glass && !liveWeb)
             {
                 if (_blurOverlay.Background is BlurBackdropBrush blur) blur.Update(effectiveBlur);
                 else _blurOverlay.Background = new BlurBackdropBrush(effectiveBlur);
+            }
+            else _blurOverlay.Background = null;
+            if (!surface && style.Glass)
+            {
                 Windows.UI.Color tint = BoardTheme.IsLight
                     ? Windows.UI.Color.FromArgb(36, 255, 255, 255)
                     : Windows.UI.Color.FromArgb(36, 0, 0, 0);
                 if (_glassTintOverlay.Background is SolidColorBrush solid) solid.Color = tint;
                 else _glassTintOverlay.Background = new SolidColorBrush(tint);
             }
-            else
-            {
-                _blurOverlay.Background = null;
-                _glassTintOverlay.Background = null;
-            }
+            else _glassTintOverlay.Background = null;
         }
         _surfaceOverlay.Visibility = _overlaySurface && (style.Glass || (hasMedia && !style.ColorCleared)) ? Visibility.Visible : Visibility.Collapsed;
-        _blurOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
+        _blurOverlay.Visibility = !_overlaySurface && style.Glass && !liveWeb ? Visibility.Visible : Visibility.Collapsed;
         _glassTintOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         if (_web is not null)
             _web.Visibility = Visibility.Visible;
@@ -190,11 +205,16 @@ public sealed class BackgroundVisual : Grid
                             };
                             _media.Children.Add(_image);
                         }
-                        WebWallpaperView web = new(path);
-                        _web = web;
-                        web.Failed += () => { if (ReferenceEquals(_web, web)) Failed(); };
-                        // 网页是独立合成层，毛玻璃采到的是一块黑。开着毛玻璃时不挂网页，只留预览图。
-                        if (!_style.Glass) _media.Children.Add(web);
+                        bool allowLive = !_style.Glass && !BlockLiveWeb;
+                        if (allowLive || preview is null)
+                        {
+                            WebWallpaperView web = new(path);
+                            _web = web;
+                            web.Failed += () => { if (ReferenceEquals(_web, web)) Failed(); };
+                            _media.Children.Add(web);
+                            if (!allowLive && preview is null && !_snapshotRunning && _snapshotPath != path)
+                                _ = SnapshotWebAsync(web, path);
+                        }
                     }
                     else if (MediaLibrary.IsVideo(path))
                     {
@@ -232,12 +252,21 @@ public sealed class BackgroundVisual : Grid
         Stretch stretch = MediaStretchOverride ?? (_style.ImageMode switch { "Stretch" => Stretch.Fill, "Fit" => Stretch.Uniform, _ => Stretch.UniformToFill });
         if (_image is not null) _image.Stretch = stretch;
         if (_videoFrames is not null) _videoFrames.Stretch = stretch;
+        if (MediaLibrary.IsWeb(_path) && _web is null && !_style.Glass && !BlockLiveWeb && File.Exists(_path))
+        {
+            WebWallpaperView web = new(_path);
+            _web = web;
+            web.Failed += () => { if (ReferenceEquals(_web, web)) Failed(); };
+            _media.Children.Add(web);
+        }
         if (_web is not null)
         {
-            bool showWeb = !_style.Glass;
+            bool showWeb = (!_style.Glass && !BlockLiveWeb) || _image is null;
             bool inTree = _media.Children.Contains(_web);
             if (showWeb && !inTree) _media.Children.Add(_web);
             else if (!showWeb && inTree) _media.Children.Remove(_web);
+            if (!showWeb && _image is null && !_snapshotRunning && _snapshotPath != _path)
+                _ = SnapshotWebAsync(_web, _path);
         }
         if (_player is not null)
         {
@@ -247,13 +276,52 @@ public sealed class BackgroundVisual : Grid
         }
     }
 
+    private bool WebIsLive => _web is not null && _media.Children.Contains(_web);
+
+    private async Task SnapshotWebAsync(WebWallpaperView web, string path)
+    {
+        _snapshotRunning = true;
+        try
+        {
+            for (int attempt = 0; attempt < 25 && web.Core is null; attempt++)
+                await Task.Delay(200);
+            if (web.Core is null) { _snapshotPath = path; return; }
+            await Task.Delay(500);
+            string destination = path + ".preview.png";
+            if (!await web.TryCapturePreviewAsync(destination)) { _snapshotPath = path; return; }
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!IsLoaded || _playlist.Current != path) return;
+                _path = "";
+                ShowCurrent();
+                _overlayKey = "";
+                if (!_overlaySurface && _style.Glass && !WebIsLive)
+                {
+                    if (_blurOverlay.Background is not BlurBackdropBrush blur)
+                        _blurOverlay.Background = new BlurBackdropBrush(_style.Blur);
+                    else blur.Update(_style.Blur);
+                    _blurOverlay.Visibility = Visibility.Visible;
+                    _glassTintOverlay.Visibility = Visibility.Visible;
+                }
+            });
+        }
+        finally { _snapshotRunning = false; }
+    }
+
     private static string? WebPreview(string path)
     {
         try
         {
             WebWallpaperPackage package = WebWallpaperPackage.Load(path);
             WallpaperProject? project = WallpaperEngineLibrary.ReadProject(package.Directory);
-            return project is not null && MediaLibrary.IsImage(project.PreviewPath) && File.Exists(project.PreviewPath) ? project.PreviewPath : null;
+            if (project is not null && MediaLibrary.IsImage(project.PreviewPath) && File.Exists(project.PreviewPath))
+                return project.PreviewPath;
+            foreach (string name in new[] { "preview.jpg", "preview.jpeg", "preview.png", "preview.gif" })
+            {
+                string candidate = Path.Combine(package.Directory, name);
+                if (File.Exists(candidate)) return candidate;
+            }
+            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
         {

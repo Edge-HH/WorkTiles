@@ -4,6 +4,7 @@ using Microsoft.Web.WebView2.Core;
 using WorkTiles.Services;
 using System.Security.Cryptography;
 using System.Text;
+using Windows.Storage.Streams;
 
 namespace WorkTiles.Controls;
 
@@ -96,6 +97,32 @@ public sealed class WebWallpaperView : Grid, IDisposable
             if (_paused) { await core.TrySuspendAsync(); if (!_disposed && !_paused) core.Resume(); }
         }
         catch (Exception) { /* 卸载或导航中的页面可能已释放，无需重启整个壁纸。 */ }
+    }
+
+    /// <summary>把当前画面存成静态图。毛玻璃不能采样网页合成层，之后改模糊这张图。</summary>
+    public async Task<bool> TryCapturePreviewAsync(string destination)
+    {
+        if (_disposed || _view.CoreWebView2 is not { } core) return false;
+        try
+        {
+            using InMemoryRandomAccessStream memory = new();
+            await core.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, memory);
+            if (memory.Size < 32) return false;
+            memory.Seek(0);
+            using DataReader reader = new(memory);
+            uint length = (uint)Math.Min(memory.Size, int.MaxValue);
+            await reader.LoadAsync(length);
+            byte[] bytes = new byte[length];
+            reader.ReadBytes(bytes);
+            string temporary = destination + ".tmp";
+            await File.WriteAllBytesAsync(temporary, bytes);
+            File.Move(temporary, destination, true);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     public void Dispose()

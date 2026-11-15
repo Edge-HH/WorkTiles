@@ -206,7 +206,7 @@ public sealed partial class MainWindow
             about.Children.Add(child);
         }
         RegisterSettingsPage("About", AboutSettingsPanel, about, "关于", "查看版本、访问仓库与检查更新。");
-        about.Children.Add(Heading("实验性功能"));
+        about.Children.Add(ExperimentalHeading());
         about.Children.Add(Toggle("显示集控", _settings.ShowExperimentalCloud, value =>
         {
             _settings.ShowExperimentalCloud = value;
@@ -242,6 +242,19 @@ public sealed partial class MainWindow
 
     private static StackPanel SettingsStack() => new() { Spacing = 18, Margin = new Thickness(0, 16, 0, 0) };
     private static TextBlock Heading(string text) => new() { Text = text, FontSize = 22 };
+
+    /// <summary>连点十次后抛出异常，用来打开错误窗口。平时看起来就是一行标题。</summary>
+    private TextBlock ExperimentalHeading()
+    {
+        int clicks = 0;
+        TextBlock heading = new() { Text = "实验性功能", FontSize = 22 };
+        heading.Tapped += (_, _) =>
+        {
+            if (++clicks < 10) return;
+            throw new InvalidOperationException("实验性功能标题被连续点击 10 次，用于测试错误窗口。");
+        };
+        return heading;
+    }
 
     private static CornerRadius MatchToolbarButtonRadius(double toolbarRadius, double toolbarPadding, double width, double height)
     {
@@ -1491,6 +1504,9 @@ public sealed partial class MainWindow
     private void ApplyBackgroundVisuals()
     {
         if (SharedBackgroundVisual is null) return;
+        // 任何一块毛玻璃都会去采窗口里的合成层。网页还挂着时采到的是黑，所以先拿掉网页，留下预览图。
+        BackgroundVisual.BlockLiveWeb = _settings.TileBackground.Glass || _settings.WidgetGlass || _settings.ToolbarGlass
+            || _settings.SharedBackground.Glass || _settings.BoardBackground.Glass || _settings.ClockBackground.Glass;
         SharedBackgroundVisual.Apply(UseSharedBackground ? _settings.SharedBackground : new(), BoardTheme.SurfaceBrush);
         ClockPanel.Background = BoardWorkspace.Background = null;
         ClockBackgroundVisual.Apply(_settings.LayoutMode == "Free" ? new() : _settings.ClockBackground, BoardTheme.SurfaceBrush, UseSharedBackground);
