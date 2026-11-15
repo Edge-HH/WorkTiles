@@ -585,8 +585,6 @@ public sealed class SubjectTileControl : Grid
             FontSize = Math.Clamp(_settings.TileBodyFontSize, 12, 72),
             FontWeight = _settings.TileBodyBold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
             FontStyle = _settings.TileBodyItalic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)),
-            BorderThickness = new Thickness(0),
             Padding = new Thickness(2, 0, 2, 0),
             MinHeight = 42,
             TextWrapping = TextWrapping.Wrap,
@@ -597,6 +595,7 @@ public sealed class SubjectTileControl : Grid
             PlaceholderText = _isEditing ? HomeworkState.PlaceholderText : string.Empty,
             Tag = homework
         };
+        ApplyTransparentInputChrome(editor);
         editor.Paste += async (_, args) =>
         {
             if (!_settings.PastePlainTextOnly) return;
@@ -864,14 +863,56 @@ public sealed class SubjectTileControl : Grid
     private static ColorSwatchButton CreateColorSwatch(string hex, double size) =>
         new(BoardTheme.DisplayContentColor(MainViewModel.BrushFromHex(hex).Color), size);
 
-    private static TextBox CreateInlineEditor(string text, double fontSize, Brush foreground, bool singleLine) => new()
+    private static TextBox CreateInlineEditor(string text, double fontSize, Brush foreground, bool singleLine)
     {
-        Text = text, FontSize = fontSize, Foreground = foreground,
-        Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)),
-        BorderThickness = new Thickness(0), Padding = new Thickness(2, 0, 2, 0), MinHeight = 34,
-        AcceptsReturn = !singleLine,
-        TextWrapping = singleLine ? TextWrapping.NoWrap : TextWrapping.Wrap
-    };
+        TextBox editor = new()
+        {
+            Text = text, FontSize = fontSize, Foreground = foreground,
+            Padding = new Thickness(2, 0, 2, 0), MinHeight = 34,
+            AcceptsReturn = !singleLine,
+            TextWrapping = singleLine ? TextWrapping.NoWrap : TextWrapping.Wrap
+        };
+        ApplyTransparentInputChrome(editor);
+        return editor;
+    }
+
+    /// <summary>
+    /// 学科标题和作业正文直接铺在磁贴背景上。输入框模板在悬停、聚焦和禁用时会改用主题填充色，
+    /// 设置页预览、导出预览和桌面透明磁贴都会被这块底色挡住。这些状态改为全透明；
+    /// 控件自身保留几乎全透明的背景，空白处仍能点中。
+    /// </summary>
+    internal static void ApplyTransparentInputChrome(Control editor)
+    {
+        editor.Background = InvisibleHitBrush();
+        editor.BorderBrush = InvisibleHitBrush();
+        editor.BorderThickness = new Thickness(0);
+        string[] keys =
+        [
+            "TextControlBackground",
+            "TextControlBackgroundPointerOver",
+            "TextControlBackgroundFocused",
+            "TextControlBackgroundDisabled",
+            "TextControlBorderBrush",
+            "TextControlBorderBrushPointerOver",
+            "TextControlBorderBrushFocused",
+            "TextControlBorderBrushDisabled"
+        ];
+        foreach (string theme in new[] { "Light", "Dark", "HighContrast" })
+        {
+            ResourceDictionary dictionary = new();
+            foreach (string key in keys)
+                dictionary[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+            dictionary["TextControlBorderThemeThickness"] = new Thickness(0);
+            dictionary["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+            editor.Resources.ThemeDictionaries[theme] = dictionary;
+        }
+        foreach (string key in keys)
+            editor.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        editor.Resources["TextControlBorderThemeThickness"] = new Thickness(0);
+        editor.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
+    }
+
+    private static SolidColorBrush InvisibleHitBrush() => new(Windows.UI.Color.FromArgb(1, 0, 0, 0));
 
     private static Button CreateIconButton(string glyph, string tooltip, RoutedEventHandler click, bool danger = false)
     {
