@@ -12,11 +12,14 @@ internal sealed class TrayIcon : IDisposable
     public const int CommandSettings = 4;
     public const int CommandRestart = 5;
     public const int CommandExit = 6;
+    public const int CommandMenu = 7;
 
     private const int GwlpWndProc = -4;
     private const uint CallbackMessage = 0x8001;
     private const uint WmLButtonUp = 0x0202;
+    private const uint WmLButtonDblClk = 0x0203;
     private const uint WmRButtonUp = 0x0205;
+    private const uint WmContextMenu = 0x007B;
     private const uint NimAdd = 0;
     private const uint NimDelete = 2;
     private const uint NifMessage = 0x1;
@@ -104,9 +107,9 @@ internal sealed class TrayIcon : IDisposable
     {
         if (msg == CallbackMessage && _current is { } tray && tray._hwnd == hwnd)
         {
-            uint mouse = unchecked((uint)lParam);
-            if (mouse == WmLButtonUp) tray.Command?.Invoke(CommandOpen);
-            else if (mouse == WmRButtonUp) tray.ShowMenu();
+        uint mouse = unchecked((uint)(lParam.ToInt64() & 0xFFFFFFFF));
+        if (mouse is WmLButtonUp or WmRButtonUp or WmLButtonDblClk or WmContextMenu or 0x0400)
+            tray.Command?.Invoke(CommandMenu);
         }
         return Previous.TryGetValue(hwnd, out nint old) && old != 0
             ? CallWindowProc(old, hwnd, msg, wParam, lParam)
