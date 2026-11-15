@@ -2,6 +2,7 @@ using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Media.Playback;
+using WorkTiles.Services;
 
 namespace WorkTiles.Controls;
 
@@ -21,13 +22,16 @@ internal sealed class VideoFrameImage : Grid, IDisposable
     internal long FrameWorkTicks => Interlocked.Read(ref _workTicks);
     internal int SurfaceWidth => (int)(_frame?.SizeInPixels.Width ?? 0);
     internal int SurfaceHeight => (int)(_frame?.SizeInPixels.Height ?? 0);
-    internal Microsoft.UI.Xaml.Media.Stretch Stretch { get => _image.Stretch; set => _image.Stretch = value; }
+    internal Microsoft.UI.Xaml.Media.Stretch Stretch { get; set; } = Microsoft.UI.Xaml.Media.Stretch.UniformToFill;
 
     internal VideoFrameImage(MediaPlayer player)
     {
         _player = player;
         IsHitTestVisible = false;
         Children.Add(_image);
+        _image.Stretch = Microsoft.UI.Xaml.Media.Stretch.Fill;
+        _image.HorizontalAlignment = Microsoft.UI.Xaml.HorizontalAlignment.Stretch;
+        _image.VerticalAlignment = Microsoft.UI.Xaml.VerticalAlignment.Stretch;
         player.IsVideoFrameServerEnabled = true;
         player.VideoFrameAvailable += FrameAvailable;
     }
@@ -47,25 +51,39 @@ internal sealed class VideoFrameImage : Grid, IDisposable
                 int nativeWidth = (int)sender.PlaybackSession.NaturalVideoWidth;
                 int nativeHeight = (int)sender.PlaybackSession.NaturalVideoHeight;
                 if (nativeWidth <= 0 || nativeHeight <= 0) return;
-                // 拷贝面按显示像素封顶并保持画面宽高比：预览只有几百像素宽时，
-                // 按视频原生分辨率拷贝（4K 每帧 800 万像素）会让设置页被帧拷贝拖垮。
+                // 显示面按控件像素来，画面先按原比例拷下来再自己摆放。
+                // 系统的 CopyFrameToVideoSurface 会把画面“适应”进目标并填黑，缩放模式就会带上视频里本来没有的黑边，
+                // 预览和真实窗口的目标比例不同时，黑边位置也不一样。
                 double rasterScale = XamlRoot?.RasterizationScale ?? 1;
                 double boxWidth = ActualSize.X * rasterScale, boxHeight = ActualSize.Y * rasterScale;
                 if (boxWidth < 8 || boxHeight < 8) return;
-                double fit = Math.Min(1, Math.Max(boxWidth / nativeWidth, boxHeight / nativeHeight));
-                int width = Math.Max(16, (int)Math.Round(nativeWidth * fit / 16) * 16);
-                int height = Math.Max(16, (int)Math.Round(nativeHeight * fit / 16) * 16);
-                if (_frame is null || _frame.SizeInPixels.Width != width || _frame.SizeInPixels.Height != height)
+                int boxW = Even(boxWidth);
+                int boxH = Even(boxHeight);
+                string mode = Stretch switch
+                {
+                    Microsoft.UI.Xaml.Media.Stretch.Uniform => "Fit",
+                    Microsoft.UI.Xaml.Media.Stretch.Fill => "Stretch",
+                    _ => "Zoom"
+                };
+                VideoPlacement.Rect place = VideoPlacement.Place(nativeWidth, nativeHeight, boxW, boxH, mode);
+                double copyScale = Math.Min(1, Math.Max(Math.Abs(place.Width) / nativeWidth, Math.Abs(place.Height) / nativeHeight));
+                double copyPixels = nativeWidth * copyScale * nativeHeight * copyScale;
+                double pixelLimit = boxW * (double)boxH * 4;
+                if (copyPixels > pixelLimit && copyPixels > 0) copyScale *= Math.Sqrt(pixelLimit / copyPixels);
+                int width = Even(nativeWidth * copyScale);
+                int height = Even(nativeHeight * copyScale);
+                if (_frame is null || _frame.SizeInPixels.Width != width || _frame.SizeInPixels.Height != height
+                    || _source is null || _source.SizeInPixels.Width != boxW || _source.SizeInPixels.Height != boxH)
                 {
                     ReleaseSurfaces();
                     var device = CanvasDevice.GetSharedDevice();
                     _frame = new CanvasRenderTarget(device, width, height, 96);
-                    _source = new CanvasImageSource(device, width, height, 96);
+                    _source = new CanvasImageSource(device, boxW, boxH, 96);
                     _image.Source = _source;
                 }
                 sender.CopyFrameToVideoSurface(_frame);
                 using var drawing = _source!.CreateDrawingSession(Microsoft.UI.Colors.Transparent);
-                drawing.DrawImage(_frame);
+                drawing.DrawImage(_frame, new Windows.Foundation.Rect(place.X, place.Y, place.Width, place.Height));
                 PresentedFrames++;
             }
             catch (Exception)
@@ -83,6 +101,12 @@ internal sealed class VideoFrameImage : Grid, IDisposable
         _source = null;
         _frame?.Dispose();
         _frame = null;
+    }
+
+    private static int Even(double value)
+    {
+        int size = Math.Max(2, (int)Math.Round(value));
+        return (size & 1) == 0 ? size : size + 1;
     }
 
     public void Dispose()

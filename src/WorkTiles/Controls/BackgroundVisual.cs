@@ -185,7 +185,18 @@ public sealed class BackgroundVisual : Grid
                         MediaPlayer player = new() { IsMuted = true, AutoPlay = true };
                         _player = player;
                         player.CommandManager.IsEnabled = false;
-                        _video = new MediaPlayerElement { AreTransportControlsEnabled = false, IsHitTestVisible = false };
+                        _video = new MediaPlayerElement
+                        {
+                            AreTransportControlsEnabled = false,
+                            IsHitTestVisible = false,
+                            // 播放器自己的画面会按适应方式填黑边，而且合成层盖在帧图像上面。
+                            // 真正显示的是按图片同一规则摆好的帧；播放器只负责解码，缩成一点并不画出来。
+                            Opacity = 0,
+                            Width = 1,
+                            Height = 1,
+                            HorizontalAlignment = HorizontalAlignment.Left,
+                            VerticalAlignment = VerticalAlignment.Top
+                        };
                         _video.SetMediaPlayer(player);
                         _media.Children.Add(_video);
                         // MediaPlayerElement 的视频合成层不能被背景模糊采样；帧服务模式由 XAML 图像呈现。

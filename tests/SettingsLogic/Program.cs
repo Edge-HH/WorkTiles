@@ -666,6 +666,12 @@ Check(ClockFormat.ShowCornerSeconds(true, ClockFormat.Corner) && !ClockFormat.Sh
 Check(LayoutMetrics.FormatArrangementGap(24, 48, true) == "0.5 格" && LayoutMetrics.FormatArrangementGap(48, 48, true) == "1 格", "吸附到网格时间隔按半格显示");
 Check(LayoutMetrics.FormatArrangementGap(24, 48, false) == "24 px", "未吸附时仍显示像素");
 Check(LayoutMetrics.GridTooDense(4000, 4000, 32) && !LayoutMetrics.GridTooDense(800, 600, 48), "一次要画的格子太多时不显示网格");
+var zoom = VideoPlacement.Place(1920, 1080, 1600, 400, "Zoom");
+Check(zoom.Width >= 1600 - .01 && zoom.Height >= 400 - .01 && zoom.Y < 0 && Math.Abs(zoom.X) < .01, "视频缩放铺满区域并居中裁掉上下");
+var fit = VideoPlacement.Place(1920, 1080, 800, 800, "Fit");
+Check(fit.Width <= 800 + .01 && fit.Height < 800 && fit.Y > 0 && Math.Abs(fit.X) < .01, "视频适应完整显示，上下留边给背景色");
+var stretched = VideoPlacement.Place(1920, 1080, 300, 300, "Stretch");
+Check(stretched.X == 0 && stretched.Y == 0 && stretched.Width == 300 && stretched.Height == 300, "视频拉伸铺满整个区域");
 Check(ToolbarChrome.CornerRadius(0, 120, 48) == 0, "圆角 0 是直角");
 Check(ToolbarChrome.CornerRadius(20, 80, 40) == 20 && ToolbarChrome.CornerRadius(20, 200, 100) == 50, "圆角 20 在任何尺寸都是短边一半的胶囊");
 Check(Math.Abs(ToolbarChrome.CornerRadius(10, 80, 40) / 40 - ToolbarChrome.CornerRadius(10, 200, 100) / 100) < 0.001, "同一档位的圆角比例不随控制窗大小变化");
