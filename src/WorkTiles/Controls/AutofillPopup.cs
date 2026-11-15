@@ -41,6 +41,9 @@ public sealed class AutofillPopup
     private readonly List<AutofillEntry> _entries = [];
     private readonly List<Border> _visuals = [];
     private Brush _rowTextBrush = BoardTheme.TextBrush;
+    private readonly SolidColorBrush _transparentRowBrush = new(Microsoft.UI.Colors.Transparent);
+    private SolidColorBrush? _highlightRowBrush;
+    private Windows.UI.Color _highlightRowColor;
     private bool _light;
     private bool _themed;
     private int _highlight = -1;
@@ -322,10 +325,14 @@ public sealed class AutofillPopup
 
     private void ApplyHighlight()
     {
-        for (int index = 0; index < _visuals.Count; index++)
+        Windows.UI.Color color = HighlightColor();
+        if (_highlightRowBrush is null || _highlightRowColor != color)
         {
-            _visuals[index].Background = new SolidColorBrush(index == _highlight ? HighlightColor() : Microsoft.UI.Colors.Transparent);
+            _highlightRowColor = color;
+            _highlightRowBrush = new SolidColorBrush(color);
         }
+        for (int index = 0; index < _visuals.Count; index++)
+            _visuals[index].Background = index == _highlight ? _highlightRowBrush : _transparentRowBrush;
     }
 
     /// <summary>

@@ -104,6 +104,11 @@ public sealed partial class MainWindow
 
     private void CaptureCurrentProject()
     {
+        if (BoardCanvas is not null)
+        {
+            foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
+                tile.FlushPendingText();
+        }
         if (CurrentProject is { } project) project.Subjects = AppDataStore.CaptureSubjects(ViewModel.Subjects);
         CaptureClockInk();
     }

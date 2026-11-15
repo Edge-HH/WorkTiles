@@ -27,7 +27,9 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _fullScreenLabelTimer = new() { Interval = TimeSpan.FromSeconds(2.2) };
     private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(10) };
-    private readonly NoiseMonitorService _noiseMonitor = new();
+        private readonly NoiseMonitorService _noiseMonitor = new();
+        private double _pendingNoiseAlert;
+        private int _noiseAlertQueued;
     private readonly XiaomiWeatherService _weatherService = new();
     private readonly WeatherCityCatalog _weatherCityCatalog = new();
     private readonly ReleaseUpdateService _updateService = new();
@@ -192,7 +194,19 @@ public sealed partial class MainWindow : Window
         };
         _autoBackupTimer.Tick += (_, _) => RunAutoBackupIfDue();
 
-        _noiseMonitor.FastLevelAvailable += (_, level) => DispatcherQueue.TryEnqueue(() => ProcessNoiseAlert(level));
+        // 采集块大约 50 毫秒来一次。界面忙的时候只保留最新电平，避免把提示判断排成一长队。
+        _noiseMonitor.FastLevelAvailable += (_, level) =>
+        {
+            _pendingNoiseAlert = level;
+            if (Interlocked.Exchange(ref _noiseAlertQueued, 1) == 1) return;
+            if (!DispatcherQueue.TryEnqueue(() =>
+                {
+                    double pending = _pendingNoiseAlert;
+                    Interlocked.Exchange(ref _noiseAlertQueued, 0);
+                    ProcessNoiseAlert(pending);
+                }))
+                Interlocked.Exchange(ref _noiseAlertQueued, 0);
+        };
         _noiseMonitor.LevelAvailable += (_, level) => DispatcherQueue.TryEnqueue(() => UpdateNoiseDisplay(level));
         _noiseMonitor.CaptureFailed += (_, message) => DispatcherQueue.TryEnqueue(() =>
         {

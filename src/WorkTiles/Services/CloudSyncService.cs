@@ -210,12 +210,7 @@ public sealed class CloudSyncService(ProjectStore store)
     {
         CloudSyncSettings cloud = library.Settings.CloudSync;
         using HttpResponseMessage listResponse = await _http.SendAsync(Request(cloud, HttpMethod.Get, "/projects"), cancellationToken);
-        if (listResponse.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
-        {
-            CredentialsRejected = true;
-            LastSyncError = "设备凭据已失效（可能已被吊销或班级已删除），请在设置中重新配对。";
-            return false;
-        }
+        if (NoteIfRejected(listResponse.StatusCode)) return false;
         if (!listResponse.IsSuccessStatusCode) { LastSyncError = $"读取集控项目失败：服务器返回 {(int)listResponse.StatusCode}。"; return false; }
         List<ProjectSummary> summaries = await listResponse.Content.ReadFromJsonAsync<List<ProjectSummary>>(Web, cancellationToken) ?? [];
         foreach (ProjectSummary summary in summaries) await PullOneAsync(library, hooks, summary, null, cancellationToken);
@@ -265,18 +260,21 @@ public sealed class CloudSyncService(ProjectStore store)
         try
         {
             LastSyncError = null;
+            CredentialsRejected = false;
+            bool rejected = false;
             foreach (Guid id in projectIds.Distinct())
             {
                 bool reachable = await StepAsync("同步项目", async () =>
                 {
                     CloudSyncSettings cloud = library.Settings.CloudSync;
                     using HttpResponseMessage response = await _http.SendAsync(Request(cloud, HttpMethod.Get, $"/projects/{id}"), cancellationToken);
+                    if (NoteIfRejected(response.StatusCode)) { rejected = true; return; }
                     if (response.StatusCode == HttpStatusCode.NotFound) return;
                     if (!response.IsSuccessStatusCode) { LastSyncError ??= $"读取项目失败：服务器返回 {(int)response.StatusCode}。"; return; }
                     ProjectSnapshot snapshot = await response.Content.ReadFromJsonAsync<ProjectSnapshot>(Web, cancellationToken) ?? throw new JsonException();
                     await PullOneAsync(library, hooks, new ProjectSummary(snapshot.Id, snapshot.Name, snapshot.Date, snapshot.Revision, snapshot.Deleted, snapshot.UpdatedAt), snapshot, cancellationToken);
                 }, cancellationToken);
-                if (!reachable) break;
+                if (rejected || !reachable) break;
             }
             if (LastSyncError is null) LastSyncAt = DateTime.Now;
         }
@@ -358,12 +356,21 @@ public sealed class CloudSyncService(ProjectStore store)
             string hash = CloudPayload.Hash(payload);
             if (project.SyncRevision > 0 && hash == project.SyncHash) { library.SyncQueue.Remove(operation); wrote |= _newerWhilePending.Remove(project.Id); continue; }
 
-            // 只有内容确实变了才上传附件；上传失败的附件在服务器版本里留空，本机仍保留原图。
+            // 文件还在本机但这次没传上去时，整份项目留在队列里，不能把缺图版本写成已同步。
+            // 本机已经没有的文件仍按空路径上传，避免一份丢失的图片挡住其余修改。
             Dictionary<string, string?> mapped = [];
+            bool uploadDeferred = false;
             foreach (AttachmentState asset in ProjectStore.Attachments(project))
             {
                 if (string.IsNullOrWhiteSpace(asset.Path) || mapped.ContainsKey(asset.Path)) continue;
-                mapped[asset.Path] = await UploadAssetAsync(cloud, asset.Path, cancellationToken);
+                string? reference = await UploadAssetAsync(cloud, asset.Path, cancellationToken);
+                if (reference is null && File.Exists(asset.Path)) { uploadDeferred = true; break; }
+                mapped[asset.Path] = reference;
+            }
+            if (uploadDeferred)
+            {
+                LastSyncError ??= $"项目“{project.Name}”有图片没能上传，已留在本机，稍后重试。";
+                continue;
             }
             if (mapped.Values.Any(x => x is null))
             {
@@ -817,6 +824,16 @@ public sealed class CloudSyncService(ProjectStore store)
         }
         catch (IOException) { return false; }
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
+    }
+
+    private const string CredentialsRejectedMessage = "设备凭据已失效（可能已被吊销或班级已删除），请在设置中重新配对。";
+
+    private bool NoteIfRejected(HttpStatusCode status)
+    {
+        if (status is not (HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)) return false;
+        CredentialsRejected = true;
+        LastSyncError = CredentialsRejectedMessage;
+        return true;
     }
 
     private static HttpRequestMessage Request(CloudSyncSettings cloud, HttpMethod method, string path)

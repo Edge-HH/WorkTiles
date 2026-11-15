@@ -12,6 +12,7 @@ internal static class ImeCandidateFix
 {
     private const int GwlpWndProc = -4;
     private const int GwlExStyle = -20;
+    private const uint WmDestroy = 0x0002;
     private const uint WmImeSetContext = 0x0281;
     private const int IscShowUiAll = unchecked((int)0xC000000F);
     private const int IaceChildren = 0x0001;
@@ -70,7 +71,11 @@ internal static class ImeCandidateFix
         if (msg == WmImeSetContext && wParam != 0)
             lParam |= IscShowUiAll;
         nint old;
-        lock (Gate) { Previous.TryGetValue(hwnd, out old); }
+        lock (Gate)
+        {
+            if (msg == WmDestroy) Previous.Remove(hwnd, out old);
+            else Previous.TryGetValue(hwnd, out old);
+        }
         return old != 0 ? CallWindowProc(old, hwnd, msg, wParam, lParam) : DefWindowProc(hwnd, msg, wParam, lParam);
     }
 

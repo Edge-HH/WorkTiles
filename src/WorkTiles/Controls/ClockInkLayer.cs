@@ -154,13 +154,19 @@ public sealed class ClockInkLayer : Canvas
 
     private void EraseStrokeAt(Point point)
     {
-        var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(
-            pair.Value.Points.Select(p => (p.X, p.Y)).ToList(), point.X, point.Y,
-            Math.Max(8, pair.Value.Thickness * Math.Max(pair.Value.TipScaleX, pair.Value.TipScaleY))));
-        if (hit.Key is null) return;
-        _renderedStrokes.Remove(hit.Key);
-        _strokes?.Remove(hit.Value);
-        Children.Remove(hit.Key);
+        Polyline? shape = null;
+        InkStrokeData? stroke = null;
+        foreach (var pair in _renderedStrokes)
+        {
+            double radius = Math.Max(8, pair.Value.Thickness * Math.Max(pair.Value.TipScaleX, pair.Value.TipScaleY));
+            if (!InkHit.Contains(pair.Value.Points, point.X, point.Y, radius)) continue;
+            shape = pair.Key;
+            stroke = pair.Value;
+        }
+        if (shape is null || stroke is null) return;
+        _renderedStrokes.Remove(shape);
+        _strokes?.Remove(stroke);
+        Children.Remove(shape);
         StrokesChanged?.Invoke();
     }
 

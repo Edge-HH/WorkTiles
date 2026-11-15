@@ -127,10 +127,33 @@ public sealed partial class MainWindow
         return CloudSync.SynchronizeAsync(_library, CloudHooks());
     });
 
-    /// <summary>执行一次同步（完整或定向），之后统一落盘、回收附件目录、展示提示并刷新状态。</summary>
+    private bool _cloudSyncBusy;
+    private bool _cloudSyncFollowUp;
+
+    /// <summary>执行一次同步（完整或定向），之后统一落盘、回收附件目录、展示提示并刷新状态。重叠的触发合并成随后的一整轮。</summary>
     private async Task RunCloudSyncAsync(Func<Task> sync)
     {
         if (!_settings.CloudSync.Enabled || !_storageReady) return;
+        if (_cloudSyncBusy) { _cloudSyncFollowUp = true; return; }
+        _cloudSyncBusy = true;
+        try { await RunCloudSyncBody(sync); }
+        finally
+        {
+            bool again = _cloudSyncFollowUp;
+            _cloudSyncFollowUp = false;
+            _cloudSyncBusy = false;
+            if (again && _settings.CloudSync.Enabled && _storageReady)
+                _ = RunCloudSyncAsync(() =>
+                {
+                    CaptureCurrentProject();
+                    if (CurrentProject is { } project) CloudSyncService.Queue(_library, project);
+                    return CloudSync.SynchronizeAsync(_library, CloudHooks());
+                });
+        }
+    }
+
+    private async Task RunCloudSyncBody(Func<Task> sync)
+    {
         try
         {
             _library.Settings = _settings;
