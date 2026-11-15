@@ -1040,9 +1040,15 @@ public sealed partial class MainWindow
             "the percentage button restores 100%");
         check(_zoomLevelText?.Text == "100%", "the zoom island shows the current percentage");
         // 拖动滑条连续缩放，比例文字与档位按钮同步；点比例按钮时滑条也要回到 100%。
+        bool sliderWasInfinite = _settings.InfiniteBoard;
+        _settings.InfiniteBoard = true;
+        ApplyBoardZoomSliderRange();
         zoomSlider.Value = 220; await NextLayoutAsync();
         check(Math.Abs(BoardScroller.ZoomFactor - 2.2) < .01 && Math.Abs(BoardZoom - 2.2) < .01 && _zoomLevelText?.Text == "220%",
-            $"the zoom slider scales the board ({BoardScroller.ZoomFactor:0.##} / {_zoomLevelText?.Text})");
+            $"the zoom slider scales the infinite board ({BoardScroller.ZoomFactor:0.##} / {_zoomLevelText?.Text})");
+        _settings.InfiniteBoard = sliderWasInfinite;
+        ApplyBoardZoomSliderRange();
+        SetBoardZoom(1); await NextLayoutAsync();
         Invoke(zoomButtons[1]); await NextLayoutAsync();
         check(Math.Abs(zoomSlider.Value - 100) < .01 && Math.Abs(BoardScroller.ZoomFactor - 1) < .001,
             "restoring 100% also moves the slider back");
@@ -1050,24 +1056,31 @@ public sealed partial class MainWindow
         {
             double keptX = zoomSubject.X, keptY = zoomSubject.Y, keptWidth = zoomSubject.TileWidth;
             SetBoardZoom(0.5); await NextLayoutAsync();
-            check(BoardCanvas.Width > BoardScroller.ActualWidth * 1.5,
+            check(Math.Abs(BoardZoom - FixedMinimumBoardZoom) < .01, "fixed board zoom stops at 80%");
+            check(BoardCanvas.Width > BoardScroller.ActualWidth * 1.15,
                 $"zoomed-out board grows to the visible area ({BoardCanvas.Width:0.#} / {BoardScroller.ActualWidth:0.#})");
             zoomSubject.TileWidth = Math.Min(keptWidth, Math.Max(280, BoardCanvas.Width / 4));
             zoomSubject.X = Math.Max(0, BoardCanvas.Width - zoomSubject.TileWidth);
             zoomSubject.Y = 0;
             LayoutChanged(zoomSubject);
-            check(zoomSubject.X > BoardScroller.ActualWidth,
-                "zoomed-out board lets a tile pass the old unscaled edge");
+            check(zoomSubject.X + zoomSubject.TileWidth > BoardScroller.ActualWidth + 40,
+                $"zoomed-out board lets a tile pass the old unscaled edge ({zoomSubject.X + zoomSubject.TileWidth:0.#} / {BoardScroller.ActualWidth:0.#})");
             SetBoardZoom(2); await NextLayoutAsync();
+            check(Math.Abs(BoardZoom - FixedMaximumBoardZoom) < .01, "fixed board zoom stops at 140%");
             var visible = VisibleBoardRect();
-            check(visible.Width < BoardScroller.ActualWidth * 0.6 && visible.Width > 10,
+            check(visible.Width < BoardScroller.ActualWidth * 0.8 && visible.Width > 10,
                 $"zoomed-in arrange area is the visible slice ({visible.Width:0.#} / {BoardScroller.ActualWidth:0.#})");
+            BoardScroller.ChangeView(10000, 10000, null, true); await NextLayoutAsync();
+            double halfWidth = BoardScroller.ActualWidth / 2;
+            double halfHeight = BoardScroller.ActualHeight / 2;
+            check(BoardScroller.HorizontalOffset <= halfWidth + 2 && BoardScroller.VerticalOffset <= halfHeight + 2,
+                $"fixed board pan stays within half a screen ({BoardScroller.HorizontalOffset:0.#},{BoardScroller.VerticalOffset:0.#} / {halfWidth:0.#},{halfHeight:0.#})");
             zoomSubject.X = keptX; zoomSubject.Y = keptY; zoomSubject.TileWidth = keptWidth;
             LayoutChanged(zoomSubject);
             SetBoardZoom(1); await NextLayoutAsync();
         }
         // 查看模式：缩放岛收起，但缩放结果保留，作业板仍可平移。
-        SetBoardZoom(1.5); await NextLayoutAsync();
+        SetBoardZoom(1.25); await NextLayoutAsync();
         SubjectTileControl focusedTile = BoardCanvas.Children.OfType<SubjectTileControl>().First();
         focusedTile.TitleEditor.Focus(FocusState.Programmatic);
         await NextLayoutAsync();
@@ -1093,7 +1106,7 @@ public sealed partial class MainWindow
         ApplyMenuBarOffset();
         UpdateProjectCommands();
         check(ZoomIsland.Visibility == Visibility.Collapsed, "view mode hides the zoom island");
-        check(Math.Abs(BoardScroller.ZoomFactor - 1.5) < .01 && BoardScroller.ZoomMode == ZoomMode.Enabled,
+        check(Math.Abs(BoardScroller.ZoomFactor - 1.25) < .01 && BoardScroller.ZoomMode == ZoomMode.Enabled,
             $"view mode keeps the applied zoom and stays pannable ({BoardScroller.ZoomFactor:0.##})");
         EnterEditing(); ApplyExtendedSettings(); await NextLayoutAsync();
         await FocusEditorAsync();
@@ -1440,7 +1453,7 @@ public sealed partial class MainWindow
         EnterEditing(); _settings.GridStyle = "Grid"; _settings.ShowGridWhileEditing = true; _renderedGridAppearance = string.Empty;
         _settings.InfiniteBoard = false; _settings.GridSize = 48; _renderedGridWidth = 0;
         await NextLayoutAsync();
-        SetBoardZoom(.5); await NextLayoutAsync();
+        SetBoardZoom(.8); await NextLayoutAsync();
         CheckGridCoversViewport("fixed board grid covers the zoomed-out viewport", check);
         SetBoardZoom(1); await NextLayoutAsync();
         _settings.SharedBackgroundEnabled = true;

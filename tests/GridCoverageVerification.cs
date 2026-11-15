@@ -63,8 +63,8 @@ public sealed partial class MainWindow
         ApplyExtendedSettings(); await NextLayoutAsync();
 
         // 固定作业板缩小：视口露出初始屏幕外的四周，网格也要铺到那里。
-        SetBoardZoom(.5); await NextLayoutAsync();
-        CheckGridCoversViewport("fixed board zoomed out to 50%", check);
+        SetBoardZoom(.8); await NextLayoutAsync();
+        CheckGridCoversViewport("fixed board zoomed out to 80%", check);
 
         // 无限作业板缩小：同一要求。
         _settings.InfiniteBoard = true; ApplyExtendedSettings(); await NextLayoutAsync();

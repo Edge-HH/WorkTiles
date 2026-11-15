@@ -1485,23 +1485,19 @@ public sealed partial class MainWindow
         {
             _wasInfiniteBoard = true;
         }
+        ApplyBoardZoomSliderRange();
+        if (!_settings.InfiniteBoard && Math.Abs(ClampBoardZoom(_boardZoom) - _boardZoom) > .001)
+            SetBoardZoom(_boardZoom);
         UpdateBoardBounds(); ApplyToolbarSettings(); ApplyWidgetBackground(); ApplyClockAppearance();
         RecordToolbarActivity(false);
         RefreshAppearancePreviews();
         if (!_settings.InfiniteBoard)
         {
-            // ScrollViewer 在内容尺寸变化的同一轮布局会丢弃 ChangeView；新尺寸提交后再复位。
             // 放大后保留用户看到的位置，只有整块作业板正好铺满视口时才把滚动量归零。
-            double targetZoom = _boardZoom;
-            bool fillViewport = targetZoom <= 1.001;
-            // 复位期间视口会短暂报出旧比例，这段状态不算用户改动。
+            // 比例本身要等尺寸落地后再设，否则滚动视图会停在旧比例。
             _pendingBoardViewReset = true;
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
-            {
-                _pendingBoardViewReset = false;
-                if (_settings.InfiniteBoard) return;
-                BoardScroller.ChangeView(fillViewport ? 0 : null, fillViewport ? 0 : null, (float)targetZoom, true);
-            });
+            ApplyBoardZoomView(_boardZoom <= 1.001);
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => _pendingBoardViewReset = false);
         }
     }
 

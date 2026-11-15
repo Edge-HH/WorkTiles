@@ -17,9 +17,11 @@ namespace WorkTiles;
 /// </summary>
 public sealed partial class MainWindow
 {
-    /// <summary>作业板缩放范围与无限作业板的滚轮缩放保持一致。</summary>
+    /// <summary>无限作业板可以缩得很小或放得很大。固定作业板只允许 80%–140%。</summary>
     internal const double MinimumBoardZoom = 0.2;
     internal const double MaximumBoardZoom = 4;
+    internal const double FixedMinimumBoardZoom = 0.8;
+    internal const double FixedMaximumBoardZoom = 1.4;
     /// <summary>悬浮岛与控制窗共用的边框宽度，等高（竖版等宽）计算必须把它算进去。</summary>
     private double IslandBorderThickness => Math.Clamp(_settings.ToolbarBorderThickness, 0, 20);
     /// <summary>缩放档位：逐档增减比固定步长更容易停在常用比例上。</summary>
@@ -36,6 +38,7 @@ public sealed partial class MainWindow
     private bool _applyingBoardZoom;
     /// <summary>布局刷新后要按新尺寸重新提交缩放，期间视口的中间状态不算用户改动。</summary>
     private bool _pendingBoardViewReset;
+    private int _boardZoomApply;
     private bool _wasInfiniteBoard;
     /// <summary>本次排布把浮岛放在控制窗上下（竖版控制窗）还是左右。</summary>
     private bool _islandVerticalBand;
@@ -60,11 +63,19 @@ public sealed partial class MainWindow
         // Ctrl+滚轮与触摸捏合直接改 ZoomFactor，这里同步记录，刷新设置时不会退回旧比例。
         BoardScroller.ViewChanged += (_, _) =>
         {
-            if (_applyingBoardZoom || _pendingBoardViewReset || Math.Abs(BoardScroller.ZoomFactor - _boardZoom) < .005) return;
-            _boardZoom = Math.Clamp(BoardScroller.ZoomFactor, MinimumBoardZoom, MaximumBoardZoom);
+            if (_applyingBoardZoom || _pendingBoardViewReset) return;
+            double allowed = ClampBoardZoom(BoardScroller.ZoomFactor);
+            if (Math.Abs(allowed - BoardScroller.ZoomFactor) > .02)
+            {
+                SetBoardZoom(allowed);
+                return;
+            }
+            if (Math.Abs(allowed - _boardZoom) < .005 && !FixedBoardPanExceedsLimit()) return;
+            _boardZoom = allowed;
             UpdateZoomLevelText();
             // 捏合改了比例后，固定作业板要按新的可见范围伸缩，否则缩小后四周是放不进磁贴的空墙。
             UpdateBoardBounds();
+            ClampFixedBoardPan();
         };
         BuildZoomIsland();
     }
@@ -83,8 +94,8 @@ public sealed partial class MainWindow
         ZoomIslandItems.Children.Add(CreateZoomIslandButton(_zoomLevelText, "恢复 100%", () => SetBoardZoom(1)));
         _zoomSlider = new Slider
         {
-            Minimum = Math.Round(MinimumBoardZoom * 100),
-            Maximum = Math.Round(MaximumBoardZoom * 100),
+            Minimum = Math.Round(CurrentMinimumBoardZoom() * 100),
+            Maximum = Math.Round(CurrentMaximumBoardZoom() * 100),
             StepFrequency = 1,
             SmallChange = 1,
             LargeChange = 10,
@@ -666,27 +677,102 @@ public sealed partial class MainWindow
             Math.Max(0, island.DesiredSize.Height - margin.Top - margin.Bottom));
     }
 
+    private double CurrentMinimumBoardZoom() => _settings.InfiniteBoard ? MinimumBoardZoom : FixedMinimumBoardZoom;
+    private double CurrentMaximumBoardZoom() => _settings.InfiniteBoard ? MaximumBoardZoom : FixedMaximumBoardZoom;
+    private double ClampBoardZoom(double factor) => Math.Clamp(factor, CurrentMinimumBoardZoom(), CurrentMaximumBoardZoom());
+
     private void StepBoardZoom(int direction)
     {
+        double minimum = CurrentMinimumBoardZoom();
+        double maximum = CurrentMaximumBoardZoom();
+        double[] steps = BoardZoomSteps.Where(step => step >= minimum - .001 && step <= maximum + .001).ToArray();
         double target = direction > 0
-            ? BoardZoomSteps.FirstOrDefault(step => step > _boardZoom + .001, MaximumBoardZoom)
-            : BoardZoomSteps.LastOrDefault(step => step < _boardZoom - .001, MinimumBoardZoom);
+            ? steps.FirstOrDefault(step => step > _boardZoom + .001, maximum)
+            : steps.LastOrDefault(step => step < _boardZoom - .001, minimum);
         SetBoardZoom(target);
     }
 
-    /// <summary>应用作业板缩放：比例交给作业板视口，缩放后仍能滚动到四周的磁贴。</summary>
+    /// <summary>应用作业板缩放。固定作业板限制在 80%–140%，避免把整块板缩到看不见或放到只剩一角。</summary>
     internal void SetBoardZoom(double factor)
     {
-        _boardZoom = Math.Clamp(factor, MinimumBoardZoom, MaximumBoardZoom);
+        _boardZoom = ClampBoardZoom(factor);
+        ApplyBoardZoomSliderRange();
         UpdateZoomLevelText();
+        // 先改画板尺寸。同一轮布局里的 ChangeView 会被丢掉，所以等这一帧布局完成后再设比例。
+        UpdateBoardBounds();
+        ApplyBoardZoomView(resetOffset: false);
+    }
+
+    /// <summary>
+    /// 把已经记下的比例交给作业板。尺寸变化和改比例必须隔一帧，否则滚动视图只改偏移、比例停在旧值。
+    /// </summary>
+    private void ApplyBoardZoomView(bool resetOffset)
+    {
+        float zoom = (float)_boardZoom;
+        int apply = ++_boardZoomApply;
+        bool infinite = _settings.InfiniteBoard;
         _applyingBoardZoom = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (apply != _boardZoomApply) return;
+            BoardScroller.UpdateLayout();
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                if (apply != _boardZoomApply) return;
+                if (BoardScroller.ZoomMode != ZoomMode.Enabled)
+                {
+                    _applyingBoardZoom = false;
+                    return;
+                }
+                double? x = resetOffset ? 0 : null;
+                double? y = resetOffset ? 0 : null;
+                if (!resetOffset && !infinite && BoardScroller.ActualWidth > 1)
+                {
+                    x = Math.Min(BoardScroller.HorizontalOffset, BoardScroller.ActualWidth / 2);
+                    y = Math.Min(BoardScroller.VerticalOffset, BoardScroller.ActualHeight / 2);
+                }
+                BoardScroller.ChangeView(x, y, zoom, true);
+                // 比例回写是异步的。标志再留一帧，避免旧比例把刚刚设下的值盖掉。
+                DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    if (apply == _boardZoomApply) _applyingBoardZoom = false;
+                });
+            });
+        });
+    }
+
+    private void ApplyBoardZoomSliderRange()
+    {
+        if (_zoomSlider is null) return;
+        double minimum = Math.Round(CurrentMinimumBoardZoom() * 100);
+        double maximum = Math.Round(CurrentMaximumBoardZoom() * 100);
+        if (Math.Abs(_zoomSlider.Minimum - minimum) < .01 && Math.Abs(_zoomSlider.Maximum - maximum) < .01) return;
+        _syncingZoomSlider = true;
         try
         {
-            BoardScroller.ZoomMode = ZoomMode.Enabled;
-            BoardScroller.ChangeView(null, null, (float)_boardZoom, true);
+            _zoomSlider.Minimum = minimum;
+            _zoomSlider.Maximum = maximum;
         }
+        finally { _syncingZoomSlider = false; }
+    }
+
+    private bool FixedBoardPanExceedsLimit()
+    {
+        if (_settings.InfiniteBoard || BoardScroller.ActualWidth < 1) return false;
+        // HorizontalOffset 是屏幕上的滚动距离，半个屏幕就是视口宽高的一半。
+        return BoardScroller.HorizontalOffset > BoardScroller.ActualWidth / 2 + 1
+            || BoardScroller.VerticalOffset > BoardScroller.ActualHeight / 2 + 1;
+    }
+
+    /// <summary>固定作业板平移最多半个屏幕，避免把内容整个拖出画面。</summary>
+    private void ClampFixedBoardPan()
+    {
+        if (!FixedBoardPanExceedsLimit()) return;
+        double x = Math.Min(BoardScroller.HorizontalOffset, BoardScroller.ActualWidth / 2);
+        double y = Math.Min(BoardScroller.VerticalOffset, BoardScroller.ActualHeight / 2);
+        _applyingBoardZoom = true;
+        try { BoardScroller.ChangeView(x, y, (float)_boardZoom, true); }
         finally { _applyingBoardZoom = false; }
-        UpdateBoardBounds();
     }
 
     private void UpdateZoomLevelText()
