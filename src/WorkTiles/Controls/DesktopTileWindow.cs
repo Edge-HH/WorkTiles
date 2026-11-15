@@ -469,6 +469,9 @@ internal sealed class DesktopCommandWindow
 
     public void ApplyTheme(ElementTheme theme)
     {
+        bool light = theme == ElementTheme.Light || (theme != ElementTheme.Dark && BoardTheme.IsLight);
+        Brush clear = BoardTheme.ButtonClearBrushFor(light);
+        foreach (ButtonBase button in _buttons) button.Background = clear;
         foreach (Segment segment in _segments) segment.ApplyTheme(theme);
     }
 
@@ -800,7 +803,7 @@ internal sealed class DesktopCommandWindow
         return button;
     }
 
-    private static Brush HitBrush() => new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
+    private static Brush HitBrush() => BoardTheme.ButtonClearBrush;
 
     private readonly record struct PlacedSegment(Segment Segment, int X, int Y, int W, int H);
 

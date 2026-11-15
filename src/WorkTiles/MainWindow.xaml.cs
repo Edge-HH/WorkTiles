@@ -24,7 +24,6 @@ public sealed partial class MainWindow : Window
     // 网格大小只取整数：旧配置里的小数值（例如拖动过旧版滑块留下的 48.37）在这里统一收敛。
     private double GridSize => Math.Clamp(Math.Round(_settings.GridSize), 16, 160);
     private static readonly Brush FullScreenHintBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 220, 38, 38));
-    private static readonly Brush ToolbarButtonBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0));
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _fullScreenLabelTimer = new() { Interval = TimeSpan.FromSeconds(2.2) };
     private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(10) };
@@ -1446,7 +1445,7 @@ public sealed partial class MainWindow : Window
     {
         _fullScreenLabelTimer.Stop();
         _showFullScreenExitHint = false;
-        FullScreenButton.Background = ToolbarButtonBrush;
+        FullScreenButton.ClearValue(Control.BackgroundProperty);
         FullScreenButton.Foreground = BoardTheme.TextBrush;
         ApplyToolbarSettings();
     }

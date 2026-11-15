@@ -29,7 +29,7 @@ public sealed class InkWidthPresetButton : Button
         Padding = new Thickness(0);
         HorizontalContentAlignment = HorizontalAlignment.Center;
         VerticalContentAlignment = VerticalAlignment.Center;
-        Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        Background = BoardTheme.ButtonClearBrush;
         _dot = new Ellipse();
         Content = _dot;
         AutomationProperties.SetName(this, name);
@@ -55,7 +55,11 @@ public sealed class InkWidthPresetButton : Button
         AutomationProperties.SetItemStatus(this, selected ? "已选中" : "未选中");
     }
 
-    public void RefreshTheme() => _dot.Fill = IsSelected ? AccentBrush() : BoardTheme.TextBrush;
+    public void RefreshTheme()
+    {
+        Background = BoardTheme.ButtonClearBrush;
+        _dot.Fill = IsSelected ? AccentBrush() : BoardTheme.TextBrush;
+    }
 
     private static Brush AccentBrush() => (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"];
 }
