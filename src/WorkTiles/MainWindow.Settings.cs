@@ -25,6 +25,7 @@ public sealed partial class MainWindow
     private Action? _refreshHomeworkAutofill;
     private Action? _refreshSubjectAutofill;
     private bool _surfaceRefreshQueued;
+    private bool _toolbarChromeQueued;
 
     private sealed record SettingsPage(StackPanel Container, UIElement Content, string Title, string Description);
 
@@ -1036,7 +1037,7 @@ public sealed partial class MainWindow
         return combo;
     }
 
-    private StackPanel SurfaceColorEditor(string color, double opacity, Func<bool> cleared, Action<string, bool> updateColor, Action<double> updateOpacity)
+    private StackPanel SurfaceColorEditor(string color, double opacity, Func<bool> cleared, Action<string, bool> updateColor, Action<double> updateOpacity, Action? changed = null)
     {
         StackPanel panel = SettingsStack();
         ColorPicker picker = new() { IsAlphaEnabled = false, IsHexInputVisible = true,
@@ -1056,7 +1057,7 @@ public sealed partial class MainWindow
         flyoutContent.Children.Add(apply);
         panel.Children.Add(new Button { Content = "背景颜色", Flyout = flyout });
         Slider transparency = Range("背景颜色透明度（%）", 0, 100, (1 - opacity) * 100,
-            value => updateOpacity(1 - value / 100), QueueSurfaceRefresh);
+            value => updateOpacity(1 - value / 100), changed ?? QueueSurfaceRefresh);
         transparency.StepFrequency = 1;
         panel.Children.Add(transparency);
         Button clear = new() { Content = "清除背景颜色" };
@@ -1114,7 +1115,7 @@ public sealed partial class MainWindow
         panel.Children.Add(SurfaceColorEditor(_settings.ToolbarBackgroundColor, _settings.ToolbarBackgroundOpacity,
             () => _settings.ToolbarBackgroundColorCleared,
             (value, cleared) => { _settings.ToolbarBackgroundColor = value; _settings.ToolbarBackgroundColorCleared = cleared; },
-            value => _settings.ToolbarBackgroundOpacity = value));
+            value => _settings.ToolbarBackgroundOpacity = value, QueueToolbarChrome));
         panel.Children.Add(Toggle("自动隐藏", _settings.ToolbarAutoHide, value => _settings.ToolbarAutoHide = value, read: () => _settings.ToolbarAutoHide));
         NumberBox hideTime = new() { Header = "自动隐藏时间（秒）", Minimum = 1, Maximum = 600,
             Value = ToolbarAutoHidePolicy.NormalizeDelay(_settings.ToolbarAutoHideSeconds),
@@ -1132,11 +1133,11 @@ public sealed partial class MainWindow
         panel.Children.Add(Note("仅在查看模式下无操作时隐藏；移动鼠标、触摸或按键后重新显示。飞出动画朝最近的窗口边框移动。"));
         _refreshSettingAvailability.Add(() => hideTime.IsEnabled = animation.IsEnabled = _settings.ToolbarAutoHide);
         panel.Children.Add(Toggle("无字模式", _settings.ToolbarIconOnly, value => _settings.ToolbarIconOnly = value, read: () => _settings.ToolbarIconOnly));
-        panel.Children.Add(Range("大小", .6, 2, _settings.ToolbarScale, value => _settings.ToolbarScale = value, read: () => _settings.ToolbarScale));
+        panel.Children.Add(Range("大小", .6, 2, _settings.ToolbarScale, value => _settings.ToolbarScale = value, QueueToolbarChrome, read: () => _settings.ToolbarScale));
         panel.Children.Add(Range("圆角", 0, ToolbarChrome.MaxRoundness, ToolbarChrome.NormalizeRoundness(_settings.ToolbarRadius),
-            value => _settings.ToolbarRadius = ToolbarChrome.NormalizeRoundness(value), read: () => ToolbarChrome.NormalizeRoundness(_settings.ToolbarRadius)));
+            value => _settings.ToolbarRadius = ToolbarChrome.NormalizeRoundness(value), QueueToolbarChrome, read: () => ToolbarChrome.NormalizeRoundness(_settings.ToolbarRadius)));
         panel.Children.Add(Range("边框粗细", 0, 20, _settings.ToolbarBorderThickness,
-            value => _settings.ToolbarBorderThickness = value, ToolbarBorderChanged, read: () => _settings.ToolbarBorderThickness));
+            value => _settings.ToolbarBorderThickness = value, QueueToolbarChrome, read: () => _settings.ToolbarBorderThickness));
         ColorPicker borderColor = new()
         {
             IsAlphaEnabled = true, IsHexInputVisible = true,
@@ -1152,11 +1153,11 @@ public sealed partial class MainWindow
         resetBorder.Click += (_, _) => { _settings.ToolbarBorderColor = ""; ToolbarBorderChanged(); };
         panel.Children.Add(resetBorder);
         panel.Children.Add(Note("控制窗、画笔栏和浮岛共用这套边框；粗细为 0 时没有边框。颜色默认跟随主题线条色，设定后不再随深浅主题变化。"));
-        var horizontal = Range("距左右边框", 0, 200, _settings.ToolbarHorizontalInset, value => _settings.ToolbarHorizontalInset = value, read: () => _settings.ToolbarHorizontalInset);
-        var vertical = Range("距上下边框", 0, 200, _settings.ToolbarVerticalInset, value => _settings.ToolbarVerticalInset = value, read: () => _settings.ToolbarVerticalInset);
+        var horizontal = Range("距左右边框", 0, 200, _settings.ToolbarHorizontalInset, value => _settings.ToolbarHorizontalInset = value, QueueToolbarChrome, read: () => _settings.ToolbarHorizontalInset);
+        var vertical = Range("距上下边框", 0, 200, _settings.ToolbarVerticalInset, value => _settings.ToolbarVerticalInset = value, QueueToolbarChrome, read: () => _settings.ToolbarVerticalInset);
         panel.Children.Add(horizontal); panel.Children.Add(vertical);
         panel.Children.Add(Toggle("毛玻璃效果", _settings.ToolbarGlass, value => _settings.ToolbarGlass = value, read: () => _settings.ToolbarGlass));
-        var blur = Range("模糊程度", 0, 100, _settings.ToolbarBlur, value => _settings.ToolbarBlur = value, QueueSurfaceRefresh, read: () => _settings.ToolbarBlur); panel.Children.Add(blur);
+        var blur = Range("模糊程度", 0, 100, _settings.ToolbarBlur, value => _settings.ToolbarBlur = value, QueueToolbarChrome, read: () => _settings.ToolbarBlur); panel.Children.Add(blur);
         _refreshSettingAvailability.Add(() =>
         {
             horizontal.Visibility = _settings.ToolbarPosition.EndsWith("Center") ? Visibility.Collapsed : Visibility.Visible;
@@ -1356,6 +1357,20 @@ public sealed partial class MainWindow
 
     private bool UseSharedBackground => _settings.LayoutMode == "Split" && _settings.SharedBackgroundEnabled;
 
+    /// <summary>控制窗滑块只改这一块窗口和它的预览。拖动时合并到下一帧，不再整窗重刷，滑块才能跟着走。</summary>
+    private void QueueToolbarChrome()
+    {
+        if (_toolbarChromeQueued) return;
+        _toolbarChromeQueued = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            _toolbarChromeQueued = false;
+            ApplyToolbarSettings();
+            RefreshAppearancePreviews();
+            ScheduleSave();
+        });
+    }
+
     /// <summary>连续外观滑块（模糊、透明度）合并到同一帧只刷背景层，拖动时不再全量重建布局。</summary>
     private void QueueSurfaceRefresh()
     {
@@ -1492,10 +1507,17 @@ public sealed partial class MainWindow
             pair.Label.VerticalAlignment = horizontalFullScreenHint ? VerticalAlignment.Center : VerticalAlignment.Stretch;
             // 竖版统一把较小的标签放在图标下方，避免文字从侧面撑宽悬浮窗。
             bool labelFirst = !expandFullScreenHint && !vertical && position.StartsWith("Top");
-            content.Children.Clear();
-            if (labelFirst) content.Children.Add(pair.Label);
-            content.Children.Add(pair.Icon);
-            if (!labelFirst) content.Children.Add(pair.Label);
+            // 尺寸连续变化时子元素顺序不变。每次清空再挂回去会强迫整条控制窗重新测量，滑块就被拖住。
+            bool ordered = content.Children.Count == 2
+                && ReferenceEquals(content.Children[labelFirst ? 0 : 1], pair.Label)
+                && ReferenceEquals(content.Children[labelFirst ? 1 : 0], pair.Icon);
+            if (!ordered)
+            {
+                content.Children.Clear();
+                if (labelFirst) content.Children.Add(pair.Label);
+                content.Children.Add(pair.Icon);
+                if (!labelFirst) content.Children.Add(pair.Label);
+            }
             button.Width = expandFullScreenHint && !vertical
                 ? double.NaN
                 : (_settings.ToolbarIconOnly ? 44 : vertical ? 64 : 88) * scale;

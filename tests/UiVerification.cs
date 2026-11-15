@@ -1968,6 +1968,15 @@ public sealed partial class MainWindow
         ApplyExtendedSettings(); await NextLayoutAsync();
         check(ReferenceEquals(toolbarGlassPreview.Background, toolbarBrush) && Math.Abs(toolbarBrush.Amount - 64) < .01,
             "toolbar preview updates glass in place");
+        double radiusBefore = toolbarGlassPreview.CornerRadius.TopLeft;
+        _settings.ToolbarScale = 1.4;
+        _settings.ToolbarRadius = 4;
+        ApplyExtendedSettings(); await NextLayoutAsync();
+        check(ReferenceEquals(FindVisuals<Border>(_appearancePreviews["Toolbar"]).Single(border => border.Name == "ToolbarPreviewFrame"), toolbarGlassPreview)
+            && Math.Abs(toolbarGlassPreview.CornerRadius.TopLeft - radiusBefore) > 1,
+            "toolbar preview keeps its frame while size and corner change");
+        _settings.ToolbarScale = 1;
+        _settings.ToolbarRadius = 14;
         _settings.ToolbarGlass = originalToolbarGlass;
         _settings.ToolbarBlur = originalToolbarBlur;
         ApplyExtendedSettings(); await NextLayoutAsync();

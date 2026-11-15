@@ -245,7 +245,7 @@ public sealed partial class MainWindow
             else if (scene.Parent is Viewbox { Parent: Border frame }) frame.BorderBrush = BoardTheme.LineBrush;
             string key = kind switch
             {
-                "Toolbar" => $"{BoardTheme.IsLight}|{RootShell.ActualWidth}|{RootShell.ActualHeight}|{_settings.ToolbarPosition}|{_settings.ToolbarScale}|{_settings.ToolbarIconOnly}|{_settings.ToolbarRadius}|{_settings.ToolbarHorizontalInset}|{_settings.ToolbarVerticalInset}|{_settings.ToolbarBorderThickness}|{_settings.ToolbarBorderColor}",
+                "Toolbar" => $"{BoardTheme.IsLight}|{RootShell.ActualWidth}|{RootShell.ActualHeight}|{_settings.ToolbarPosition}|{_settings.ToolbarIconOnly}",
                 // 模糊、透明度和颜色只改卡片上已有的画笔，不把整张预览拆掉重建。
                 "Components" => $"{BoardTheme.IsLight}",
                 "Clock" => $"{BoardTheme.IsLight}|{_settings.ClockFontFamily}|{_settings.ClockFontWeight}|{_settings.ClockColor}",
@@ -890,61 +890,79 @@ public sealed partial class MainWindow
     {
         string position = _settings.ToolbarPosition;
         bool vertical = position.StartsWith("Center");
-        double scale = Math.Clamp(_settings.ToolbarScale, .6, 2);
-        double previewBorder = IslandBorderThickness;
-        double toolbarWidth = ((vertical ? (_settings.ToolbarIconOnly ? 44 : 64) : (_settings.ToolbarIconOnly ? 44 : 88) * 3 + 8) + 14) * scale + previewBorder * 2;
-        double toolbarHeight = (((_settings.ToolbarIconOnly ? 44 : 64) * (vertical ? 3 : 1)) + (vertical ? 8 : 0) + 14) * scale + previewBorder * 2;
-        // 在实际窗口坐标中截取控制窗附近，保持预览宽高比，避免整窗缩小和留黑边。
-        double cropHeight = Math.Max(300, Math.Max(toolbarHeight + 64, (toolbarWidth + 64) * 300 / 640));
-        double cropWidth = cropHeight * 640 / 300;
-        Grid viewport = new()
-        {
-            Width = Math.Max(cropWidth, Math.Max(RootShell.ActualWidth, toolbarWidth + _settings.ToolbarHorizontalInset * 2)),
-            Height = Math.Max(cropHeight, Math.Max(RootShell.ActualHeight, toolbarHeight + _settings.ToolbarVerticalInset * 2))
-        };
+        Grid viewport = new();
         BackgroundVisual background = new() { MediaStretchOverride = Stretch.UniformToFill };
         background.Apply(UseSharedBackground ? _settings.SharedBackground : _settings.BoardBackground, BoardTheme.SurfaceBrush);
         _buildingPreviewRefreshers?.Add(() => background.Apply(UseSharedBackground ? _settings.SharedBackground : _settings.BoardBackground, BoardTheme.SurfaceBrush));
         viewport.Children.Add(background);
-        StackPanel buttons = new() { Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal, Spacing = 4 * scale };
-        double frameRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, toolbarWidth, toolbarHeight);
+        StackPanel buttons = new() { Orientation = vertical ? Orientation.Vertical : Orientation.Horizontal };
+        List<(Button Button, FluentIcon Icon, TextBlock Label, StackPanel Content)> previewButtons = [];
         foreach (var (glyph, label) in new[] { (FluentGlyphs.Edit, "编辑看板"), (FluentGlyphs.Settings, "设置"), (FluentGlyphs.FullScreen, "进入全屏") })
         {
-            StackPanel content = new() { Orientation = Orientation.Vertical,
-                Spacing = (vertical ? 2 : 4) * scale, HorizontalAlignment = HorizontalAlignment.Center };
-            FluentIcon icon = new() { Glyph = glyph, FontSize = 18 * scale, Foreground = BoardTheme.TextBrush };
-            TextBlock text = new() { Text = label, FontSize = (vertical ? 8 : 10) * scale, Foreground = BoardTheme.TextBrush,
-                HorizontalAlignment = HorizontalAlignment.Center, Visibility = _settings.ToolbarIconOnly ? Visibility.Collapsed : Visibility.Visible };
+            StackPanel content = new() { Orientation = Orientation.Vertical, HorizontalAlignment = HorizontalAlignment.Center };
+            FluentIcon icon = new() { Glyph = glyph, Foreground = BoardTheme.TextBrush };
+            TextBlock text = new() { Text = label, Foreground = BoardTheme.TextBrush, HorizontalAlignment = HorizontalAlignment.Center,
+                Visibility = _settings.ToolbarIconOnly ? Visibility.Collapsed : Visibility.Visible };
             bool labelFirst = !vertical && position.StartsWith("Top");
             if (labelFirst) content.Children.Add(text);
             content.Children.Add(icon);
             if (!labelFirst) content.Children.Add(text);
-            double buttonWidth = (_settings.ToolbarIconOnly ? 44 : vertical ? 64 : 88) * scale;
-            double buttonHeight = (_settings.ToolbarIconOnly ? 44 : 64) * scale;
-            buttons.Children.Add(new Button { Width = buttonWidth,
-                Height = buttonHeight, Padding = new Thickness(6 * scale),
-                CornerRadius = MatchToolbarButtonRadius(frameRadius, 7 * scale, buttonWidth, buttonHeight),
-                Style = SettingsButton.Style, Content = content, IsTabStop = false });
+            Button button = new() { Style = SettingsButton.Style, Content = content, IsTabStop = false };
+            previewButtons.Add((button, icon, text, content));
+            buttons.Children.Add(button);
         }
         Border frame = new()
         {
-            Name = "ToolbarPreviewFrame", Child = buttons, Padding = new Thickness(7 * scale), CornerRadius = new CornerRadius(frameRadius),
+            Name = "ToolbarPreviewFrame", Child = buttons,
             Background = CreateToolbarBackground(),
-            BorderBrush = CreateToolbarBorder(_settings.ToolbarBorderColor), BorderThickness = new Thickness(previewBorder),
+            BorderBrush = CreateToolbarBorder(_settings.ToolbarBorderColor),
             HorizontalAlignment = position.EndsWith("Left") ? HorizontalAlignment.Left : position.EndsWith("Right") ? HorizontalAlignment.Right : HorizontalAlignment.Center,
-            VerticalAlignment = position.StartsWith("Top") ? VerticalAlignment.Top : vertical ? VerticalAlignment.Center : VerticalAlignment.Bottom,
-            Margin = new Thickness(_settings.ToolbarHorizontalInset, _settings.ToolbarVerticalInset, _settings.ToolbarHorizontalInset, _settings.ToolbarVerticalInset)
+            VerticalAlignment = position.StartsWith("Top") ? VerticalAlignment.Top : vertical ? VerticalAlignment.Center : VerticalAlignment.Bottom
         };
-        _buildingPreviewRefreshers?.Add(() => frame.Background = CreateToolbarBackground(frame.Background));
         viewport.Children.Add(frame);
-        double centerX = position.EndsWith("Left") ? _settings.ToolbarHorizontalInset + toolbarWidth / 2
-            : position.EndsWith("Right") ? viewport.Width - _settings.ToolbarHorizontalInset - toolbarWidth / 2 : viewport.Width / 2;
-        double centerY = position.StartsWith("Top") ? _settings.ToolbarVerticalInset + toolbarHeight / 2
-            : vertical ? viewport.Height / 2 : viewport.Height - _settings.ToolbarVerticalInset - toolbarHeight / 2;
-        Canvas crop = new() { Width = cropWidth, Height = cropHeight,
-            Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, cropWidth, cropHeight) } };
-        Canvas.SetLeft(viewport, -Math.Clamp(centerX - cropWidth / 2, 0, viewport.Width - cropWidth));
-        Canvas.SetTop(viewport, -Math.Clamp(centerY - cropHeight / 2, 0, viewport.Height - cropHeight));
+        Canvas crop = new();
+        void Layout()
+        {
+            double scale = Math.Clamp(_settings.ToolbarScale, .6, 2);
+            double previewBorder = IslandBorderThickness;
+            double toolbarWidth = ((vertical ? (_settings.ToolbarIconOnly ? 44 : 64) : (_settings.ToolbarIconOnly ? 44 : 88) * 3 + 8) + 14) * scale + previewBorder * 2;
+            double toolbarHeight = (((_settings.ToolbarIconOnly ? 44 : 64) * (vertical ? 3 : 1)) + (vertical ? 8 : 0) + 14) * scale + previewBorder * 2;
+            double cropHeight = Math.Max(300, Math.Max(toolbarHeight + 64, (toolbarWidth + 64) * 300 / 640));
+            double cropWidth = cropHeight * 640 / 300;
+            viewport.Width = Math.Max(cropWidth, Math.Max(RootShell.ActualWidth, toolbarWidth + _settings.ToolbarHorizontalInset * 2));
+            viewport.Height = Math.Max(cropHeight, Math.Max(RootShell.ActualHeight, toolbarHeight + _settings.ToolbarVerticalInset * 2));
+            buttons.Spacing = 4 * scale;
+            double frameRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, toolbarWidth, toolbarHeight);
+            foreach (var (button, icon, label, content) in previewButtons)
+            {
+                double buttonWidth = (_settings.ToolbarIconOnly ? 44 : vertical ? 64 : 88) * scale;
+                double buttonHeight = (_settings.ToolbarIconOnly ? 44 : 64) * scale;
+                content.Spacing = (vertical ? 2 : 4) * scale;
+                icon.FontSize = 18 * scale;
+                label.FontSize = (vertical ? 8 : 10) * scale;
+                button.Width = buttonWidth;
+                button.Height = buttonHeight;
+                button.Padding = new Thickness(6 * scale);
+                button.CornerRadius = MatchToolbarButtonRadius(frameRadius, 7 * scale, buttonWidth, buttonHeight);
+            }
+            frame.Padding = new Thickness(7 * scale);
+            frame.CornerRadius = new CornerRadius(frameRadius);
+            frame.BorderThickness = new Thickness(previewBorder);
+            frame.Margin = new Thickness(_settings.ToolbarHorizontalInset, _settings.ToolbarVerticalInset, _settings.ToolbarHorizontalInset, _settings.ToolbarVerticalInset);
+            frame.Background = CreateToolbarBackground(frame.Background);
+            frame.BorderBrush = CreateToolbarBorder(_settings.ToolbarBorderColor);
+            double centerX = position.EndsWith("Left") ? _settings.ToolbarHorizontalInset + toolbarWidth / 2
+                : position.EndsWith("Right") ? viewport.Width - _settings.ToolbarHorizontalInset - toolbarWidth / 2 : viewport.Width / 2;
+            double centerY = position.StartsWith("Top") ? _settings.ToolbarVerticalInset + toolbarHeight / 2
+                : vertical ? viewport.Height / 2 : viewport.Height - _settings.ToolbarVerticalInset - toolbarHeight / 2;
+            crop.Width = cropWidth;
+            crop.Height = cropHeight;
+            crop.Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(0, 0, cropWidth, cropHeight) };
+            Canvas.SetLeft(viewport, -Math.Clamp(centerX - cropWidth / 2, 0, Math.Max(0, viewport.Width - cropWidth)));
+            Canvas.SetTop(viewport, -Math.Clamp(centerY - cropHeight / 2, 0, Math.Max(0, viewport.Height - cropHeight)));
+        }
+        Layout();
+        _buildingPreviewRefreshers?.Add(Layout);
         crop.Children.Add(viewport);
         return new Viewbox { Stretch = Stretch.Uniform, Child = crop };
     }
