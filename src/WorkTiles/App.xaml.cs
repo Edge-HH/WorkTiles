@@ -145,6 +145,7 @@ public partial class App : Application
     private void ShowInstancePrompt(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
     {
         InstancePromptWindow? prompt = null;
+        bool becameMain = false;
         prompt = new InstancePromptWindow(async () =>
         {
             prompt!.SetBusy("正在退出正在运行的实例…");
@@ -155,6 +156,7 @@ public partial class App : Application
                 prompt.AllowBack();
                 return;
             }
+            becameMain = true;
             StartMainWindow(owned, startFullScreen, launchArgs);
             prompt.Close();
         }, () =>
@@ -163,6 +165,12 @@ public partial class App : Application
             instanceGate.Dispose();
             prompt!.Close();
         });
+        prompt.Closed += (_, _) =>
+        {
+            if (becameMain) return;
+            instanceGate.Dispose();
+            Exit();
+        };
         prompt.Activate();
     }
 

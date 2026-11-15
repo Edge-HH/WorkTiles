@@ -357,6 +357,7 @@ public sealed partial class MainWindow
         };
         try
         {
+            _allowClose = true;
             _ = System.Diagnostics.Process.Start(start) ?? throw new IOException("无法启动软件。");
         }
         catch (Exception ex)
