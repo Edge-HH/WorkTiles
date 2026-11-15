@@ -10,6 +10,7 @@ public partial class App : Application
     public App()
     {
         InitializeComponent();
+        SystemAccent.Start();
         UnhandledException += (_, args) => WriteCrashLog(new Exception(args.Message, args.Exception));
         AppDomain.CurrentDomain.UnhandledException += (_, args) => WriteCrashLog(args.ExceptionObject as Exception);
     }
@@ -30,6 +31,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
+        SystemAccent.Apply();
         LaunchArgs launchArgs = LaunchArgs.Parse(Environment.GetCommandLineArgs().Skip(1));
         // 发布流水线使用真实窗口及资源加载路径；隔离复制目录由验证脚本负责。
         if (Environment.GetCommandLineArgs().Contains("--smoke-test"))

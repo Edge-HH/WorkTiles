@@ -125,6 +125,19 @@ public sealed partial class MainWindow
                     AppDomain.CurrentDomain.FirstChanceException -= backdropExceptionHandler;
                 }
                 Check(backdropExceptions.Count == 0, "Mica configuration does not throw while window focus changes");
+                Windows.UI.ViewManagement.UISettings accentSettings = new();
+                Windows.UI.Color windowsAccent = accentSettings.GetColorValue(BoardTheme.IsLight
+                    ? Windows.UI.ViewManagement.UIColorType.AccentDark1
+                    : Windows.UI.ViewManagement.UIColorType.AccentLight2);
+                SolidColorBrush brandBrush = (SolidColorBrush)Application.Current.Resources["BoardBrandBrush"];
+                SolidColorBrush accentFill = (SolidColorBrush)Application.Current.Resources["AccentFillColorDefaultBrush"];
+                Check(brandBrush.Color.R == windowsAccent.R && brandBrush.Color.G == windowsAccent.G && brandBrush.Color.B == windowsAccent.B
+                    && accentFill.Color.R == windowsAccent.R && accentFill.Color.G == windowsAccent.G && accentFill.Color.B == windowsAccent.B,
+                    "brand color and controls follow the Windows accent");
+                Check(FindVisuals<FluentIcon>(BrandRegion).Any(icon => icon.Symbol == "Board"
+                    && icon.Foreground is SolidColorBrush iconBrush
+                    && iconBrush.Color.R == windowsAccent.R && iconBrush.Color.G == windowsAccent.G && iconBrush.Color.B == windowsAccent.B),
+                    "menu bar icon follows the Windows accent");
                 ShowSettings();
                 await NextLayoutAsync();
                 var settingsPreviewEditors = FindVisuals<RichEditBox>(_appearancePreviews["Tile"]).ToList();
