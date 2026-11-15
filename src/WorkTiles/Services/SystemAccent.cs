@@ -112,16 +112,38 @@ public static class SystemAccent
     private static void PaintNavigation(ResourceDictionary theme, bool light)
     {
         Color fill = light ? Color.FromArgb(255, 230, 230, 230) : Color.FromArgb(255, 44, 44, 44);
-        Color hover = light ? Color.FromArgb(255, 214, 214, 214) : Color.FromArgb(255, 58, 58, 58);
+        Color hover = light ? Color.FromArgb(255, 214, 214, 214) : Color.FromArgb(255, 47, 47, 51);
+        Color pressed = light ? Color.FromArgb(255, 196, 196, 196) : Color.FromArgb(255, 58, 58, 62);
+        // 控件模板悬停时真正取的是这几支画笔。深色里系统默认是一层发白的淡灰，这里改成深灰。
+        foreach (string key in new[]
+        {
+            "SubtleFillColorSecondaryBrush", "ControlFillColorSecondaryBrush", "SystemControlHighlightListLowBrush",
+            "SystemControlHighlightListLowRevealBackgroundBrush",
+            "NavigationViewItemBackgroundPointerOver", "NavigationViewItemBackgroundSelectedPointerOver",
+            "MenuFlyoutItemBackgroundPointerOver", "MenuFlyoutItemRevealBackgroundPointerOver",
+            "MenuBarItemBackgroundPointerOver", "ComboBoxBackgroundPointerOver", "ComboBoxItemBackgroundPointerOver",
+            "ComboBoxItemBackgroundSelectedPointerOver", "ComboBoxItemRevealBackgroundPointerOver",
+            "ListViewItemBackgroundPointerOver", "ListViewItemRevealBackgroundPointerOver", "ButtonBackgroundPointerOver"
+        })
+            PaintBrush(theme, key, hover);
+        foreach (string key in new[]
+        {
+            "SubtleFillColorTertiaryBrush", "ControlFillColorTertiaryBrush",
+            "NavigationViewItemBackgroundPressed", "NavigationViewItemBackgroundSelectedPressed",
+            "MenuFlyoutItemBackgroundPressed", "ComboBoxBackgroundPressed", "ComboBoxItemBackgroundPressed",
+            "ButtonBackgroundPressed"
+        })
+            PaintBrush(theme, key, pressed);
         PaintBrush(theme, "NavigationViewItemBackgroundSelected", fill);
-        PaintBrush(theme, "NavigationViewItemBackgroundSelectedPointerOver", hover);
-        PaintBrush(theme, "NavigationViewItemBackgroundSelectedPressed", hover);
+        PaintBrush(theme, "ComboBoxItemBackgroundSelected", fill);
     }
 
     private static void PaintBrush(ResourceDictionary dictionary, string key, Color color)
     {
         if (dictionary.TryGetValue(key, out object? value) && value is SolidColorBrush brush)
             brush.Color = color;
+        else
+            dictionary[key] = new SolidColorBrush(color);
     }
 
     private static void PaintAcrylic(ResourceDictionary dictionary, string key, Color color)

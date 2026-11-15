@@ -5,9 +5,16 @@
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
             <!-- 明确导航选中背景，避免系统色回退时白色底与白色标题重合。 -->
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPointerOver" Color="#2A2A32" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundPressed" Color="#32323A" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#2C2C2C" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#3A3A3A" />
-            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#3A3A3A" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#34343C" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#34343C" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPointerOver" Color="#2A2A32" />
+            <SolidColorBrush x:Key="MenuFlyoutItemBackgroundPressed" Color="#32323A" />
+            <SolidColorBrush x:Key="MenuBarItemBackgroundPointerOver" Color="#2A2A32" />
+            <SolidColorBrush x:Key="ComboBoxItemBackgroundPointerOver" Color="#2A2A32" />
+            <SolidColorBrush x:Key="ListViewItemBackgroundPointerOver" Color="#2A2A32" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#F0F0F5" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#0E0E12" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#16161E" />
