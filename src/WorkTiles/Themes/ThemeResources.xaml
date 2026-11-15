@@ -7,6 +7,7 @@
             <!-- 明确导航选中背景，避免系统色回退时白色底与白色标题重合。 -->
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#2A2A35" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#353543" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#353543" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#F0F0F5" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#0E0E12" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#16161E" />
@@ -27,10 +28,53 @@
             <SolidColorBrush x:Key="BoardWarningBrush" Color="#FBBF24" />
             <SolidColorBrush x:Key="BoardDangerBrush" Color="#F87171" />
             <SolidColorBrush x:Key="BoardPaperBrush" Color="#FFFDF7" />
+            <!-- 悬停画刷过渡不插值 Alpha：静止色若是透明白，第一帧会按白色 RGB 铺满，按钮先闪浅灰再落到深灰。
+                 实心按钮用表面色，幽灵按钮用与悬停色相同 RGB 的全透明色。 -->
+            <StaticResource x:Key="BoardButtonRestBrush" ResourceKey="BoardSurfaceSecondaryBrush" />
+            <SolidColorBrush x:Key="BoardButtonHoverBrush" Color="#2A2A35" />
+            <SolidColorBrush x:Key="BoardButtonPressedBrush" Color="#353543" />
+            <SolidColorBrush x:Key="BoardButtonClearBrush" Color="#002A2A35" />
+            <StaticResource x:Key="ButtonBackground" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="ToggleButtonBackground" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundDisabled" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="RepeatButtonBackground" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="RepeatButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="RepeatButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="RepeatButtonBackgroundDisabled" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#E6E6ED" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#DADAE3" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#DADAE3" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#000000" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#FFFFFF" />
@@ -50,6 +94,46 @@
             <SolidColorBrush x:Key="BoardWarningBrush" Color="#B45309" />
             <SolidColorBrush x:Key="BoardDangerBrush" Color="#DC2626" />
             <SolidColorBrush x:Key="BoardPaperBrush" Color="#FFFFFF" />
+            <StaticResource x:Key="BoardButtonRestBrush" ResourceKey="BoardSurfaceSecondaryBrush" />
+            <SolidColorBrush x:Key="BoardButtonHoverBrush" Color="#E6E6ED" />
+            <SolidColorBrush x:Key="BoardButtonPressedBrush" Color="#DADAE3" />
+            <SolidColorBrush x:Key="BoardButtonClearBrush" Color="#00E6E6ED" />
+            <StaticResource x:Key="ButtonBackground" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="ButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="ButtonBackgroundDisabled" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="ToggleButtonBackground" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="ToggleButtonBackgroundDisabled" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="RepeatButtonBackground" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="RepeatButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="RepeatButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="RepeatButtonBackgroundDisabled" ResourceKey="BoardButtonRestBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="HyperlinkButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="SubtleButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="NavigationViewItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="NavigationViewButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="MenuFlyoutItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundPressed" ResourceKey="BoardButtonPressedBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundSubMenuOpened" ResourceKey="BoardButtonHoverBrush" />
+            <StaticResource x:Key="MenuFlyoutSubItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -79,7 +163,7 @@
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="10" />
         <Setter Property="CornerRadius" Value="8" />
-        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Background" Value="{ThemeResource BoardButtonClearBrush}" />
         <!-- 底部工具栏的所有可用操作使用同一高对比度颜色，避免前两个图标被误解为禁用状态。 -->
         <Setter Property="Foreground" Value="{ThemeResource BoardTextBrush}" />
         <Setter Property="BorderThickness" Value="0" />

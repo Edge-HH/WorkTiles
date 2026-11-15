@@ -455,7 +455,7 @@
             CornerRadius="14"
             Canvas.ZIndex="100">
             <ScrollViewer x:Name="MainToolbarScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="ToolbarItems" Orientation="Horizontal" Spacing="4">
-                <ToggleButton x:Name="GlobalPenButton" Width="44" Height="44" Padding="10" Background="Transparent" BorderThickness="0" Visibility="Collapsed" AutomationProperties.Name="画笔" Checked="GlobalPen_Changed" Unchecked="GlobalPen_Changed">
+                <ToggleButton x:Name="GlobalPenButton" Width="44" Height="44" Padding="10" Background="{ThemeResource BoardButtonClearBrush}" BorderThickness="0" Visibility="Collapsed" AutomationProperties.Name="画笔" Checked="GlobalPen_Changed" Unchecked="GlobalPen_Changed">
                     <icons:FluentIcon Symbol="Pen" />
                 </ToggleButton>
                 <Button x:Name="BackToBoardButton" Click="BackToBoardButton_Click" Style="{StaticResource BoardIconButtonStyle}" Visibility="Collapsed" AutomationProperties.Name="返回看板">
@@ -472,7 +472,7 @@
                     Width="44"
                     Height="44"
                     Padding="10"
-                    Background="Transparent"
+                    Background="{ThemeResource BoardButtonClearBrush}"
                     BorderThickness="0"
                     IsChecked="True"
                     Visibility="Collapsed"

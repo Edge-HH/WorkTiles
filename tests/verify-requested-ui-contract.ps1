@@ -113,6 +113,16 @@ if ($xaml -notmatch 'x:Name="SettingsContentHost"' -or
     $failures.Add('磁贴设置页缺少右侧固定预览、放大铺满的背景、浅色提亮，或示例文案与配色没有跟随当前色系。')
 }
 $exportTiles = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\ExportTileVisual.cs'))
+# 悬停过渡不插值 Alpha。静止色若是透明白，第一帧会铺成浅灰，然后才落到深灰。
+if ($theme -notmatch 'BoardButtonHoverBrush" Color="#2A2A35"' -or
+    $theme -notmatch 'BoardButtonClearBrush" Color="#002A2A35"' -or
+    $theme -notmatch 'BoardButtonHoverBrush" Color="#E6E6ED"' -or
+    $theme -notmatch 'BoardButtonClearBrush" Color="#00E6E6ED"' -or
+    $theme -notmatch 'ButtonBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush"' -or
+    $theme -notmatch 'MenuFlyoutItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush"' -or
+    $theme -notmatch 'NavigationViewItemBackgroundPointerOver" ResourceKey="BoardButtonHoverBrush"') {
+    $failures.Add('菜单栏和设置按钮的悬停色与静止色不是同一套深灰，悬停时会先闪浅灰。')
+}
 if (([regex]::Matches($tiles, 'ApplyTransparentInputChrome\(')).Count -lt 2 -or
     $exportTiles -notmatch 'ApplyTransparentInputChrome\(' -or
     $tiles -notmatch '"TextControlBackground"' -or

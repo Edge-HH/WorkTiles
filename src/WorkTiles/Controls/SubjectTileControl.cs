@@ -919,7 +919,7 @@ public sealed class SubjectTileControl : Grid
         Button button = new()
         {
             Width = 38, Height = 38, Padding = new Thickness(8),
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)), BorderThickness = new Thickness(0),
+            Background = BoardTheme.ButtonClearBrush, BorderThickness = new Thickness(0),
             Content = new FontIcon
             {
                 Glyph = glyph, FontSize = 15,
@@ -936,7 +936,7 @@ public sealed class SubjectTileControl : Grid
         ToggleButton button = new()
         {
             Width = 38, Height = 38, Padding = new Thickness(8),
-            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(1, 0, 0, 0)), BorderThickness = new Thickness(0),
+            Background = BoardTheme.ButtonClearBrush, BorderThickness = new Thickness(0),
             Content = new FontIcon
             {
                 Glyph = glyph, FontSize = 16,
