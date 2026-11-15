@@ -150,6 +150,7 @@ public partial class App : Application
             prompt.Close();
         }, () =>
         {
+            instanceGate.ForwardToRunningInstance(SingleInstanceService.ForegroundAction);
             instanceGate.Dispose();
             prompt!.Close();
         });

@@ -112,6 +112,11 @@
                             <Canvas x:Name="AlignmentCanvas" IsHitTestVisible="False" />
                         </Grid>
                     </Grid></ScrollViewer>
+                    <StackPanel x:Name="EmptyProjectPanel" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" Visibility="Collapsed" Canvas.ZIndex="30">
+                        <TextBlock Text="创建或导入一个作业项目" FontSize="24" HorizontalAlignment="Center" />
+                        <Button Content="新建项目" Click="NewProject_Click" HorizontalAlignment="Center" />
+                        <Button Content="导入 .wth" Click="ImportProject_Click" HorizontalAlignment="Center" />
+                    </StackPanel>
                 </Grid>
             </Grid>
             <Canvas x:Name="FreeWidgetsCanvas" /><Canvas x:Name="FreeLayoutHandles" IsHitTestVisible="False" />
@@ -180,11 +185,11 @@
                         <NavigationViewItem Content="噪音检测" Tag="ComponentsNoise"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Microphone" /></NavigationViewItem.Icon></NavigationViewItem>
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
-                <NavigationViewItem x:Name="AutofillNavigationGroup" Content="自动填充" SelectsOnInvoked="False" Visibility="Collapsed">
+                <NavigationViewItem x:Name="AutofillNavigationGroup" Content="自动填充" SelectsOnInvoked="False">
                     <NavigationViewItem.Icon><icons:FluentIcon Symbol="TextGrammarWand" /></NavigationViewItem.Icon>
                     <NavigationViewItem.MenuItems>
                         <NavigationViewItem Content="学科补全" Tag="AutofillSubject"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Board" /></NavigationViewItem.Icon></NavigationViewItem>
-                        <NavigationViewItem Content="作业补全" Tag="AutofillHomework"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Document" /></NavigationViewItem.Icon></NavigationViewItem>
+                        <NavigationViewItem x:Name="AutofillHomeworkNavItem" Content="作业补全" Tag="AutofillHomework" Visibility="Collapsed"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Document" /></NavigationViewItem.Icon></NavigationViewItem>
                     </NavigationViewItem.MenuItems>
                 </NavigationViewItem>
                 <NavigationViewItem Content="考试" Tag="Exam"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Clock" /></NavigationViewItem.Icon></NavigationViewItem>
@@ -348,11 +353,6 @@
             </Grid>
         </NavigationView>
 
-        <StackPanel x:Name="EmptyProjectPanel" Grid.Row="1" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="16" Visibility="Collapsed">
-            <TextBlock Text="创建或导入一个作业项目" FontSize="24" />
-            <Button Content="新建项目" Click="NewProject_Click" HorizontalAlignment="Center" />
-            <Button Content="导入 .wth" Click="ImportProject_Click" HorizontalAlignment="Center" />
-        </StackPanel>
         <InfoBar x:Name="StorageInfoBar" Grid.Row="1" VerticalAlignment="Top" Canvas.ZIndex="150" Severity="Error" IsOpen="False" />
         <Border x:Name="GlobalInkToolbar" Grid.RowSpan="2" VerticalAlignment="Bottom" HorizontalAlignment="Center" Margin="0,0,0,94" Padding="12" Background="{ThemeResource BoardSurfaceBrush}" BorderBrush="{ThemeResource BoardLineBrush}" BorderThickness="1" CornerRadius="12" Canvas.ZIndex="110" Visibility="Collapsed">
             <ScrollViewer x:Name="InkToolbarScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="GlobalInkTools" Orientation="Horizontal" Spacing="10" /></ScrollViewer>

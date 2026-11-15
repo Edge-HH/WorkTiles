@@ -638,8 +638,13 @@ public sealed partial class MainWindow : Window
     private async void DeleteSubject(SubjectBoard subject)
     {
         if (await ShowConfirmAsync("删除这个科目", $"确定删除“{subject.Name}”以及其中的文字、图片和笔迹吗？") != ContentDialogResult.Primary) return;
+        if (FindTile(subject) is { } tile) BoardCanvas.Children.Remove(tile);
         ViewModel.Subjects.Remove(subject);
-        BuildTiles();
+        if (RichTextToolbarHost is not null) RichTextToolbarHost.Content = null;
+        RefreshIslands();
+        UpdateBoardBounds();
+        UpdateSubjectCount();
+        SyncDesktopTiles();
         ScheduleSave();
     }
 

@@ -155,6 +155,10 @@ public sealed partial class MainWindow
                 Check(ReferenceEquals(SettingsRoot.SelectedItem, AppearanceNavItem) &&
                     initiallySelectedSettingsItems.Count == 1,
                     "opening settings has exactly one selected navigation item with its indicator");
+                SolidColorBrush selectedNav = (SolidColorBrush)Application.Current.Resources["NavigationViewItemBackgroundSelected"];
+                Check(Math.Abs(selectedNav.Color.R - selectedNav.Color.G) < 4 && Math.Abs(selectedNav.Color.G - selectedNav.Color.B) < 4,
+                    $"selected settings tab is neutral gray ({selectedNav.Color.R},{selectedNav.Color.G},{selectedNav.Color.B})");
+                Check(EmptyProjectPanel.Parent == BoardWorkspace, "the first-run prompt is centered on the board");
                 NavigationViewItem backgroundNavigationItem = AppearanceNavigationGroup.MenuItems
                     .OfType<NavigationViewItem>()
                     .Single(item => item.Tag?.ToString() == "AppearanceBackground");
@@ -393,8 +397,15 @@ public sealed partial class MainWindow
                 Check(themeSwatches.Count(s => s.IsSelected) == 1, "current tile theme has a checkmark");
                 themeButton.Flyout.Hide();
                 RichEditBox paletteEditor = FindVisuals<RichEditBox>(BoardCanvas).First();
-                paletteEditor.Focus(FocusState.Programmatic); paletteEditor.Document.Selection.SetRange(0, 2); await NextLayoutAsync();
-                var textColorButton = FindVisuals<Button>(RichTextToolbarHost).First(b => ToolTipService.GetToolTip(b)?.ToString() == "文字颜色");
+                Button? textColorButton = null;
+                for (int attempt = 0; attempt < 8 && textColorButton is null; attempt++)
+                {
+                    paletteEditor.Focus(FocusState.Programmatic);
+                    paletteEditor.Document.Selection.SetRange(0, 2);
+                    await NextLayoutAsync();
+                    textColorButton = FindVisuals<Button>(RichTextToolbarHost).FirstOrDefault(b => ToolTipService.GetToolTip(b)?.ToString() == "文字颜色");
+                }
+                Check(textColorButton is not null, "text color button is hosted with the focused editor");
                 void InvokeButton(Button button) => ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button)
                     .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
                 InvokeButton(textColorButton); await NextLayoutAsync();
@@ -1020,6 +1031,20 @@ public sealed partial class MainWindow
         check(ZoomIsland.Visibility == Visibility.Visible && zoomButtons.Count == 3 && zoomSlider.Visibility == Visibility.Visible,
             "editing mode offers the board zoom island with three buttons and a slider");
         check(zoom.Left >= toolbar.Right - .5, $"zoom island sits right of the control window ({zoom.Left:0.#} >= {toolbar.Right:0.#})");
+        string keptToolbarPosition = _settings.ToolbarPosition;
+        foreach (string edge in new[] { "TopRight", "BottomRight" })
+        {
+            _settings.ToolbarPosition = edge;
+            ApplyExtendedSettings();
+            await NextLayoutAsync();
+            Rect edgeToolbar = Bounds(FloatingToolbar);
+            Rect edgeZoom = Bounds(ZoomIsland);
+            check(ZoomIsland.Visibility == Visibility.Visible && edgeZoom.Width > 40 && edgeZoom.Right <= edgeToolbar.Left + 1,
+                $"{edge} keeps the zoom island left of the control window ({edgeZoom.Right:0.#} <= {edgeToolbar.Left:0.#}, width {edgeZoom.Width:0.#})");
+        }
+        _settings.ToolbarPosition = keptToolbarPosition;
+        ApplyExtendedSettings();
+        await NextLayoutAsync();
         check(Math.Abs(zoom.Height - toolbar.Height) < .5,
             $"zoom island matches the control window height ({zoom.Height:0.#} / {toolbar.Height:0.#})");
         check(slider.Width > 0 && ZoomIslandItems.ActualWidth >= slider.Width - .5,
@@ -1304,8 +1329,9 @@ public sealed partial class MainWindow
         check(Math.Abs(_autoLayoutGapSlider!.StepFrequency - 10) < .01, "gap slider steps by 10px while grid snapping is off");
         GridSnapToggleButton.IsChecked = true;
         await NextLayoutAsync();
-        check(Math.Abs(_autoLayoutGapSlider.StepFrequency - GridSize / 2) < .01,
-            $"gap slider steps by half a grid cell while snapping is on ({_autoLayoutGapSlider.StepFrequency})");
+        check(Math.Abs(_autoLayoutGapSlider.StepFrequency - 1) < .01
+            && ToolTipService.GetToolTip(_autoLayoutGapSlider) is string gapTip && gapTip.EndsWith("格", StringComparison.Ordinal),
+            $"gap slider stays continuous and the hover text is in grid cells ({_autoLayoutGapSlider.StepFrequency} / {ToolTipService.GetToolTip(_autoLayoutGapSlider)})");
         ShowSettingsPage("Layout");
         await NextLayoutAsync();
         double layoutGrid = _settings.GridSize;
@@ -1740,13 +1766,14 @@ public sealed partial class MainWindow
             && ComponentsNavigationGroup.MenuItems.OfType<NavigationViewItem>().Any(item => Equals(item.Content, "外观"))
             && ComponentsNavigationGroup.MenuItems.OfType<NavigationViewItem>().Any(item => Equals(item.Content, "时钟")),
             "clock and component appearance live under components");
-        check(CloudSyncNavItem.Visibility == Visibility.Collapsed && AutofillNavigationGroup.Visibility == Visibility.Collapsed,
-            "cloud control and autofill stay hidden until enabled");
+        check(CloudSyncNavItem.Visibility == Visibility.Collapsed && AutofillNavigationGroup.Visibility == Visibility.Visible
+            && AutofillHomeworkNavItem.Visibility == Visibility.Collapsed,
+            "cloud control and homework autofill stay hidden while subject autofill stays available");
         _settings.ShowExperimentalCloud = true;
         _settings.ShowExperimentalAutofill = true;
         ApplyExperimentalNavigation();
-        check(CloudSyncNavItem.Visibility == Visibility.Visible && AutofillNavigationGroup.Visibility == Visibility.Visible,
-            "experimental switches reveal cloud control and autofill");
+        check(CloudSyncNavItem.Visibility == Visibility.Visible && AutofillHomeworkNavItem.Visibility == Visibility.Visible,
+            "experimental switches reveal cloud control and homework autofill");
         _settings.ShowExperimentalCloud = false;
         _settings.ShowExperimentalAutofill = false;
         ApplyExperimentalNavigation();
@@ -1870,8 +1897,9 @@ public sealed partial class MainWindow
             "auto layout snap switch turns grid snapping off for the whole app");
         snapToggle.IsOn = true; await NextLayoutAsync();
         check(IsGridSnappingEnabled && GridSnapToggleButton.IsChecked == true && _settings.GridSnappingEnabled &&
-            Math.Abs(gapSlider.StepFrequency - Math.Max(1, GridSize) / 2) < .01,
-            "auto layout snap switch enables snapping and half cell gap steps");
+            Math.Abs(gapSlider.StepFrequency - 1) < .01
+            && ToolTipService.GetToolTip(gapSlider) is string snapTip && snapTip.EndsWith("格", StringComparison.Ordinal),
+            "auto layout snap switch enables snapping and a continuous gap slider (" + gapSlider.StepFrequency + " / " + ToolTipService.GetToolTip(gapSlider) + ")");
         TextBlock gapReadout = FindVisuals<TextBlock>(_settingsPages["Layout"].Content).Single(text => text.Name == "AutoLayoutGapReadout");
         check(gapReadout.Text.EndsWith("格", StringComparison.Ordinal),
             "snapped arrangement gap is shown in grid cells (" + gapReadout.Text + ")");

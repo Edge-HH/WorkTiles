@@ -1,3 +1,4 @@
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Windows.Graphics;
@@ -14,7 +15,7 @@ internal sealed class InstancePromptWindow : Window
     public InstancePromptWindow(Func<Task> replace, Action back)
     {
         Title = "WorkTiles";
-        StackPanel root = new() { Spacing = 20, Padding = new Thickness(28), Width = 460 };
+        StackPanel root = new() { Spacing = 20, Padding = new Thickness(28), Width = 560 };
         _message = new TextBlock
         {
             Text = "检测到正在运行的WorkTiles实例",
@@ -27,8 +28,8 @@ internal sealed class InstancePromptWindow : Window
             Spacing = 12,
             HorizontalAlignment = HorizontalAlignment.Right
         };
-        _replace = new Button { Content = "退出正在运行的实例并启动" };
-        _back = new Button { Content = "返回" };
+        _replace = new Button { Content = "退出正在运行的实例并启动", Style = (Style)Application.Current.Resources["BoardPrimaryButtonStyle"] };
+        _back = new Button { Content = "返回已启动的实例", Style = (Style)Application.Current.Resources["BoardSecondaryButtonStyle"] };
         _replace.Click += async (_, _) =>
         {
             _replace.IsEnabled = false;
@@ -41,7 +42,12 @@ internal sealed class InstancePromptWindow : Window
         root.Children.Add(_message);
         root.Children.Add(actions);
         Content = root;
-        AppWindow.Resize(new SizeInt32(520, 200));
+        const int width = 640, height = 240;
+        AppWindow.Resize(new SizeInt32(width, height));
+        DisplayArea area = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+        AppWindow.Move(new PointInt32(
+            area.WorkArea.X + Math.Max(0, (area.WorkArea.Width - width) / 2),
+            area.WorkArea.Y + Math.Max(0, (area.WorkArea.Height - height) / 2)));
     }
 
     public void SetBusy(string message)

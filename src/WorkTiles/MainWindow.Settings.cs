@@ -181,12 +181,12 @@ public sealed partial class MainWindow
             _settings.ShowExperimentalCloud = value;
             ApplyExperimentalNavigation();
         }, read: () => _settings.ShowExperimentalCloud));
-        about.Children.Add(Toggle("显示自动填充", _settings.ShowExperimentalAutofill, value =>
+        about.Children.Add(Toggle("显示作业填充", _settings.ShowExperimentalAutofill, value =>
         {
             _settings.ShowExperimentalAutofill = value;
             ApplyExperimentalNavigation();
         }, read: () => _settings.ShowExperimentalAutofill));
-        about.Children.Add(Note("默认关闭。打开后，设置侧栏会显示集控或自动填充。"));
+        about.Children.Add(Note("默认关闭。打开后，设置侧栏会显示集控，或在自动填充里显示作业填充。学科补全一直可用。"));
         ApplyExperimentalNavigation();
         UpdateSourceComboBox.SelectedIndex = _settings.UpdateSource == "Gitee" ? 1 : 0;
         UpdateSourceComboBox.SelectionChanged += async (_, _) =>
@@ -1009,12 +1009,17 @@ public sealed partial class MainWindow
     private void UpdateAutoLayoutGapStep()
     {
         if (_autoLayoutGapSlider is null) return;
-        double step = IsGridSnappingEnabled ? Math.Max(1, GridSize) / 2 : 10;
+        // 吸附打开时拖动保持连续，悬停提示按半格显示，不再把滑块锁死在很大的一档上。
+        // 关闭吸附仍按 10 像素一档。
+        double step = IsGridSnappingEnabled ? 1 : 10;
         _autoLayoutGapSlider.StepFrequency = step;
         _autoLayoutGapSlider.SmallChange = step;
-        _autoLayoutGapSlider.LargeChange = step * 2;
+        _autoLayoutGapSlider.LargeChange = IsGridSnappingEnabled ? Math.Max(1, GridSize) / 2 : 20;
         if (_autoLayoutGapReadout is not null)
+        {
             _autoLayoutGapReadout.Text = LayoutMetrics.FormatArrangementGap(_settings.AutoLayoutGap, GridSize, IsGridSnappingEnabled);
+            ToolTipService.SetToolTip(_autoLayoutGapSlider, _autoLayoutGapReadout.Text);
+        }
     }
 
     /// <summary>自动布局里的“吸附到网格”和编辑工具栏的吸附按钮共用同一份设置。</summary>
@@ -1449,7 +1454,9 @@ public sealed partial class MainWindow
         if (CloudSyncNavItem is not null)
             CloudSyncNavItem.Visibility = _settings.ShowExperimentalCloud ? Visibility.Visible : Visibility.Collapsed;
         if (AutofillNavigationGroup is not null)
-            AutofillNavigationGroup.Visibility = _settings.ShowExperimentalAutofill ? Visibility.Visible : Visibility.Collapsed;
+            AutofillNavigationGroup.Visibility = Visibility.Visible;
+        if (AutofillHomeworkNavItem is not null)
+            AutofillHomeworkNavItem.Visibility = _settings.ShowExperimentalAutofill ? Visibility.Visible : Visibility.Collapsed;
     }
 
     /// <summary>标题栏向下避让：给顶栏加上边距，上方留空给 ClassIsland 主界面等窗口。</summary>

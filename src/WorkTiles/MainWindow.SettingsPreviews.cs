@@ -840,7 +840,7 @@ public sealed partial class MainWindow
 
     private UIElement CreateToolbarPositionPicker()
     {
-        Grid screen = new() { Height = 156, Padding = new Thickness(8) };
+        Grid screen = new() { Height = 220, Padding = new Thickness(18) };
         for (int index = 0; index < 3; index++)
         {
             screen.RowDefinitions.Add(new RowDefinition());
@@ -862,7 +862,7 @@ public sealed partial class MainWindow
             RadioButton button = new()
             {
                 Name = "ToolbarPosition" + position, GroupName = "ToolbarPosition", Tag = position,
-                MinWidth = 0, MinHeight = 40, Width = 40, Padding = new Thickness(0),
+                MinWidth = 22, MinHeight = 22, Width = 22, Height = 22, Padding = new Thickness(0),
                 HorizontalAlignment = column == 0 ? HorizontalAlignment.Left : column == 2 ? HorizontalAlignment.Right : HorizontalAlignment.Center,
                 VerticalAlignment = row == 0 ? VerticalAlignment.Top : row == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Center,
                 IsChecked = _settings.ToolbarPosition == position

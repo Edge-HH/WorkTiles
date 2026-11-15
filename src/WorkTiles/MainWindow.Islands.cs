@@ -549,21 +549,23 @@ public sealed partial class MainWindow
 
         double beforeSlack = vertical ? control.Top - insetY : control.Left - insetX;
         double afterSlack = vertical ? windowHeight - insetY - control.Bottom : windowWidth - insetX - control.Right;
-        // 缩放岛固定在控制窗之后（右侧；竖版控制窗时下方），空间不足时先缩短滑条：
-        // 滑条是浮层里唯一能压缩的部件，缩短后整块浮层仍能完整显示，按钮不会被裁掉。
-        if (zoomVisible) FitZoomSliderInto(Math.Max(0, afterSlack - gap), vertical, scale);
+        // 控制窗已经贴在右边时，右侧没有地方放缩放岛，改放到控制窗左边。
+        bool zoomBefore = !vertical && _settings.ToolbarPosition.EndsWith("Right");
+        double zoomSlack = zoomBefore ? beforeSlack : afterSlack;
+        // 空间不足时先缩短滑条：滑条是浮层里唯一能压缩的部件，缩短后按钮仍能完整显示。
+        if (zoomVisible) FitZoomSliderInto(Math.Max(0, zoomSlack - gap), vertical, scale);
         Size zoomSize = zoomVisible ? MeasureIsland(ZoomIsland) : default;
 
         double editSpan = editIsland is null ? 0 : (vertical ? editSize.Height : editSize.Width) + gap;
         // 编辑岛默认占控制窗之前（左/上）一侧；横版时该侧放不下而另一侧更宽松就换到另一侧。
         // 竖版固定“编辑工具在上、缩放在下”，不换边：换边会把编辑工具挤到控制窗下方，并顶掉下方的缩放岛。
         bool editBefore = editIsland is not null && (vertical || !(editSpan > beforeSlack && afterSlack > beforeSlack));
-        // 缩放岛固定占控制窗之后的一侧，不随空间换边。
-        bool zoomBefore = false;
 
         List<(FrameworkElement Island, Size Size)> before = [], after = [];
+        // 贴右边时缩放岛离控制窗更近，编辑岛再往左排。
+        if (zoomVisible && zoomBefore) before.Add((ZoomIsland, zoomSize));
         if (editIsland is not null) (editBefore ? before : after).Add((editIsland, editSize));
-        if (zoomVisible) (zoomBefore ? before : after).Add((ZoomIsland, zoomSize));
+        if (zoomVisible && !zoomBefore) after.Add((ZoomIsland, zoomSize));
 
         // 沿控制窗两侧依次排开：before 列表由近到远向一侧延伸，after 列表由近到远向另一侧延伸。
         void Place(List<(FrameworkElement Island, Size Size)> items, bool before, double start, double limit)
@@ -745,9 +747,17 @@ public sealed partial class MainWindow
 
     private void ApplyBoardZoomSliderRange()
     {
+        float minZoom = (float)CurrentMinimumBoardZoom();
+        float maxZoom = (float)CurrentMaximumBoardZoom();
+        // 捏合到头时由滚动视图自己停住。再强行改回去，页面会在极限处来回闪。
+        if (BoardScroller is not null)
+        {
+            if (Math.Abs(BoardScroller.MinZoomFactor - minZoom) > .001f) BoardScroller.MinZoomFactor = minZoom;
+            if (Math.Abs(BoardScroller.MaxZoomFactor - maxZoom) > .001f) BoardScroller.MaxZoomFactor = maxZoom;
+        }
         if (_zoomSlider is null) return;
-        double minimum = Math.Round(CurrentMinimumBoardZoom() * 100);
-        double maximum = Math.Round(CurrentMaximumBoardZoom() * 100);
+        double minimum = Math.Round(minZoom * 100);
+        double maximum = Math.Round(maxZoom * 100);
         if (Math.Abs(_zoomSlider.Minimum - minimum) < .01 && Math.Abs(_zoomSlider.Maximum - maximum) < .01) return;
         _syncingZoomSlider = true;
         try

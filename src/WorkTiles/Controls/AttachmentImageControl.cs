@@ -230,6 +230,7 @@ public sealed class AttachmentImageControl : Grid
         ((Border)sender).ReleasePointerCapture(e.Pointer);
         _pointerId = null;
         _activeResizeHandle = null;
+        if (_isCropping) SnapCropTowardTopLeft();
         EndInteraction();
         e.Handled = true;
     }
@@ -276,7 +277,6 @@ public sealed class AttachmentImageControl : Grid
         }
 
         double oldFrameWidth = _imageFrame.Width;
-        double oldFrameHeight = _imageFrame.Height;
         _imageFrame.Width = newWidth;
         _imageFrame.Height = newHeight;
         _attachment.FrameWidth = newWidth;
@@ -285,13 +285,8 @@ public sealed class AttachmentImageControl : Grid
         _attachment.PositionY = top ? start.Y + start.Height - newHeight : start.Y;
         if (_isCropping)
         {
-            // 裁切只改取景框。图片停在原地，拖哪条边就只露出或藏起那一侧。
+            // 拖动时不挪画面。取景框单独变化，松手后再把露出的空白收到左上角。
             _attachment.AspectRatio = newWidth / newHeight;
-            if (left) _attachment.OffsetX += (newWidth - oldFrameWidth) / 2;
-            else if (right) _attachment.OffsetX -= (newWidth - oldFrameWidth) / 2;
-            if (top) _attachment.OffsetY += (newHeight - oldFrameHeight) / 2;
-            else if (bottom) _attachment.OffsetY -= (newHeight - oldFrameHeight) / 2;
-            ClampCropOffsets();
         }
         else if (oldFrameWidth > 0)
         {
@@ -441,6 +436,18 @@ public sealed class AttachmentImageControl : Grid
 
     // 等比缩放下取宽高的共同下限，避免一边贴近最小值时另一边缩到不可见。
     private static double MinUniformWidth(double aspect) => Math.Max(MinimumWidth, MinimumHeight * aspect);
+
+    /// <summary>松手后把画面往左上收，消掉裁切拖动留在上边或左边的空白。</summary>
+    private void SnapCropTowardTopLeft()
+    {
+        (double contentWidth, double contentHeight) = GetVisualContentSize();
+        double imageLeft = (_imageFrame.Width - contentWidth) / 2 + _attachment.OffsetX;
+        double imageTop = (_imageFrame.Height - contentHeight) / 2 + _attachment.OffsetY;
+        if (imageLeft > 0) _attachment.OffsetX -= imageLeft;
+        if (imageTop > 0) _attachment.OffsetY -= imageTop;
+        ClampCropOffsets();
+        ApplyTransforms();
+    }
 
     private void ClampCropOffsets()
     {
