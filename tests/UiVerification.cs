@@ -209,6 +209,18 @@ public sealed partial class MainWindow
                     "menu bar settings use the same icon as window settings");
                 var editor = FindVisuals<RichEditBox>(BoardCanvas).Last();
                 editor.IsReadOnly = false;
+                ITextRange story = editor.Document.GetRange(0, int.MaxValue);
+                int storyEnd = story.EndPosition;
+                ITextRange trailingMark = editor.Document.GetRange(storyEnd - 1, storyEnd);
+                ITextRange lineEnd = editor.Document.GetRange(storyEnd - 2, storyEnd - 1);
+                Check(Math.Abs(editor.Document.GetRange(0, 1).CharacterFormat.Size - _settings.TileBodyFontSize) < .01,
+                    $"the first line uses the body size ({editor.Document.GetRange(0, 1).CharacterFormat.Size})");
+                Check(Math.Abs(trailingMark.CharacterFormat.Size - lineEnd.CharacterFormat.Size) < .01
+                    && Math.Abs(trailingMark.CharacterFormat.Size - _settings.TileBodyFontSize) < .01,
+                    $"the extra end caret uses the body size ({trailingMark.CharacterFormat.Size} / {lineEnd.CharacterFormat.Size} / {_settings.TileBodyFontSize})");
+                editor.Document.Selection.SetRange(storyEnd - 1, storyEnd - 1);
+                Check(Math.Abs(editor.Document.Selection.CharacterFormat.Size - _settings.TileBodyFontSize) < .01,
+                    $"typing at the end of the first line keeps the body size ({editor.Document.Selection.CharacterFormat.Size})");
                 editor.Document.Selection.SetRange(0, 2);
                 editor.Document.Selection.CharacterFormat.Name = FontService.ResourceName;
                 editor.Document.Selection.CharacterFormat.Bold = FormatEffect.On;

@@ -685,6 +685,8 @@ public sealed class SubjectTileControl : Grid
                 // 空作业也要写入默认样式：它决定用户接下来输入的字体、字号和颜色。
                 ApplyDefaultBodyStyle(editor, homework.Content.Length);
             }
+            // 行末多出来的那一格是控件自己的段落标记。不改它的话，字号停在 15，第一行输入和行末光标都会落回去。
+            AlignTrailingParagraphMark(editor);
             FontService.RebindBundledFont(editor, homework.FontFallbacks);
             editor.IsReadOnly = readOnly;
             documentReady = true;
@@ -716,7 +718,17 @@ public sealed class SubjectTileControl : Grid
         if (readOnly) editor.IsReadOnly = false;
         try
         {
-            ITextRange range = editor.Document.GetRange(0, Math.Max(0, textLength));
+            ITextRange story = editor.Document.GetRange(0, int.MaxValue);
+            int end = story.EndPosition;
+            int styleEnd = Math.Clamp(textLength, 0, end);
+            if (styleEnd < end)
+            {
+                ITextRange tail = editor.Document.GetRange(styleEnd, end);
+                tail.GetText(TextGetOptions.None, out string tailText);
+                if (tailText.Length > 0 && tailText.All(character => character is '\r' or '\n'))
+                    styleEnd = end;
+            }
+            ITextRange range = editor.Document.GetRange(0, styleEnd);
             range.CharacterFormat.Name = FontService.RtfFamilyName(_settings.TileBodyFontFamily);
             range.CharacterFormat.Size = (float)Math.Clamp(_settings.TileBodyFontSize, 12, 72);
             range.CharacterFormat.Bold = _settings.TileBodyBold ? FormatEffect.On : FormatEffect.Off;
@@ -726,6 +738,34 @@ public sealed class SubjectTileControl : Grid
             editor.Document.Selection.CharacterFormat.Size = (float)Math.Clamp(_settings.TileBodyFontSize, 12, 72);
             editor.Document.Selection.CharacterFormat.Bold = _settings.TileBodyBold ? FormatEffect.On : FormatEffect.Off;
             editor.Document.Selection.CharacterFormat.Italic = _settings.TileBodyItalic ? FormatEffect.On : FormatEffect.Off;
+        }
+        finally
+        {
+            if (readOnly) editor.IsReadOnly = true;
+        }
+    }
+
+    /// <summary>行末段落标记沿用前一个字的格式，避免光标再往后一格时字号跳回控件默认的 15。</summary>
+    private static void AlignTrailingParagraphMark(RichEditBox editor)
+    {
+        bool readOnly = editor.IsReadOnly;
+        if (readOnly) editor.IsReadOnly = false;
+        try
+        {
+            ITextRange story = editor.Document.GetRange(0, int.MaxValue);
+            int end = story.EndPosition;
+            if (end < 2) return;
+            ITextRange mark = editor.Document.GetRange(end - 1, end);
+            mark.GetText(TextGetOptions.None, out string markText);
+            if (markText is not "\r" and not "\n") return;
+            ITextRange sample = editor.Document.GetRange(end - 2, end - 1);
+            sample.GetText(TextGetOptions.None, out string sampleText);
+            if (sampleText is "\r" or "\n" || sample.CharacterFormat.Size is < 8 or > 96) return;
+            mark.CharacterFormat.Name = sample.CharacterFormat.Name;
+            mark.CharacterFormat.Size = sample.CharacterFormat.Size;
+            mark.CharacterFormat.Bold = sample.CharacterFormat.Bold;
+            mark.CharacterFormat.Italic = sample.CharacterFormat.Italic;
+            mark.CharacterFormat.Underline = sample.CharacterFormat.Underline;
         }
         finally
         {
