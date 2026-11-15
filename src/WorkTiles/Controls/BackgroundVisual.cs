@@ -15,7 +15,7 @@ public sealed class BackgroundVisual : Grid
     private readonly Grid _media = new();
     private readonly Grid _overlays = new();
     // 效果层常驻在视觉树中；重复应用设置时只替换 Brush，避免清空/重挂载造成闪烁。
-    private readonly Border _surfaceOverlay = new() { IsHitTestVisible = false };
+    private readonly Border _surfaceOverlay = new() { IsHitTestVisible = false, Name = "SurfaceTintOverlay" };
     private readonly Border _blurOverlay = new() { IsHitTestVisible = false };
     private readonly Border _glassTintOverlay = new() { IsHitTestVisible = false };
     private readonly BackgroundPlaylist _playlist = new();
@@ -36,7 +36,7 @@ public sealed class BackgroundVisual : Grid
     private bool _overlaySurface;
     private string _overlayKey = "";
     private string _backgroundKey = "";
-    private bool _mediaRestoreQueued;
+    private int _mediaRestoreEpoch;
 
     // 局部外观预览可要求铺满；不改变项目保存的图片显示模式。
     internal Stretch? MediaStretchOverride { get; init; }
@@ -97,13 +97,11 @@ public sealed class BackgroundVisual : Grid
 
     private void QueueMediaRestore()
     {
-        // Viewbox 间重挂载可能在同一轮布局中交错触发 Loaded/Unloaded。
-        // 等事件结束后以当前挂载状态为准恢复，避免最后一次 Unloaded 清空已加载的图片。
-        if (_mediaRestoreQueued) return;
-        _mediaRestoreQueued = DispatcherQueue.TryEnqueue(() =>
+        // 搬动预览时 Loaded 和 Unloaded 会交错。只认最后一次，避免先排队的卸载把后来的加载吃掉。
+        int epoch = ++_mediaRestoreEpoch;
+        DispatcherQueue.TryEnqueue(() =>
         {
-            _mediaRestoreQueued = false;
-            if (!IsLoaded) return;
+            if (epoch != _mediaRestoreEpoch || !IsLoaded) return;
             ShowCurrent();
             UpdateTimer();
         });
@@ -127,16 +125,19 @@ public sealed class BackgroundVisual : Grid
         }
         bool changed = _playlist.Configure(style);
         if (changed) { _failed = false; _timer.Stop(); }
+        bool hasMedia = !shared && !string.IsNullOrEmpty(_playlist.Current);
         // 共享区域本身不承载媒体；只有从独立媒体切换到共享层时才需要释放旧播放器。
         if (shared && !wasShared) ReleaseMedia();
         else if (IsLoaded && !_failed) ShowCurrent();
-        string overlayKey = $"{surface}|{style.Glass}|{style.Color}|{style.ColorOpacity:0.####}|{style.ColorCleared}|{effectiveBlur:0.####}|{BoardTheme.IsLight}";
+        string overlayKey = $"{surface}|{style.Glass}|{hasMedia}|{style.Color}|{style.ColorOpacity:0.####}|{style.ColorCleared}|{effectiveBlur:0.####}|{BoardTheme.IsLight}";
         if (_overlayKey != overlayKey)
         {
             _overlayKey = overlayKey;
             _overlaySurface = surface;
             if (surface && style.Glass)
                 _surfaceOverlay.Background = SurfaceBackground.Apply(_surfaceOverlay.Background, style.Color, style.ColorOpacity, style.ColorCleared, true, style.Blur);
+            else if (surface && hasMedia && !style.ColorCleared)
+                _surfaceOverlay.Background = SurfaceBackground.Apply(_surfaceOverlay.Background, style.Color, style.ColorOpacity, false, false, 0);
             else _surfaceOverlay.Background = null;
             if (!surface && style.Glass)
             {
@@ -154,7 +155,7 @@ public sealed class BackgroundVisual : Grid
                 _glassTintOverlay.Background = null;
             }
         }
-        _surfaceOverlay.Visibility = _overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
+        _surfaceOverlay.Visibility = _overlaySurface && (style.Glass || (hasMedia && !style.ColorCleared)) ? Visibility.Visible : Visibility.Collapsed;
         _blurOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         _glassTintOverlay.Visibility = !_overlaySurface && style.Glass ? Visibility.Visible : Visibility.Collapsed;
         UpdateTimer();

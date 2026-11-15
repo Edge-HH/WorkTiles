@@ -26,6 +26,7 @@ public sealed partial class MainWindow
     private Action? _refreshSubjectAutofill;
     private bool _surfaceRefreshQueued;
     private bool _toolbarChromeQueued;
+    private bool _tileSurfaceQueued;
     private bool _layoutPreviewQueued;
     private bool _layoutSnapPending;
     private bool _layoutArrangePending;
@@ -100,9 +101,9 @@ public sealed partial class MainWindow
         tile.Children.Add(Toggle("正文默认粗体", _settings.TileBodyBold, value => _settings.TileBodyBold = value, TileBodyStyleChanged, read: () => _settings.TileBodyBold));
         tile.Children.Add(Toggle("正文默认斜体", _settings.TileBodyItalic, value => _settings.TileBodyItalic = value, TileBodyStyleChanged, read: () => _settings.TileBodyItalic));
         tile.Children.Add(Toggle("右下角显示学科字样", _settings.ShowTileSubjectLabel, value => _settings.ShowTileSubjectLabel = value, read: () => _settings.ShowTileSubjectLabel));
-        tile.Children.Add(Range("磁贴圆角", 0, 40, _settings.TileCornerRadius, value => _settings.TileCornerRadius = value, read: () => _settings.TileCornerRadius));
+        tile.Children.Add(Range("磁贴圆角", 0, 40, _settings.TileCornerRadius, value => _settings.TileCornerRadius = value, QueueTileSurface, read: () => _settings.TileCornerRadius));
         tile.Children.Add(Note("默认正文样式用于新建和尚未单独设置格式的正文；已有的局部字体、粗体、斜体、颜色与高光不会被覆盖。开启纯文本粘贴后，Ctrl+V 和右键粘贴都会移除来源格式。"));
-        tile.Children.Add(BackgroundEditor(_settings.TileBackground, () => true, () => true, surface: true, scope: MediaScope.Tile));
+        tile.Children.Add(BackgroundEditor(_settings.TileBackground, () => true, () => true, surface: true, scope: MediaScope.Tile, surfaceChanged: QueueTileSurface));
         StackPanel backgrounds = SettingsStack();
         // 背景板预览把跨区、时钟和作业板合成一张主界面式场景，并在宽窗口固定到右侧。
         backgrounds.Children.Add(CreateAppearancePreview("Background"));
@@ -1066,7 +1067,7 @@ public sealed partial class MainWindow
         void ApplyColor()
         {
             updateColor($"#{picker.Color.R:X2}{picker.Color.G:X2}{picker.Color.B:X2}", false);
-            SettingChanged();
+            (changed ?? QueueSurfaceRefresh)();
         }
         picker.ColorChanged += (_, _) => ApplyColor();
         apply.Click += (_, _) => { ApplyColor(); flyout.Hide(); };
@@ -1088,7 +1089,7 @@ public sealed partial class MainWindow
     }
 
     private StackPanel BackgroundEditor(BackgroundSettings style, Func<bool> allowImage, Func<bool> allowGlass, bool includeGlass = true, bool surface = false,
-        MediaScope scope = MediaScope.Background)
+        MediaScope scope = MediaScope.Background, Action? surfaceChanged = null)
     {
         StackPanel panel = SettingsStack(), imageControls = SettingsStack();
         ColorPicker color = new() { IsAlphaEnabled = false, IsHexInputVisible = true };
@@ -1096,7 +1097,7 @@ public sealed partial class MainWindow
         color.ColorChanged += (_, args) => { style.Color = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}"; SettingChanged(); };
         if (surface)
             panel.Children.Add(SurfaceColorEditor(style.Color, style.ColorOpacity, () => style.ColorCleared,
-                (value, cleared) => { style.Color = value; style.ColorCleared = cleared; }, value => style.ColorOpacity = value));
+                (value, cleared) => { style.Color = value; style.ColorCleared = cleared; }, value => style.ColorOpacity = value, surfaceChanged));
         else
             imageControls.Children.Add(new Button { Content = "背景颜色", Flyout = new Flyout { Content = color } });
         imageControls.Children.Add(new ContentControl { Content = CreateBackgroundMediaEditor(style, scope), HorizontalContentAlignment = HorizontalAlignment.Stretch });
@@ -1116,7 +1117,7 @@ public sealed partial class MainWindow
         if (includeGlass)
         {
             var glass = Toggle("毛玻璃效果", style.Glass, value => style.Glass = value, read: () => style.Glass);
-            var blur = Range("模糊程度", 0, 100, style.Blur, value => style.Blur = value, QueueSurfaceRefresh, read: () => style.Blur);
+            var blur = Range("模糊程度", 0, 100, style.Blur, value => style.Blur = value, surfaceChanged ?? QueueSurfaceRefresh, read: () => style.Blur);
             panel.Children.Add(glass); panel.Children.Add(blur);
             _refreshSettingAvailability.Add(() => { glass.IsEnabled = allowGlass(); blur.IsEnabled = allowGlass() && style.Glass; });
         }
@@ -1372,6 +1373,22 @@ public sealed partial class MainWindow
     }
 
     private bool UseSharedBackground => _settings.LayoutMode == "Split" && _settings.SharedBackgroundEnabled;
+
+    /// <summary>磁贴圆角、颜色、透明度和模糊只刷磁贴外壳。拖动时合并到下一帧。</summary>
+    private void QueueTileSurface()
+    {
+        if (_tileSurfaceQueued) return;
+        _tileSurfaceQueued = true;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            _tileSurfaceQueued = false;
+            foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
+                tile.ApplyAppearance(_settings, applyBodyDefaults: false);
+            ForEachDesktopTile(tile => tile.ApplyAppearance(_settings, applyBodyDefaults: false));
+            _tileAppearancePreview?.ApplyAppearance(_settings, applyBodyDefaults: false);
+            ScheduleSave();
+        });
+    }
 
     /// <summary>控制窗滑块只改这一块窗口和它的预览。拖动时合并到下一帧，不再整窗重刷，滑块才能跟着走。</summary>
     private void QueueToolbarChrome()

@@ -14,7 +14,7 @@ public sealed partial class MainWindow
     // 页内预览的固定设计尺寸：经 Viewbox 等比缩放后，窄窗口也不会撑宽设置页。
     private const double PreviewSceneWidth = 640, PreviewSceneHeight = 300;
     // 右侧固定预览区的宽度范围与设置列的最小宽度：宽度不够时预览退回页内顶部，避免把设置控件挤到无法操作。
-    private const double StickyPreviewMinWidth = 400, StickyPreviewMaxWidth = 720, MinimumSettingsColumnWidth = 440;
+    private const double StickyPreviewMinWidth = 280, StickyPreviewMaxWidth = 640, MinimumSettingsColumnWidth = 320;
     // 浅色模式下给底图压一层白色提亮，深色图片在浅色设置页里不会再发闷。
     private const double TilePreviewLightOverlayOpacity = .55;
 
@@ -123,11 +123,11 @@ public sealed partial class MainWindow
         if (_tilePreviewInlineFrame is null || _tilePreviewStickyFrame is null ||
             _backgroundPreviewInlineFrame is null || _backgroundPreviewStickyFrame is null) return;
         double available = SettingsContentHost.ActualWidth;
-        double panelWidth = Math.Clamp(available * .52, StickyPreviewMinWidth, StickyPreviewMaxWidth);
+        double panelWidth = Math.Clamp(available * .42, StickyPreviewMinWidth, StickyPreviewMaxWidth);
         bool tilePage = _selectedSettingsPage == "AppearanceTile";
         bool backgroundPage = _selectedSettingsPage == "AppearanceBackground";
         bool sticky = (tilePage || backgroundPage) && SettingsRoot.Visibility == Visibility.Visible &&
-            available - panelWidth >= MinimumSettingsColumnWidth;
+            available >= 800 && available - panelWidth >= MinimumSettingsColumnWidth;
 
         SettingsPreviewHost.Visibility = sticky ? Visibility.Visible : Visibility.Collapsed;
         SettingsPreviewHost.Width = panelWidth;

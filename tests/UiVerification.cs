@@ -1730,6 +1730,9 @@ public sealed partial class MainWindow
                 " root=" + RootShell.ActualWidth + "x" + RootShell.ActualHeight + " scale=" + (RootShell.XamlRoot?.RasterizationScale ?? 0) +
                 " panel=" + SettingsPreviewHost.ActualWidth + " count=" + previews.Count +
                 " sizes=" + string.Join(",", previews.Select(preview => $"{preview.Name}:{preview.ActualWidth}x{preview.ActualHeight}")) + "]");
+            if (page == "AppearanceTile" && SettingsContentHost.ActualWidth >= 800)
+                check(SettingsPreviewHost.Visibility == Visibility.Visible,
+                    "wide tile settings keep the preview beside the options");
             await SaveVisualAsync(RootShell, Path.Combine(output, page + "-preview.png"), (int)RootShell.ActualWidth, (int)RootShell.ActualHeight);
         }
         // 窄窗口必须回退到页内预览：右侧区域放不下时，预览仍要出现在“标题大小”上方。
@@ -1891,6 +1894,31 @@ public sealed partial class MainWindow
         var backdrop = FindVisuals<Image>(_appearancePreviews["Tile"]).First();
         check(backdrop.Source is Microsoft.UI.Xaml.Media.Imaging.BitmapImage bitmap && bitmap.PixelWidth > 0, "tile preview background asset loads");
         check(backdrop.Stretch == Stretch.UniformToFill, "tile preview background fills the whole preview area");
+        string previousTileImage = _settings.TileBackground.ImagePath;
+        bool previousTileGlass = _settings.TileBackground.Glass;
+        string previousTileColor = _settings.TileBackground.Color;
+        double previousTileOpacity = _settings.TileBackground.ColorOpacity;
+        bool previousTileCleared = _settings.TileBackground.ColorCleared;
+        _settings.TileBackground.ImagePath = Path.Combine(output, "attachment.png");
+        _settings.TileBackground.Glass = false;
+        _settings.TileBackground.Color = "#FF0000";
+        _settings.TileBackground.ColorOpacity = 0.5;
+        _settings.TileBackground.ColorCleared = false;
+        ApplyExtendedSettings();
+        await NextLayoutAsync();
+        Border? imageTint = FindVisuals<Border>(_appearancePreviews["Tile"]).FirstOrDefault(border => border.Name == "SurfaceTintOverlay");
+        check(imageTint is { Visibility: Visibility.Visible } && imageTint.Background is SolidColorBrush imageTintBrush
+            && imageTintBrush.Color.A > 80 && imageTintBrush.Color.R > 200,
+            "tile image keeps a color tint without turning glass on");
+        check(FindVisuals<Slider>(_settingsPages["AppearanceTile"].Content).Any(slider => Equals(slider.Header, "背景颜色透明度（%）") && slider.IsEnabled),
+            "tile color opacity slider stays available on an image background");
+        _settings.TileBackground.ImagePath = previousTileImage;
+        _settings.TileBackground.Glass = previousTileGlass;
+        _settings.TileBackground.Color = previousTileColor;
+        _settings.TileBackground.ColorOpacity = previousTileOpacity;
+        _settings.TileBackground.ColorCleared = previousTileCleared;
+        ApplyExtendedSettings();
+        await NextLayoutAsync();
         var lightOverlay = FindVisuals<Border>(_appearancePreviews["Tile"]).Single(border => border.Name == "TilePreviewLightOverlay");
         check(Math.Abs(lightOverlay.Opacity - (BoardTheme.IsLight ? .55 : 0)) < .01, "tile preview background brightens in light mode");
         // 切到浅色模式后底图必须明显提亮，切回深色恢复原图。
