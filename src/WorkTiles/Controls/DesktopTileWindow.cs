@@ -308,7 +308,7 @@ internal sealed class DesktopTileWindow : DesktopSurfaceWindow
         // 这里保持低 tint/luminosity 让背景模糊自然透出。
         ConfigureBackdrop(
             true,
-            DesktopCornerMode.RoundSmall,
+            DesktopCornerMode.None,
             tint,
             Math.Min(alpha, 0.25f),
             Math.Min(alpha * 0.5f, 0.35f));

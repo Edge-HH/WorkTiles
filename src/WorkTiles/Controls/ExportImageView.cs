@@ -43,7 +43,7 @@ public sealed class ExportImageView : Grid
     private readonly TextBox _titleInput = new() { Header = "标题", MaxLength = 200 };
     private readonly CheckBox _showTitle = new() { Content = "显示标题", IsChecked = true };
     private readonly ComboBox _alignment = new() { Header = "标题位置", ItemsSource = new[] { "左上", "上方居中", "右上" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
-    private readonly ComboBox _palette = new() { Header = "色系", ItemsSource = new[] { "鲜明", "马卡龙" }, HorizontalAlignment = HorizontalAlignment.Stretch };
+    private readonly ComboBox _palette = new() { Header = "色系", ItemsSource = new[] { "鲜明", "马卡龙", "自定义" }, HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly NumberBox _scale = new() { Header = "选中磁贴缩放（%）", Minimum = 1, Maximum = 1000, Value = 100, IsEnabled = false, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
     private readonly Button _save = new() { Content = "导出 PNG", HorizontalAlignment = HorizontalAlignment.Stretch, IsEnabled = false };
     private readonly List<ExportTileVisual> _tiles = [];
@@ -94,7 +94,7 @@ public sealed class ExportImageView : Grid
         _titleFont.SuggestionChosen += (_, e) => { _titleFont.Text = (string)e.SelectedItem; ApplyTitleFont(_titleFont.Text); };
         _titleFont.QuerySubmitted += (_, e) => ApplyTitleFont(e.ChosenSuggestion as string ?? e.QueryText);
         _titleSize.ValueChanged += (_, _) => { if (double.IsFinite(_titleSize.Value)) UpdateTitleAndArrange(); };
-        _palette.SelectedIndex = project.Palette == "Macaron" ? 1 : 0;
+        _palette.SelectedIndex = project.Palette switch { "Macaron" => 1, "Custom" => 2, _ => 0 };
         options.Children.Add(_palette);
         Button backgroundButton = new() { Content = "背景颜色", HorizontalAlignment = HorizontalAlignment.Stretch };
         ColorPicker picker = new() { Color = _background, IsAlphaEnabled = false, IsColorChannelTextInputVisible = true };
@@ -243,7 +243,7 @@ public sealed class ExportImageView : Grid
         bool light = .2126 * _background.R + .7152 * _background.G + .0722 * _background.B > 145;
         _title.Foreground = new SolidColorBrush(light ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White);
         if (!_ready) return;
-        foreach (ExportTileVisual tile in _tiles) tile.SetAppearance(_background, _palette.SelectedIndex == 1 ? "Macaron" : "Vivid");
+        foreach (ExportTileVisual tile in _tiles) tile.SetAppearance(_background, _palette.SelectedIndex switch { 1 => "Macaron", 2 => "Custom", _ => "Vivid" });
         _appearanceTask = RefreshBackdropAsync(++_appearanceRevision);
     }
 

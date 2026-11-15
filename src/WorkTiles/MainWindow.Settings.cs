@@ -20,7 +20,6 @@ public sealed partial class MainWindow
     private ComboBox? _layoutChoice;
     private Slider? _gridSizeSlider;
     private Slider? _autoLayoutGapSlider;
-    private TextBlock? _autoLayoutGapReadout;
     private ToggleSwitch? _gridSnapToggle;
     private Action? _refreshHomeworkAutofill;
     private Action? _refreshSubjectAutofill;
@@ -35,6 +34,28 @@ public sealed partial class MainWindow
 
     private void InitializeExtendedSettings()
     {
+        StackPanel general = SettingsStack();
+        ToggleSwitch launch = Toggle("开机自启", _settings.LaunchAtStartup, value =>
+        {
+            bool turnedOn = value && !_settings.LaunchAtStartup;
+            _settings.LaunchAtStartup = value;
+            if (turnedOn) _settings.SilentStartup = true;
+            StartupRegistration.Apply(_settings.LaunchAtStartup, _settings.SilentStartup);
+        }, read: () => _settings.LaunchAtStartup);
+        ToggleSwitch silent = Toggle("静默启动", _settings.SilentStartup, value =>
+        {
+            _settings.SilentStartup = value;
+            StartupRegistration.Apply(_settings.LaunchAtStartup, _settings.SilentStartup);
+        }, read: () => _settings.SilentStartup);
+        general.Children.Add(launch);
+        general.Children.Add(silent);
+        general.Children.Add(Note("开启开机自启后才可以静默启动。静默启动时开机不显示主界面，只留托盘图标；若桌面磁贴已开启，则照常显示磁贴。"));
+        general.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
+            _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
+        general.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
+        _refreshSettingAvailability.Add(() => silent.IsEnabled = _settings.LaunchAtStartup);
+        RegisterSettingsPage("General", GeneralSettingsPanel, general, "常规", "开机自启、静默启动和桌面磁贴。");
+
         StackPanel layout = SettingsStack();
         _layoutChoice = Choice("布局模式", ["分屏", "仅作业", "仅时钟", "自由布局"],
             ["Split", "Board", "Clock", "Free"], _settings.LayoutMode, value => _settings.LayoutMode = value, read: () => _settings.LayoutMode);
@@ -56,11 +77,23 @@ public sealed partial class MainWindow
         // 与编辑工具栏的吸附按钮是同一个设置，两边状态实时同步。
         _gridSnapToggle = Toggle("吸附到网格", _settings.GridSnappingEnabled, SetGridSnapping, read: () => _settings.GridSnappingEnabled);
         layout.Children.Add(_gridSnapToggle);
-        _autoLayoutGapSlider = Range("自动排版磁贴间隔", 0, 120, _settings.AutoLayoutGap,
-            value => _settings.AutoLayoutGap = value, AutoLayoutGapChanged, read: () => _settings.AutoLayoutGap);
-        _autoLayoutGapReadout = new TextBlock { Name = "AutoLayoutGapReadout", Opacity = 0.75 };
+        _autoLayoutGapSlider = new Slider
+        {
+            Header = "自动排版磁贴间隔",
+            Minimum = 0,
+            Maximum = 120,
+            Value = Math.Clamp(_settings.AutoLayoutGap, 0, 120)
+        };
+        _autoLayoutGapSlider.ValueChanged += (_, args) =>
+        {
+            if (_refreshingSettingControls) return;
+            _settings.AutoLayoutGap = IsGridSnappingEnabled
+                ? LayoutMetrics.CellsToPixels(args.NewValue, GridSize)
+                : args.NewValue;
+            ToolTipService.SetToolTip(_autoLayoutGapSlider, LayoutMetrics.FormatArrangementGap(_settings.AutoLayoutGap, GridSize, IsGridSnappingEnabled));
+            AutoLayoutGapChanged();
+        };
         layout.Children.Add(_autoLayoutGapSlider);
-        layout.Children.Add(_autoLayoutGapReadout);
         UpdateAutoLayoutGapStep();
         layout.Children.Add(Toggle("自动对齐", _settings.AutoLayoutAlign, value => _settings.AutoLayoutAlign = value, read: () => _settings.AutoLayoutAlign));
         layout.Children.Add(Toggle("自动调整磁贴大小", _settings.AutoLayoutResize, value => _settings.AutoLayoutResize = value, read: () => _settings.AutoLayoutResize));
@@ -69,9 +102,7 @@ public sealed partial class MainWindow
         RegisterSettingsPage("Layout", LayoutSettingsPanel, layout, "布局", "调整布局模式、无限作业板与网格。");
 
         StackPanel window = SettingsStack();
-        window.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
-            _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
-        window.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
+        window.Children.Add(Note("同一安装目录只打开一个窗口。再次启动时可以选择重启正在运行的实例，或取消并回到已经打开的窗口。桌面磁贴在「常规」页。"));
         RegisterSettingsPage("Window", WindowSettingsPanel, window, "窗口", "同一安装目录只打开一个窗口。再次启动时可以选择退出正在运行的实例。");
 
         StackPanel menuBar = SettingsStack();
@@ -1005,21 +1036,37 @@ public sealed partial class MainWindow
         });
     }
 
-    /// <summary>间隔滑块跟随网格吸附：关闭吸附按 10px 步进，开启吸附按半格步进。</summary>
+    /// <summary>间隔滑块：吸附时单位就是半格，悬停提示显示格数；关闭吸附时按 10 像素。</summary>
     private void UpdateAutoLayoutGapStep()
     {
         if (_autoLayoutGapSlider is null) return;
-        // 吸附打开时拖动保持连续，悬停提示按半格显示，不再把滑块锁死在很大的一档上。
-        // 关闭吸附仍按 10 像素一档。
-        double step = IsGridSnappingEnabled ? 1 : 10;
-        _autoLayoutGapSlider.StepFrequency = step;
-        _autoLayoutGapSlider.SmallChange = step;
-        _autoLayoutGapSlider.LargeChange = IsGridSnappingEnabled ? Math.Max(1, GridSize) / 2 : 20;
-        if (_autoLayoutGapReadout is not null)
+        bool snap = IsGridSnappingEnabled;
+        _refreshingSettingControls = true;
+        try
         {
-            _autoLayoutGapReadout.Text = LayoutMetrics.FormatArrangementGap(_settings.AutoLayoutGap, GridSize, IsGridSnappingEnabled);
-            ToolTipService.SetToolTip(_autoLayoutGapSlider, _autoLayoutGapReadout.Text);
+            if (snap)
+            {
+                _autoLayoutGapSlider.Minimum = 0;
+                _autoLayoutGapSlider.Maximum = LayoutMetrics.MaximumArrangementCells;
+                _autoLayoutGapSlider.StepFrequency = LayoutMetrics.ArrangementCellStep;
+                _autoLayoutGapSlider.SmallChange = LayoutMetrics.ArrangementCellStep;
+                _autoLayoutGapSlider.LargeChange = 1;
+                double cells = LayoutMetrics.PixelsToCells(_settings.AutoLayoutGap, GridSize);
+                _autoLayoutGapSlider.Value = cells;
+                _settings.AutoLayoutGap = LayoutMetrics.CellsToPixels(cells, GridSize);
+            }
+            else
+            {
+                _autoLayoutGapSlider.Minimum = 0;
+                _autoLayoutGapSlider.Maximum = 120;
+                _autoLayoutGapSlider.StepFrequency = 10;
+                _autoLayoutGapSlider.SmallChange = 10;
+                _autoLayoutGapSlider.LargeChange = 20;
+                _autoLayoutGapSlider.Value = Math.Clamp(_settings.AutoLayoutGap, 0, 120);
+            }
+            ToolTipService.SetToolTip(_autoLayoutGapSlider, LayoutMetrics.FormatArrangementGap(_settings.AutoLayoutGap, GridSize, snap));
         }
+        finally { _refreshingSettingControls = false; }
     }
 
     /// <summary>自动布局里的“吸附到网格”和编辑工具栏的吸附按钮共用同一份设置。</summary>
@@ -1397,6 +1444,7 @@ public sealed partial class MainWindow
             foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
                 tile.ApplyAppearance(_settings, applyBodyDefaults: false);
             ForEachDesktopTile(tile => tile.ApplyAppearance(_settings, applyBodyDefaults: false));
+            ApplyDesktopTileBackdrops();
             _tileAppearancePreview?.ApplyAppearance(_settings, applyBodyDefaults: false);
             ScheduleSave();
         });

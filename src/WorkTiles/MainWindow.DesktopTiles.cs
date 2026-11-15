@@ -262,6 +262,7 @@ public sealed partial class MainWindow
             WatchDesktopSubject(subject);
             window.ApplyTheme(theme);
             window.ApplyBackgroundSettings(_settings.TileBackground);
+            ApplyDesktopCorner(window);
             window.SetEditing(editing);
             window.TitleText = subject.Name;
         }
@@ -340,6 +341,7 @@ public sealed partial class MainWindow
         window.HostDoubleClick += () => BeginDesktopEdit();
         window.Attach(tile, popup);
         window.ApplyBackgroundSettings(_settings.TileBackground);
+        ApplyDesktopCorner(window);
         window.SetEditing(DesktopEditActive);
         ArrangeDesktopTiles();
     }
@@ -471,7 +473,17 @@ public sealed partial class MainWindow
     private void ApplyDesktopTileBackdrops()
     {
         foreach (DesktopTileWindow window in _desktopWindows.Values)
+        {
             window.ApplyBackgroundSettings(_settings.TileBackground);
+            ApplyDesktopCorner(window);
+        }
+    }
+
+    private void ApplyDesktopCorner(DesktopTileWindow window)
+    {
+        double zoom = DesktopZoom;
+        int radius = (int)Math.Round(Math.Clamp(_settings.TileCornerRadius, 0, 40) * zoom * Math.Max(1, _desktopScale));
+        window.SetRegionRadius(radius);
     }
 
     private void SetDesktopZoom(double zoom)
@@ -597,6 +609,7 @@ public sealed partial class MainWindow
         if (window.Tile is { } tile && (Math.Abs(tile.Width - widthDip) > 0.5 || Math.Abs(tile.Height - heightDip) > 0.5))
             tile.FitDisplaySize(widthDip, heightDip);
         window.Place(pixels.X, pixels.Y, pixels.Width, pixels.Height);
+        ApplyDesktopCorner(window);
     }
 
     private void PlaceFreeTiles(DesktopWorkArea work, double zoom)
@@ -874,6 +887,7 @@ public sealed partial class MainWindow
         if (_desktopResizeEdge is DesktopResizeEdge.Bottom or DesktopResizeEdge.BottomLeft or DesktopResizeEdge.BottomRight)
             height = Math.Clamp(_resizeOriginHeight + dy, minHeight, maxHeight);
         window.ResizeTo(x, y, width, height);
+        ApplyDesktopCorner(window);
         window.Tile?.FitDisplaySize(width / _desktopScale / zoom, height / _desktopScale / zoom);
     }
 

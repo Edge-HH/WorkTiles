@@ -7,6 +7,7 @@
             <!-- 明确导航选中背景，避免系统色回退时白色底与白色标题重合。 -->
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#2C2C2C" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#3A3A3A" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#3A3A3A" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#F0F0F5" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#0E0E12" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#16161E" />
@@ -31,6 +32,7 @@
         <ResourceDictionary x:Key="Light">
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelected" Color="#E6E6E6" />
             <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="NavigationViewItemBackgroundSelectedPressed" Color="#D6D6D6" />
             <SolidColorBrush x:Key="NavigationViewItemForegroundSelected" Color="#000000" />
             <SolidColorBrush x:Key="BoardBackgroundBrush" Color="#FFFFFF" />
             <SolidColorBrush x:Key="BoardSurfaceBrush" Color="#FFFFFF" />

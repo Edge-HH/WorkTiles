@@ -438,6 +438,7 @@ Check(lockRoundTrip.Lock.TotpSecret == lockState.TotpSecret && !lockRoundTrip.Lo
 LaunchArgs emptyArgs = LaunchArgs.Parse([]);
 Check(emptyArgs.Windowed is null && emptyArgs.View == LaunchArgs.ViewDisplay && emptyArgs.Project is null,
     "无参数时保持默认全屏、看板视图且不指定项目");
+Check(LaunchArgs.Parse(["--silent"]).Silent, "--silent 静默启动");
 Check(LaunchArgs.Parse(["--windowed"]).Windowed is true, "--windowed 使用普通窗口启动");
 Check(LaunchArgs.Parse(["--fullscreen"]).Windowed is false, "--fullscreen 使用全屏启动");
 Check(LaunchArgs.Parse(["--fullscreen", "--windowed"]).Windowed is true

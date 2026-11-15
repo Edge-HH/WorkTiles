@@ -140,6 +140,10 @@ public sealed partial class MainWindow
                     "menu bar icon follows the Windows accent");
                 ShowSettings();
                 await NextLayoutAsync();
+                Check(ReferenceEquals(SettingsRoot.SelectedItem, GeneralNavItem),
+                    "opening settings starts on the general page");
+                SettingsRoot.SelectedItem = AppearanceNavItem;
+                await NextLayoutAsync();
                 var settingsPreviewEditors = FindVisuals<RichEditBox>(_appearancePreviews["Tile"]).ToList();
                 Check(settingsPreviewEditors.Count > 0 && settingsPreviewEditors.All(editor => editor.IsReadOnly),
                     "opening settings loads read-only tile preview editors");
@@ -154,7 +158,7 @@ public sealed partial class MainWindow
                     .ToList();
                 Check(ReferenceEquals(SettingsRoot.SelectedItem, AppearanceNavItem) &&
                     initiallySelectedSettingsItems.Count == 1,
-                    "opening settings has exactly one selected navigation item with its indicator");
+                    "the tile page is the only selected navigation item after it is opened");
                 SolidColorBrush selectedNav = (SolidColorBrush)Application.Current.Resources["NavigationViewItemBackgroundSelected"];
                 Check(Math.Abs(selectedNav.Color.R - selectedNav.Color.G) < 4 && Math.Abs(selectedNav.Color.G - selectedNav.Color.B) < 4,
                     $"selected settings tab is neutral gray ({selectedNav.Color.R},{selectedNav.Color.G},{selectedNav.Color.B})");
@@ -1897,12 +1901,12 @@ public sealed partial class MainWindow
             "auto layout snap switch turns grid snapping off for the whole app");
         snapToggle.IsOn = true; await NextLayoutAsync();
         check(IsGridSnappingEnabled && GridSnapToggleButton.IsChecked == true && _settings.GridSnappingEnabled &&
-            Math.Abs(gapSlider.StepFrequency - 1) < .01
+            Math.Abs(gapSlider.StepFrequency - LayoutMetrics.ArrangementCellStep) < .01
+            && Math.Abs(gapSlider.Maximum - LayoutMetrics.MaximumArrangementCells) < .01
             && ToolTipService.GetToolTip(gapSlider) is string snapTip && snapTip.EndsWith("格", StringComparison.Ordinal),
-            "auto layout snap switch enables snapping and a continuous gap slider (" + gapSlider.StepFrequency + " / " + ToolTipService.GetToolTip(gapSlider) + ")");
-        TextBlock gapReadout = FindVisuals<TextBlock>(_settingsPages["Layout"].Content).Single(text => text.Name == "AutoLayoutGapReadout");
-        check(gapReadout.Text.EndsWith("格", StringComparison.Ordinal),
-            "snapped arrangement gap is shown in grid cells (" + gapReadout.Text + ")");
+            "auto layout snap switch enables snapping and a half-cell gap slider (" + gapSlider.StepFrequency + " / " + ToolTipService.GetToolTip(gapSlider) + ")");
+        check(!FindVisuals<TextBlock>(_settingsPages["Layout"].Content).Any(text => text.Name == "AutoLayoutGapReadout"),
+            "snapped arrangement gap is shown on the slider tooltip, not a separate readout");
         check(Math.Abs(gridSizeSlider.Minimum - LayoutMetrics.MinimumGridSize) < .01, "grid size slider minimum is raised");
         GridSnapToggleButton.IsChecked = false; await NextLayoutAsync();
         check(!snapToggle.IsOn && Math.Abs(gapSlider.StepFrequency - 10) < .01, "board snap button turns the auto layout snap switch off");

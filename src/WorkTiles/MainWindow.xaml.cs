@@ -69,9 +69,13 @@ public sealed partial class MainWindow : Window
 
     public MainViewModel ViewModel { get; } = new();
 
-    public MainWindow(bool startFullScreen = true, string initialView = "display", string? projectArgument = null)
+    private bool _silentStart;
+    private TrayIcon? _tray;
+
+    public MainWindow(bool startFullScreen = true, string initialView = "display", string? projectArgument = null, bool silentStart = false)
     {
         _startFullScreen = startFullScreen;
+        _silentStart = silentStart;
         _initialView = initialView;
         _launchProject = string.IsNullOrWhiteSpace(projectArgument) ? null : projectArgument.Trim();
         InitializeComponent();
@@ -119,6 +123,7 @@ public sealed partial class MainWindow : Window
         SetTitleBar(DragRegion);
         SystemBackdrop = new PersistentMicaBackdrop();
         InitializeAppWindow();
+        ImeCandidateFix.Attach(WinRT.Interop.WindowNative.GetWindowHandle(this));
         InitializeDesktopTiles();
         InitializeTimersAndServices();
         InitializePresentationBehavior();
@@ -141,9 +146,12 @@ public sealed partial class MainWindow : Window
                 // 自动备份按到期检查推进；定时器只负责触发，是否执行由上次备份时间决定。
                 _autoBackupTimer.Start();
                 RunAutoBackupIfDue();
+                StartupRegistration.Apply(_settings.LaunchAtStartup, _settings.SilentStartup);
+                InstallTrayIcon();
             }
-            RootShell.Focus(FocusState.Programmatic);
-            if (_startFullScreen)
+            if (_silentStart) AppWindow.Hide();
+            else RootShell.Focus(FocusState.Programmatic);
+            if (_startFullScreen && !_silentStart)
             {
                 DispatcherQueue.TryEnqueue(() => SetFullScreen(true));
             }
@@ -159,6 +167,7 @@ public sealed partial class MainWindow : Window
             SaveStateNow();
             _noiseMonitor.Dispose();
             _noiseAlertPlayer.Dispose();
+            _tray?.Dispose();
         };
     }
 
@@ -350,9 +359,7 @@ public sealed partial class MainWindow : Window
         UpdateExamDisplay();
         if (SettingsRoot.SelectedItem is null)
         {
-            // 等导航模板加载并显示后再设置默认项，确保背景和选中指示条使用同一状态。
-            AppearanceNavigationGroup.IsExpanded = true;
-            SettingsRoot.SelectedItem = AppearanceNavItem;
+            SettingsRoot.SelectedItem = GeneralNavItem;
         }
         ProjectCommands.Visibility = Visibility.Collapsed;
         EmptyProjectPanel.Visibility = Visibility.Collapsed;
@@ -990,7 +997,8 @@ public sealed partial class MainWindow : Window
     private void PaletteComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_isLoaded) return;
-        _settings.Palette = PaletteComboBox.SelectedIndex == 1 ? "Macaron" : "Vivid";
+        _settings.Palette = PaletteName(PaletteComboBox.SelectedIndex);
+        if (_settings.Palette == "Custom") EnsureCustomPalette();
         RememberAppearance();
         ApplyPalette();
         BuildTiles();
@@ -999,13 +1007,127 @@ public sealed partial class MainWindow : Window
 
     private void ApplyPalette()
     {
-        ColorPalette.IsMacaron = _settings.Palette == "Macaron";
+        ColorPalette.Use(_settings.Palette, _settings.CustomPalette);
+        RefreshPaletteSwatches();
         RefreshInkPalette();
         // 学科色卡按当前色系解析，切换色系后重建列表即可保持显示的颜色与套用结果一致。
         _refreshSubjectAutofill?.Invoke();
         foreach (var subject in ViewModel.Subjects)
         {
             subject.AccentBrush = MainViewModel.BrushFromHex(ColorPalette.ResolveAccent(subject.AccentHex, subject.IsAccentExplicit, ColorPalette.IsMacaron));
+        }
+    }
+
+    private static int PaletteIndex(string? palette) => palette switch { "Macaron" => 1, "Custom" => 2, _ => 0 };
+
+    private static string PaletteName(int index) => index switch { 1 => "Macaron", 2 => "Custom", _ => "Vivid" };
+
+    private void RefreshPaletteSwatches()
+    {
+        if (PaletteSwatchRow is null) return;
+        PaletteSwatchRow.Children.Clear();
+        IReadOnlyList<string> colors = ColorPalette.ActiveSwatches;
+        bool custom = _settings.Palette == "Custom";
+        for (int index = 0; index < colors.Count; index++)
+        {
+            int slot = index;
+            string hex = colors[index];
+            Button swatch = new()
+            {
+                Width = 28,
+                Height = 28,
+                Padding = new Thickness(0),
+                Background = MainViewModel.BrushFromHex(hex),
+                BorderThickness = new Thickness(1),
+                BorderBrush = BoardTheme.LineBrush,
+                CornerRadius = new CornerRadius(4),
+                IsEnabled = custom
+            };
+            ToolTipService.SetToolTip(swatch, custom ? "修改这一色" : hex);
+            if (custom)
+            {
+                ColorPicker picker = new()
+                {
+                    IsAlphaEnabled = false,
+                    IsHexInputVisible = true,
+                    Color = MainViewModel.BrushFromHex(hex).Color
+                };
+                picker.ColorChanged += (_, args) =>
+                {
+                    EnsureCustomPalette();
+                    _settings.CustomPalette[slot] = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}";
+                    swatch.Background = new SolidColorBrush(args.NewColor);
+                    if (CurrentProject is { } project) project.CustomPalette = [.._settings.CustomPalette];
+                    ColorPalette.Use("Custom", _settings.CustomPalette);
+                    foreach (SubjectBoard subject in ViewModel.Subjects)
+                        subject.AccentBrush = MainViewModel.BrushFromHex(ColorPalette.ResolveAccent(subject.AccentHex, subject.IsAccentExplicit, false));
+                    _refreshSubjectAutofill?.Invoke();
+                    BuildTiles();
+                    ScheduleSave();
+                };
+                swatch.Flyout = new Flyout { Content = picker };
+            }
+            PaletteSwatchRow.Children.Add(swatch);
+        }
+    }
+
+    private void NewCustomPalette_Click(object sender, RoutedEventArgs e)
+    {
+        IReadOnlyList<string> source = ColorPalette.ActiveSwatches;
+        _settings.CustomPalette = (source.Count == 9 ? source : ColorPalette.Presets).ToList();
+        _settings.Palette = "Custom";
+        if (PaletteComboBox.SelectedIndex != 2) PaletteComboBox.SelectedIndex = 2;
+        RememberAppearance();
+        ApplyPalette();
+        BuildTiles();
+        ScheduleSave();
+    }
+
+    private void EnsureCustomPalette()
+    {
+        if (_settings.CustomPalette is { Count: 9 }) return;
+        IReadOnlyList<string> source = ColorPalette.Presets;
+        _settings.CustomPalette = source.Take(9).ToList();
+    }
+
+    private void InstallTrayIcon()
+    {
+        nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        ImeCandidateFix.Attach(hwnd);
+        _tray = new TrayIcon(hwnd, () => _settings.DesktopTilesEnabled);
+        _tray.Command += command => DispatcherQueue.TryEnqueue(() => HandleTrayCommand(command));
+    }
+
+    private void HandleTrayCommand(int command)
+    {
+        switch (command)
+        {
+            case TrayIcon.CommandOpen:
+                AppWindow.Show();
+                Activate();
+                break;
+            case TrayIcon.CommandShowTiles:
+                _settings.DesktopTilesEnabled = true;
+                SyncDesktopTiles();
+                ScheduleSave();
+                break;
+            case TrayIcon.CommandHideTiles:
+                _settings.DesktopTilesEnabled = false;
+                SyncDesktopTiles();
+                ScheduleSave();
+                break;
+            case TrayIcon.CommandSettings:
+                AppWindow.Show();
+                Activate();
+                ShowSettings();
+                ShowSettingsPage("General");
+                break;
+            case TrayIcon.CommandRestart:
+                RestartAfterRestore();
+                break;
+            case TrayIcon.CommandExit:
+                Close();
+                break;
         }
     }
 
@@ -1384,9 +1506,8 @@ public sealed partial class MainWindow : Window
             ViewModel.ReplaceSubjects(AppDataStore.RestoreSubjects(CurrentProject?.Subjects ?? []));
             LoadClockInk();
             ThemeComboBox.SelectedIndex = _settings.Theme switch { "Light" => 1, "Default" => 2, _ => 0 };
-            PaletteComboBox.SelectedIndex = _settings.Palette == "Macaron" ? 1 : 0;
-            // 设置页在构造时就会按色系解析预设色（学科色卡等），因此先确定色系再构建设置页。
-            ColorPalette.IsMacaron = _settings.Palette == "Macaron";
+            PaletteComboBox.SelectedIndex = PaletteIndex(_settings.Palette);
+            ColorPalette.Use(_settings.Palette, _settings.CustomPalette);
             NoiseIntervalSlider.Value = Math.Clamp(_settings.NoiseIntervalSeconds, 0.1, 2);
             _settings.NoiseIntervalSeconds = NoiseIntervalSlider.Value;
             NoiseThresholdSlider.Value = Math.Clamp(_settings.NoiseThresholdDb, 20, 120);

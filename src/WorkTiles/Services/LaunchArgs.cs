@@ -19,6 +19,9 @@ public sealed class LaunchArgs
     /// <summary>--project 的取值：项目名称或 .wth 文件路径；未给出时为 null。</summary>
     public string? Project { get; init; }
 
+    /// <summary>开机自启的静默启动：不打开主窗口，只留托盘；桌面磁贴仍按设置显示。</summary>
+    public bool Silent { get; init; }
+
     /// <summary>二次启动转发时只带显式给出的参数，避免把默认值当成用户的指定。</summary>
     public bool HasViewOverride => View != ViewDisplay;
 
@@ -27,6 +30,7 @@ public sealed class LaunchArgs
         bool? windowed = null;
         string view = ViewDisplay;
         string? project = null;
+        bool silent = false;
         // --project 与值分开写（--project 路径）时先记下标记，把下一个参数当值。
         bool pendingProject = false;
         foreach (string raw in arguments)
@@ -41,6 +45,7 @@ public sealed class LaunchArgs
             }
             if (Is(argument, "--windowed")) { windowed = true; continue; }
             if (Is(argument, "--fullscreen")) { windowed = false; continue; }
+            if (Is(argument, "--silent")) { silent = true; continue; }
             if (TakesValue(argument, "--view=", out string value))
             {
                 view = value.Trim().ToLowerInvariant() switch
@@ -60,7 +65,7 @@ public sealed class LaunchArgs
             }
             if (Is(argument, "--project")) pendingProject = true;
         }
-        return new LaunchArgs { Windowed = windowed, View = view, Project = project };
+        return new LaunchArgs { Windowed = windowed, View = view, Project = project, Silent = silent };
     }
 
     private static bool Is(string argument, string flag) => argument.Equals(flag, StringComparison.OrdinalIgnoreCase);

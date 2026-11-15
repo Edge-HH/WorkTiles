@@ -74,6 +74,8 @@ public sealed class BoardSettingsState
     public string UpdateSource { get; set; } = "GitHub";
     public string Theme { get; set; } = "Dark";
     public string Palette { get; set; } = "Vivid";
+    /// <summary>自定义色系的 9 个颜色，顺序与鲜明色系一一对应。只在色系为自定义时使用。</summary>
+    public List<string> CustomPalette { get; set; } = [];
     public double NoiseIntervalSeconds { get; set; } = 0.1;
     public string MicrophoneDeviceId { get; set; } = "";
     public double NoiseThresholdDb { get; set; } = 60;
@@ -119,6 +121,10 @@ public sealed class BoardSettingsState
     public LocalExamSettings LocalExam { get; set; } = new();
     /// <summary>在 Windows 桌面上显示当前项目的科目磁贴。本机窗口行为，不参与班级同步。</summary>
     public bool DesktopTilesEnabled { get; set; }
+    /// <summary>开机自动启动。开启后才允许静默启动。</summary>
+    public bool LaunchAtStartup { get; set; }
+    /// <summary>开机自启时不打开主窗口，只留托盘；桌面磁贴若已开启则照常显示。默认开启。</summary>
+    public bool SilentStartup { get; set; } = true;
     /// <summary>每个项目一份桌面顺序，键是项目 Id，值是科目名。不写回作业板坐标。</summary>
     public Dictionary<string, List<string>> DesktopTileOrder { get; set; } = new();
     /// <summary>桌面磁贴是否从右上角往空隙里自动排列。关掉后停在当前屏幕位置，不回到开启前的布局。</summary>

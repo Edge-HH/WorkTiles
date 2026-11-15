@@ -11,7 +11,15 @@ public partial class App : Application
     {
         InitializeComponent();
         SystemAccent.Start();
-        UnhandledException += (_, args) => WriteCrashLog(new Exception(args.Message, args.Exception));
+        UnhandledException += (_, args) =>
+        {
+            Exception exception = args.Exception ?? new Exception(args.Message);
+            WriteCrashLog(exception);
+            if (IsAutomationLaunch()) return;
+            args.Handled = true;
+            try { CrashReportWindow.Present(exception); }
+            catch (Exception presentFailed) { WriteCrashLog(presentFailed); }
+        };
         AppDomain.CurrentDomain.UnhandledException += (_, args) => WriteCrashLog(args.ExceptionObject as Exception);
     }
 
@@ -128,9 +136,10 @@ public partial class App : Application
 
     private void StartMainWindow(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
     {
-        _window = new MainWindow(startFullScreen, launchArgs.View, launchArgs.Project);
+        _window = new MainWindow(startFullScreen && !launchArgs.Silent, launchArgs.View, launchArgs.Project, launchArgs.Silent);
         _window.AttachSingleInstanceGate(instanceGate);
         _window.Activate();
+        if (launchArgs.Silent) _window.AppWindow.Hide();
     }
 
     private void ShowInstancePrompt(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
@@ -155,5 +164,16 @@ public partial class App : Application
             prompt!.Close();
         });
         prompt.Activate();
+    }
+
+    private static bool IsAutomationLaunch()
+    {
+        foreach (string argument in Environment.GetCommandLineArgs())
+        {
+            if (argument.Contains("--smoke-test", StringComparison.OrdinalIgnoreCase)
+                || argument.Contains("--verify-", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return false;
     }
 }

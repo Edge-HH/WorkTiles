@@ -248,7 +248,7 @@ public sealed partial class MainWindow
                 "Toolbar" => $"{BoardTheme.IsLight}|{RootShell.ActualWidth}|{RootShell.ActualHeight}|{_settings.ToolbarPosition}|{_settings.ToolbarIconOnly}",
                 // 模糊、透明度和颜色只改卡片上已有的画笔，不把整张预览拆掉重建。
                 "Components" => $"{BoardTheme.IsLight}",
-                "Clock" => $"{BoardTheme.IsLight}|{_settings.ClockFontFamily}|{_settings.ClockFontWeight}|{_settings.ClockColor}",
+                "Clock" => $"{BoardTheme.IsLight}|{_settings.ClockFontFamily}|{_settings.ClockFontWeight}|{_settings.ClockColor}|{_settings.ClockShowSeconds}|{_settings.ClockSecondStyle}",
                 // 磁贴示例的主题色与高光色都取自当前色系，主题或色系变化必须重建示例才和真实磁贴一致。
                 "Tile" => $"{BoardTheme.IsLight}|{ColorPalette.IsMacaron}",
                 "Background" => $"{BoardTheme.IsLight}|{_settings.LayoutMode}|{_settings.SharedBackgroundEnabled}|{_settings.SplitRatio:0.####}",
@@ -497,9 +497,13 @@ public sealed partial class MainWindow
         timeContent.Children.Add(time);
         TextBlock dateText = BindLiveText(ClockDateText, 20);
         timeContent.Children.Add(dateText);
-        // 时钟字体、粗细与颜色在“外观 → 时钟”调整；首次构建和缓存命中只走刷新器时都要同步。
         ApplyClockTextStyles(timeText, seconds, dateText);
-        _buildingPreviewRefreshers?.Add(() => ApplyClockTextStyles(timeText, seconds, dateText));
+        _buildingPreviewRefreshers?.Add(() =>
+        {
+            ApplyClockTextStyles(timeText, seconds, dateText);
+            bool corner = ClockFormat.ShowCornerSeconds(_settings.ClockShowSeconds, _settings.ClockSecondStyle);
+            seconds.Visibility = corner ? Visibility.Visible : Visibility.Collapsed;
+        });
 
         // 组件栏与看板 ClockComponents 同构：卡片外壳 + 图标，而不是裸文本。
         Border WidgetCard(string symbol, bool warning, TextBlock source, TextBlock? suffix = null, double horizontalPadding = 16)
@@ -697,6 +701,12 @@ public sealed partial class MainWindow
         content.Children.Add(time);
         content.Children.Add(date);
         ApplyClockTextStyles(timeText, seconds, date);
+        _buildingPreviewRefreshers?.Add(() =>
+        {
+            ApplyClockTextStyles(timeText, seconds, date);
+            bool corner = ClockFormat.ShowCornerSeconds(_settings.ClockShowSeconds, _settings.ClockSecondStyle);
+            seconds.Visibility = corner ? Visibility.Visible : Visibility.Collapsed;
+        });
         scene.Children.Add(content);
     }
 
@@ -840,7 +850,7 @@ public sealed partial class MainWindow
 
     private UIElement CreateToolbarPositionPicker()
     {
-        Grid screen = new() { Height = 220, Padding = new Thickness(18) };
+        Grid screen = new() { Height = 200, Padding = new Thickness(20) };
         for (int index = 0; index < 3; index++)
         {
             screen.RowDefinitions.Add(new RowDefinition());
@@ -862,7 +872,7 @@ public sealed partial class MainWindow
             RadioButton button = new()
             {
                 Name = "ToolbarPosition" + position, GroupName = "ToolbarPosition", Tag = position,
-                MinWidth = 22, MinHeight = 22, Width = 22, Height = 22, Padding = new Thickness(0),
+                MinWidth = 0, MinHeight = 0, Width = 28, Height = 28, Padding = new Thickness(0), Margin = new Thickness(6),
                 HorizontalAlignment = column == 0 ? HorizontalAlignment.Left : column == 2 ? HorizontalAlignment.Right : HorizontalAlignment.Center,
                 VerticalAlignment = row == 0 ? VerticalAlignment.Top : row == 2 ? VerticalAlignment.Bottom : VerticalAlignment.Center,
                 IsChecked = _settings.ToolbarPosition == position

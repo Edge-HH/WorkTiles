@@ -158,6 +158,7 @@
                         IsSettingsVisible="False" IsPaneOpen="True" Loaded="SettingsRoot_Loaded"
                         SelectionChanged="SettingsNavigation_SelectionChanged">
             <NavigationView.MenuItems>
+                <NavigationViewItem x:Name="GeneralNavItem" Content="常规" Tag="General"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Settings" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem Content="布局" Tag="Layout"><NavigationViewItem.Icon><icons:FluentIcon Symbol="Layout" /></NavigationViewItem.Icon></NavigationViewItem>
                 <NavigationViewItem x:Name="WindowNavigationGroup" Content="窗口" IsExpanded="True" SelectsOnInvoked="False">
                     <NavigationViewItem.Icon><icons:FluentIcon Symbol="Window" /></NavigationViewItem.Icon>
@@ -211,6 +212,7 @@
                     <TextBlock x:Name="SettingsPageTitle" FontSize="36" Foreground="{ThemeResource BoardTextBrush}" Text="磁贴" />
                     <TextBlock x:Name="SettingsPageDescription" FontSize="15" Foreground="{ThemeResource BoardTextSecondaryBrush}" Text="调整磁贴标题和背景样式。" />
                 </StackPanel>
+                <StackPanel x:Name="GeneralSettingsPanel" Visibility="Collapsed" />
                 <StackPanel x:Name="LayoutSettingsPanel" Visibility="Collapsed" />
                 <StackPanel x:Name="WindowSettingsPanel" Visibility="Collapsed" />
                 <StackPanel x:Name="MenuBarSettingsPanel" Visibility="Collapsed" />
@@ -225,9 +227,15 @@
                                 <ComboBoxItem Content="深色" Tag="Dark" /><ComboBoxItem Content="浅色" Tag="Light" /><ComboBoxItem Content="跟随系统" Tag="Default" />
                             </ComboBox>
                         </Grid>
-                        <ComboBox x:Name="PaletteComboBox" Header="色系" SelectedIndex="0" SelectionChanged="PaletteComboBox_SelectionChanged">
-                            <ComboBoxItem Content="鲜艳" /><ComboBoxItem Content="马卡龙" />
-                        </ComboBox>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="260" /></Grid.ColumnDefinitions>
+                            <TextBlock Text="色系" VerticalAlignment="Center" FontSize="15" />
+                            <ComboBox x:Name="PaletteComboBox" Grid.Column="1" HorizontalAlignment="Stretch" SelectedIndex="0" SelectionChanged="PaletteComboBox_SelectionChanged">
+                                <ComboBoxItem Content="鲜艳" Tag="Vivid" /><ComboBoxItem Content="马卡龙" Tag="Macaron" /><ComboBoxItem Content="自定义" Tag="Custom" />
+                            </ComboBox>
+                        </Grid>
+                        <StackPanel x:Name="PaletteSwatchRow" Orientation="Horizontal" Spacing="8" />
+                        <Button x:Name="NewCustomPaletteButton" Content="新建自定义色系" Click="NewCustomPalette_Click" HorizontalAlignment="Left" />
                     </StackPanel>
                 </Border>
 

@@ -22,8 +22,32 @@ public static class LayoutMetrics
     {
         double gap = double.IsFinite(pixels) ? Math.Max(0, pixels) : 0;
         if (!snapToGrid) return $"{Math.Round(gap):0} px";
-        double grid = gridSize > 0 && double.IsFinite(gridSize) ? gridSize : 1;
-        double cells = Math.Round(gap / grid * 2, MidpointRounding.AwayFromZero) / 2;
-        return cells.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " 格";
+        return FormatCells(PixelsToCells(gap, gridSize));
     }
+
+    public const double ArrangementCellStep = 0.5;
+    public const double MaximumArrangementCells = 8;
+
+    public static double PixelsToCells(double pixels, double gridSize)
+    {
+        double grid = gridSize > 0 && double.IsFinite(gridSize) ? gridSize : 1;
+        double gap = double.IsFinite(pixels) ? Math.Max(0, pixels) : 0;
+        return SnapCells(gap / grid);
+    }
+
+    public static double CellsToPixels(double cells, double gridSize)
+    {
+        double grid = gridSize > 0 && double.IsFinite(gridSize) ? gridSize : 1;
+        return SnapCells(cells) * grid;
+    }
+
+    public static double SnapCells(double cells)
+    {
+        if (!double.IsFinite(cells)) return 0;
+        double snapped = Math.Round(Math.Max(0, cells) / ArrangementCellStep, MidpointRounding.AwayFromZero) * ArrangementCellStep;
+        return Math.Min(MaximumArrangementCells, snapped);
+    }
+
+    public static string FormatCells(double cells) =>
+        SnapCells(cells).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " 格";
 }

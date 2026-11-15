@@ -20,6 +20,7 @@ public sealed class ProjectDocument
     public string? LinkedFile { get; set; }
     public string Theme { get; set; } = "Dark";
     public string Palette { get; set; } = "Vivid";
+    public List<string> CustomPalette { get; set; } = [];
     public List<SubjectState> Subjects { get; set; } = [];
     // 仅时钟模式的全屏笔迹：作业板是磁贴自己的笔迹，这里独立保存整屏书写的内容。
     public List<InkStrokeState> ClockInkStrokes { get; set; } = [];
@@ -122,11 +123,19 @@ public sealed class ProjectStore(string? directory = null)
         string basis = $"{DateTime.Now:M月d日}";
         string name = basis;
         for (int i = 2; library.Projects.Any(p => p.Name == name); i++) name = $"{basis} ({i})";
-        ProjectDocument project = new() { Name = name, AssignmentDate = DateOnly.FromDateTime(DateTime.Now), Theme = library.Settings.Theme, Palette = library.Settings.Palette };
+        ProjectDocument project = new()
+        {
+            Name = name,
+            AssignmentDate = DateOnly.FromDateTime(DateTime.Now),
+            Theme = library.Settings.Theme,
+            Palette = library.Settings.Palette,
+            CustomPalette = [..(library.Settings.CustomPalette ?? [])]
+        };
         if (keepLayout && current is not null)
         {
             project.Theme = current.Theme;
             project.Palette = current.Palette;
+            project.CustomPalette = [..(current.CustomPalette ?? [])];
             project.Subjects = Clone(current.Subjects);
             foreach (SubjectState subject in project.Subjects) { subject.Entries.Clear(); subject.InkStrokes.Clear(); }
         }
@@ -203,7 +212,7 @@ public static class ProjectValidation
     {
         if (project.Version != 1 || project.Id == Guid.Empty || string.IsNullOrWhiteSpace(project.Name) || project.Name.Length > 200)
             throw new InvalidDataException("不支持的作业文件版本或无效项目资料。");
-        if (project.Theme is not ("Dark" or "Light" or "Default") || project.Palette is not ("Vivid" or "Macaron"))
+        if (project.Theme is not ("Dark" or "Light" or "Default") || project.Palette is not ("Vivid" or "Macaron" or "Custom"))
             throw new InvalidDataException("项目主题或色系无效。");
         if (project.Subjects is null || project.Subjects.Count > 1000) throw new InvalidDataException("磁贴数量无效。");
         // 旧项目文件没有整屏笔迹字段，反序列化后补成空列表即可；有内容时按磁贴笔迹同样的规则校验。

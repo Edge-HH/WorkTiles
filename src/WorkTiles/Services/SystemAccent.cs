@@ -101,11 +101,21 @@ public static class SystemAccent
         PaintBrush(theme, "SliderTrackDecreaseBackgroundThemeBrush", fill);
         PaintBrush(theme, "BoardBrandBrush", fill);
         PaintBrush(theme, "BoardBrandSoftBrush", Soften(fill, light));
+        PaintNavigation(theme, light);
         PaintAcrylic(theme, "AccentAcrylicBackgroundFillColorDefaultBrush", light ? light3 : dark1);
         PaintAcrylic(theme, "AccentAcrylicInAppFillColorDefaultBrush", light ? light3 : dark1);
         PaintAcrylic(theme, "AccentAcrylicBackgroundFillColorBaseBrush", light ? light2 : dark2);
         PaintAcrylic(theme, "AccentAcrylicInAppFillColorBaseBrush", light ? light2 : dark2);
         PaintFocusBorder(theme, fill);
+    }
+
+    private static void PaintNavigation(ResourceDictionary theme, bool light)
+    {
+        Color fill = light ? Color.FromArgb(255, 230, 230, 230) : Color.FromArgb(255, 44, 44, 44);
+        Color hover = light ? Color.FromArgb(255, 214, 214, 214) : Color.FromArgb(255, 58, 58, 58);
+        PaintBrush(theme, "NavigationViewItemBackgroundSelected", fill);
+        PaintBrush(theme, "NavigationViewItemBackgroundSelectedPointerOver", hover);
+        PaintBrush(theme, "NavigationViewItemBackgroundSelectedPressed", hover);
     }
 
     private static void PaintBrush(ResourceDictionary dictionary, string key, Color color)

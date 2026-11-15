@@ -123,6 +123,7 @@ public sealed partial class MainWindow
         if (!_isLoaded || _applyingProjectAppearance || CurrentProject is not { } project) return;
         project.Theme = _settings.Theme;
         project.Palette = _settings.Palette;
+        project.CustomPalette = [..(_settings.CustomPalette ?? [])];
     }
 
     private void UpdateProjectCommands()
@@ -143,8 +144,8 @@ public sealed partial class MainWindow
             ? Visibility.Visible : Visibility.Collapsed;
         RenameProjectMenu.IsEnabled = DeleteProjectMenu.IsEnabled = SaveProjectMenu.IsEnabled = ExportProjectMenu.IsEnabled = exists && _storageReady;
         GlobalPenButton.IsEnabled = exists;
-        EmptyProjectPanel.Visibility = !exists && SettingsRoot.Visibility != Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
-        BoardWorkspace.Visibility = exists && _settings.LayoutMode != "Clock" ? Visibility.Visible : Visibility.Collapsed;
+        EmptyProjectPanel.Visibility = !exists && SettingsRoot.Visibility != Visibility.Visible && CloudControlRoot.Visibility != Visibility.Visible ? Visibility.Visible : Visibility.Collapsed;
+        BoardWorkspace.Visibility = !exists || _settings.LayoutMode != "Clock" ? Visibility.Visible : Visibility.Collapsed;
         EditBoardButton.IsEnabled = exists;
         UpdateInkSubjectLabel();
     }
@@ -234,14 +235,17 @@ public sealed partial class MainWindow
     /// </summary>
     private void ApplyProjectAppearance(ProjectDocument project)
     {
-        if (project.Theme == _settings.Theme && project.Palette == _settings.Palette) return;
+        project.CustomPalette ??= [];
+        bool sameCustom = project.CustomPalette.SequenceEqual(_settings.CustomPalette ?? []);
+        if (project.Theme == _settings.Theme && project.Palette == _settings.Palette && sameCustom) return;
         _applyingProjectAppearance = true;
         try
         {
             _settings.Theme = project.Theme;
             _settings.Palette = project.Palette;
+            _settings.CustomPalette = [..project.CustomPalette];
             ThemeComboBox.SelectedIndex = project.Theme switch { "Light" => 1, "Default" => 2, _ => 0 };
-            PaletteComboBox.SelectedIndex = project.Palette == "Macaron" ? 1 : 0;
+            PaletteComboBox.SelectedIndex = PaletteIndex(project.Palette);
             RootShell.RequestedTheme = project.Theme switch { "Light" => ElementTheme.Light, "Default" => ElementTheme.Default, _ => ElementTheme.Dark };
         }
         finally { _applyingProjectAppearance = false; }
@@ -332,7 +336,7 @@ public sealed partial class MainWindow
             if (removeEmptyPickerFileOnFailure && File.Exists(path) && new FileInfo(path).Length == 0) File.Delete(path);
             throw;
         }
-        project.Theme = copy.Theme; project.Palette = copy.Palette; project.LinkedFile = path;
+        project.Theme = copy.Theme; project.Palette = copy.Palette; project.CustomPalette = [..(copy.CustomPalette ?? [])]; project.LinkedFile = path;
         if (_isEditing) ViewModel.BeginEditing();
         PersistProjects();
         StorageInfoBar.Title = "已保存作业文件"; StorageInfoBar.Message = path; StorageInfoBar.Severity = InfoBarSeverity.Success; StorageInfoBar.IsOpen = true;
