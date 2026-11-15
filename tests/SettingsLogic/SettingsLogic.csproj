@@ -22,6 +22,7 @@
     <Compile Include="../../src/WorkTiles/Services/MenuBarPolicy.cs" Link="MenuBarPolicy.cs" />
     <Compile Include="../../src/WorkTiles/Services/ToolbarChrome.cs" Link="ToolbarChrome.cs" />
     <Compile Include="../../src/WorkTiles/Services/LayoutMetrics.cs" Link="LayoutMetrics.cs" />
+    <Compile Include="../../src/WorkTiles/Services/ClockFormat.cs" Link="ClockFormat.cs" />
     <Content Include="../../src/WorkTiles/Assets/Pinyin/pinyin.txt" Link="Assets/Pinyin/pinyin.txt" CopyToOutputDirectory="PreserveNewest" />
     <Compile Include="../../src/WorkTiles/Services/WidgetLayout.cs" Link="WidgetLayout.cs" />
     <Compile Include="../../src/WorkTiles/Services/DesktopTileLayout.cs" Link="DesktopTileLayout.cs" />

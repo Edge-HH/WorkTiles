@@ -97,6 +97,7 @@ public static class SettingsSchema
         new("TileBodyItalic", "AppearanceTile", "正文默认斜体", SettingKind.Bool, false),
         new("PastePlainTextOnly", "AppearanceTile", "仅粘贴纯文本", SettingKind.Bool, false),
         new("ShowTileSubjectLabel", "AppearanceTile", "右下角显示学科字样", SettingKind.Bool, true),
+        new("TileCornerRadius", "AppearanceTile", "磁贴圆角", SettingKind.Number, 3, 0, 40, 1, Unit: "px"),
         new("TileBackground", "AppearanceTile", "磁贴背景", SettingKind.Background, BackgroundDefault(), Section: "磁贴背景", Variant: "Surface"),
 
         // 外观 → 背景板
@@ -145,6 +146,8 @@ public static class SettingsSchema
         // 外观 → 时钟
         new("ClockFontFamily", "AppearanceClock", "时钟字体", SettingKind.Font, ""),
         new("ClockFontWeight", "AppearanceClock", "时钟粗细", SettingKind.Enum, "Normal", Options: [new("Light", "细体"), new("Normal", "常规"), new("Medium", "中等"), new("Bold", "粗体")]),
+        new("ClockShowSeconds", "AppearanceClock", "显示秒", SettingKind.Bool, true),
+        new("ClockSecondStyle", "AppearanceClock", "秒数样式", SettingKind.Enum, "Corner", Options: [new("Corner", "右上角小数字"), new("Large", "大数字")], EnableWhen: "ClockShowSeconds"),
         new("ClockColor", "AppearanceClock", "时钟颜色", SettingKind.Color, ""),
 
         // 组件 → 天气

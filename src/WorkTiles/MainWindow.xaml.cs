@@ -243,8 +243,9 @@ public sealed partial class MainWindow : Window
     {
         DateTime now = DateTime.Now;
         string dateText = $"{now:yyyy年M月d日} 星期{GetChineseWeekday(now.DayOfWeek)}";
-        MainTimeText.Text = now.ToString("HH:mm");
+        MainTimeText.Text = ClockFormat.MainText(now, _settings.ClockShowSeconds, _settings.ClockSecondStyle);
         SecondsText.Text = now.ToString("ss");
+        ApplyClockDigitMode();
         ClockDateText.Text = dateText;
         // 考试模式挂在同一条一秒时钟上：到点切换、倒计时与全屏覆盖层的刷新都不再单独定时。
         UpdateExamDisplay();

@@ -318,6 +318,7 @@ public sealed class SubjectTileControl : Grid
         if (applyBodyDefaults) ApplyBodyDefaults(settings);
         _nameEditor.MaxWidth = Math.Max(240, Width - 150);
         _watermark.Visibility = settings.ShowTileSubjectLabel ? Visibility.Visible : Visibility.Collapsed;
+        _frame.CornerRadius = new CornerRadius(Math.Clamp(settings.TileCornerRadius, 0, 40));
         // 保持透明画刷以接收双击等命中测试，同时不遮挡桌面透明与圆角透底。
         _frame.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         _backgroundVisual.Apply(settings.TileBackground, BoardTheme.SurfaceBrush, surface: true);

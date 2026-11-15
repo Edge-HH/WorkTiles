@@ -122,6 +122,7 @@ public sealed partial class MainWindow
         tile.Children.Add(Toggle("正文默认粗体", _settings.TileBodyBold, value => _settings.TileBodyBold = value, TileBodyStyleChanged, read: () => _settings.TileBodyBold));
         tile.Children.Add(Toggle("正文默认斜体", _settings.TileBodyItalic, value => _settings.TileBodyItalic = value, TileBodyStyleChanged, read: () => _settings.TileBodyItalic));
         tile.Children.Add(Toggle("右下角显示学科字样", _settings.ShowTileSubjectLabel, value => _settings.ShowTileSubjectLabel = value, read: () => _settings.ShowTileSubjectLabel));
+        tile.Children.Add(Range("磁贴圆角", 0, 40, _settings.TileCornerRadius, value => _settings.TileCornerRadius = value, read: () => _settings.TileCornerRadius));
         tile.Children.Add(Note("默认正文样式用于新建和尚未单独设置格式的正文；已有的局部字体、粗体、斜体、颜色与高光不会被覆盖。开启纯文本粘贴后，Ctrl+V 和右键粘贴都会移除来源格式。"));
         tile.Children.Add(BackgroundEditor(_settings.TileBackground, () => true, () => true, surface: true, scope: MediaScope.Tile));
         StackPanel backgrounds = SettingsStack();
@@ -1232,6 +1233,19 @@ public sealed partial class MainWindow
         panel.Children.Add(ClockFontPicker());
         panel.Children.Add(Choice("时钟粗细", ["细体", "常规", "中等", "粗体"], ["Light", "Normal", "Medium", "Bold"],
             _settings.ClockFontWeight, value => _settings.ClockFontWeight = value, read: () => _settings.ClockFontWeight));
+        panel.Children.Add(Toggle("显示秒", _settings.ClockShowSeconds, value =>
+        {
+            _settings.ClockShowSeconds = value;
+            ApplyClockDigitMode();
+        }, read: () => _settings.ClockShowSeconds));
+        ComboBox secondStyle = Choice("秒数样式", ["右上角小数字", "大数字"], [ClockFormat.Corner, ClockFormat.Large],
+            ClockFormat.NormalizeStyle(_settings.ClockSecondStyle), value =>
+            {
+                _settings.ClockSecondStyle = value;
+                ApplyClockDigitMode();
+            }, read: () => ClockFormat.NormalizeStyle(_settings.ClockSecondStyle));
+        panel.Children.Add(secondStyle);
+        _refreshSettingAvailability.Add(() => secondStyle.IsEnabled = _settings.ClockShowSeconds);
         ColorPicker picker = new()
         {
             IsAlphaEnabled = false, IsHexInputVisible = true,
@@ -1327,7 +1341,20 @@ public sealed partial class MainWindow
         date.Foreground = color;
     }
 
-    private void ApplyClockAppearance() => ApplyClockTextStyles(MainTimeText, SecondsText, ClockDateText);
+    private void ApplyClockAppearance()
+    {
+        ApplyClockTextStyles(MainTimeText, SecondsText, ClockDateText);
+        ApplyClockDigitMode();
+    }
+
+    private void ApplyClockDigitMode()
+    {
+        if (MainTimeText is null || SecondsText is null) return;
+        DateTime now = DateTime.Now;
+        MainTimeText.Text = ClockFormat.MainText(now, _settings.ClockShowSeconds, _settings.ClockSecondStyle);
+        SecondsText.Visibility = ClockFormat.ShowCornerSeconds(_settings.ClockShowSeconds, _settings.ClockSecondStyle)
+            ? Visibility.Visible : Visibility.Collapsed;
+    }
 
     /// <summary>控制窗边框：设置为空时跟随主题线条色，指定颜色后不再随深浅主题变化。</summary>
     private static Brush CreateToolbarBorder(string color) =>

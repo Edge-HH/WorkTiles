@@ -489,6 +489,8 @@ public sealed partial class MainWindow
         TextBlock seconds = BindLiveText(SecondsText, 28);
         seconds.Margin = new Thickness(0, 17, 0, 0);
         seconds.VerticalAlignment = VerticalAlignment.Top;
+        seconds.Visibility = ClockFormat.ShowCornerSeconds(_settings.ClockShowSeconds, _settings.ClockSecondStyle)
+            ? Visibility.Visible : Visibility.Collapsed;
         Grid.SetColumn(timeText, 0); Grid.SetColumn(seconds, 1);
         time.Children.Add(timeText); time.Children.Add(seconds);
         timeContent.Children.Add(time);
@@ -680,6 +682,8 @@ public sealed partial class MainWindow
         TextBlock seconds = BindLiveText(SecondsText, 28);
         seconds.Margin = new Thickness(0, 17, 0, 0);
         seconds.VerticalAlignment = VerticalAlignment.Top;
+        seconds.Visibility = ClockFormat.ShowCornerSeconds(_settings.ClockShowSeconds, _settings.ClockSecondStyle)
+            ? Visibility.Visible : Visibility.Collapsed;
         Grid.SetColumn(timeText, 0); Grid.SetColumn(seconds, 1);
         time.Children.Add(timeText); time.Children.Add(seconds);
         TextBlock date = BindLiveText(ClockDateText, 20);

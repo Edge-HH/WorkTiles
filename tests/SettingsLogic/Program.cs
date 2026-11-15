@@ -660,6 +660,9 @@ Check(DesktopTileLayout.Arrange([], desktopArea).Count == 0, "没有磁贴时不
 List<string> merged = DesktopTileLayout.MergeOrder(["语文", "已删除", "数学"], ["数学", "英语", "语文"]);
 Check(merged.SequenceEqual(["语文", "数学", "英语"]), "已保存的顺序保留还在的科目，新科目接在末尾");
 Check(DesktopTileLayout.MergeOrder(["数学", "数学"], ["数学"]).SequenceEqual(["数学"]), "同名科目按出现次数对应，多出来的保存项丢掉");
+Check(ClockFormat.MainText(new DateTime(2026, 11, 15, 9, 8, 7), false, ClockFormat.Corner) == "09:08", "关闭秒数时只显示时和分");
+Check(ClockFormat.MainText(new DateTime(2026, 11, 15, 9, 8, 7), true, ClockFormat.Large) == "09:08:07", "大数字把秒写进主时间");
+Check(ClockFormat.ShowCornerSeconds(true, ClockFormat.Corner) && !ClockFormat.ShowCornerSeconds(true, ClockFormat.Large) && !ClockFormat.ShowCornerSeconds(false, ClockFormat.Corner), "右上角小数字只在显示秒且不是大数字时出现");
 Check(LayoutMetrics.FormatArrangementGap(24, 48, true) == "0.5 格" && LayoutMetrics.FormatArrangementGap(48, 48, true) == "1 格", "吸附到网格时间隔按半格显示");
 Check(LayoutMetrics.FormatArrangementGap(24, 48, false) == "24 px", "未吸附时仍显示像素");
 Check(LayoutMetrics.GridTooDense(4000, 4000, 32) && !LayoutMetrics.GridTooDense(800, 600, 48), "一次要画的格子太多时不显示网格");

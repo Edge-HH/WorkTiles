@@ -36,6 +36,8 @@ public sealed class BoardSettingsState
     public bool PastePlainTextOnly { get; set; }
     /// <summary>磁贴右下角显示学科名称。默认打开，保持现有看板的大字水印。</summary>
     public bool ShowTileSubjectLabel { get; set; } = true;
+    /// <summary>磁贴外框圆角，单位是像素。默认 3，和原来的细圆角一致。</summary>
+    public double TileCornerRadius { get; set; } = 3;
     public BackgroundSettings TileBackground { get; set; } = new();
     public bool SharedBackgroundEnabled { get; set; }
     public BackgroundSettings SharedBackground { get; set; } = new();
@@ -99,6 +101,10 @@ public sealed class BoardSettingsState
     public string SecondLaunchAction { get; set; } = "Foreground";
     /// <summary>预览（查看模式）下显示顶部菜单栏；默认关闭，菜单栏只在编辑模式显示。</summary>
     public bool ShowMenuBarInPreview { get; set; }
+    /// <summary>时钟是否显示秒。关闭后只显示时和分。</summary>
+    public bool ClockShowSeconds { get; set; } = true;
+    /// <summary>秒数形态：Corner 为右上角小数字，Large 为并入主时间的大数字。</summary>
+    public string ClockSecondStyle { get; set; } = "Corner";
     /// <summary>关于页实验功能：打开后设置侧栏显示集控。默认关闭。</summary>
     public bool ShowExperimentalCloud { get; set; }
     /// <summary>关于页实验功能：打开后设置侧栏显示自动填充。默认关闭。</summary>

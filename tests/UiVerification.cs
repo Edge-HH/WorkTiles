@@ -1637,6 +1637,11 @@ public sealed partial class MainWindow
             "noise settings can stop monitoring when the window loses focus");
         check(FindVisuals<ToggleSwitch>(_settingsPages["AppearanceTile"].Content).Any(toggle => Equals(toggle.Header, "右下角显示学科字样") && toggle.IsOn),
             "tile appearance shows the subject label by default");
+        check(FindVisuals<Slider>(_settingsPages["AppearanceTile"].Content).Any(slider => Equals(slider.Header, "磁贴圆角")),
+            "tile appearance offers a corner radius slider");
+        check(FindVisuals<ToggleSwitch>(_settingsPages["AppearanceClock"].Content).Any(toggle => Equals(toggle.Header, "显示秒") && toggle.IsOn)
+            && FindVisuals<ComboBox>(_settingsPages["AppearanceClock"].Content).Any(box => Equals(box.Header, "秒数样式")),
+            "clock settings offer seconds and a small-or-large digit style");
         ElementTheme originalAboutTheme = RootShell.RequestedTheme;
         RootShell.RequestedTheme = ElementTheme.Light;
         await NextLayoutAsync();
