@@ -38,31 +38,24 @@ public sealed class RecentImagesView : StackPanel
             string title = _library.DisplayTitle(path);
             string? preview = MediaLibrary.PreviewFile(path);
             bool image = MediaLibrary.IsImage(path) || preview is not null;
-            Grid face = new();
-            TextBlock caption = new()
-            {
-                Text = title,
-                TextWrapping = TextWrapping.Wrap,
-                MaxLines = 3,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Margin = new Thickness(6),
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            if (image)
-            {
-                Image picture = new()
+            object content = image
+                ? new Image
                 {
                     Stretch = Stretch.UniformToFill,
                     Source = new BitmapImage(new Uri(preview ?? path)) { DecodePixelWidth = 176, AutoPlay = false }
+                }
+                : new TextBlock
+                {
+                    Text = title,
+                    TextWrapping = TextWrapping.Wrap,
+                    MaxLines = 3,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Margin = new Thickness(6),
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
                 };
-                picture.ImageOpened += (_, _) => caption.Visibility = Visibility.Collapsed;
-                picture.ImageFailed += (_, _) => caption.Visibility = Visibility.Visible;
-                face.Children.Add(picture);
-            }
-            face.Children.Add(caption);
             Button button = new() { Width = 88, Height = 88, Padding = new Thickness(0), CornerRadius = new CornerRadius(6),
-                Content = face };
+                Content = content };
             AutomationProperties.SetName(button, "使用最近媒体 " + title);
             ToolTipService.SetToolTip(button, title);
             button.Click += async (_, _) => await _select(path);
