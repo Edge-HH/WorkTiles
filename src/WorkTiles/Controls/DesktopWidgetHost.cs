@@ -147,7 +147,8 @@ internal enum DesktopCornerMode
 /// <summary>
 /// 标准 Win32 + DesktopWindowXamlSource 桌面组件宿主：
 /// 1. 创建纯 WS_POPUP + WS_EX_NOREDIRECTIONBITMAP + WS_EX_TOOLWINDOW 窗口（无边框、无标题栏、无白边）；
-/// 2. 通过 DwmExtendFrameIntoClientArea(-1) 与透明/亚克力 SystemBackdrop 实现逐像素透明与圆角透底；
+/// 2. 通过 DwmExtendFrameIntoClientArea(-1)、DWMWA_BORDER_COLOR=NONE 与透明/亚克力 SystemBackdrop 实现逐像素透明与圆角透底；
+///    显示、改尺寸和 SetWindowRgn 之后要重新写这些属性，否则系统会沿窗口补回一圈白边；
 /// 3. 非编辑态下以 Progman 作为 Owner（GWLP_HWNDPARENT）并保持 WS_EX_NOACTIVATE，配合 Win+D 事件钩子，
 ///    保证按 Win+D 时不被最小化且不被桌面遮挡，同时普通窗口仍可覆盖在上方。
 /// </summary>
@@ -181,15 +182,21 @@ internal sealed class DesktopWidgetHost : IDisposable
     private const uint WmMouseActivate = 0x0021;
     private const uint WmWindowPosChanging = 0x0046;
     private const uint WmNcCalcSize = 0x0083;
+    private const uint WmNcPaint = 0x0085;
+    private const uint WmNcActivate = 0x0086;
     private const uint WmSysCommand = 0x0112;
+    private const uint WmDwmCompositionChanged = 0x031E;
 
     private const int MaActivate = 1;
     private const int MaNoActivate = 3;
     private const int ScMinimize = 0xF020;
+    private const int HollowBrush = 5;
 
     private const int DwmwaWindowCornerPreference = 33;
     private const int DwmwaBorderColor = 34;
     private const int DwmwaColorNone = unchecked((int)0xFFFFFFFE);
+    private const int DwmwaSystemBackdropType = 38;
+    private const int DwmsbtNone = 1;
 
     private static readonly nint HwndBottom = 1;
     private static readonly nint HwndTop = 0;
@@ -201,6 +208,7 @@ internal sealed class DesktopWidgetHost : IDisposable
     private static readonly List<DesktopWidgetHost> _activeHosts = [];
     private static nint _winEventHook;
     private static WinEventProc? _winEventProc;
+    private static readonly EnumChildProc StripChildBorderDelegate = StripChildBorder;
 
     private nint _hwnd;
     private DesktopWindowXamlSource? _xamlSource;
@@ -212,6 +220,7 @@ internal sealed class DesktopWidgetHost : IDisposable
     private bool _interactive;
     private bool _clickThrough;
     private bool _disposed;
+    private bool _applyingFrame;
     private DesktopCornerMode _cornerMode = DesktopCornerMode.None;
     private bool _acrylic;
     private bool _backdropSuppressed;
@@ -258,7 +267,9 @@ internal sealed class DesktopWidgetHost : IDisposable
         _xamlSource.ShouldConstrainPopupsToWorkArea = true;
         _xamlSource.Content = content;
         Trace("Content set");
-        if (_acrylic) ApplyBackdrop();
+        // 岛建好后再写一次。Initialize 会把显示前设过的无边框属性清掉，不透明白板也会露出来。
+        ApplyBackdrop();
+        ApplyDwmAttributes();
 
         UpdateDesktopAnchor();
         Trace("UpdateDesktopAnchor done");
@@ -281,6 +292,13 @@ internal sealed class DesktopWidgetHost : IDisposable
         _visible = true;
         ShowWindow(_hwnd, SwShowNoActivate);
         _xamlSource?.SiteBridge?.MoveAndResize(new RectInt32(0, 0, _width, _height));
+        // 显示时系统会补上默认白边，当前这次调用可能仍早于 DWM 收尾，下一帧再写一次。
+        ApplyDwmAttributes();
+        if (_xamlSource?.Content is UIElement element)
+            element.DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_disposed) ApplyDwmAttributes();
+            });
     }
 
     public void Hide()
@@ -321,6 +339,8 @@ internal sealed class DesktopWidgetHost : IDisposable
             _xamlSource?.SiteBridge?.MoveAndResize(new RectInt32(0, 0, width, height));
             ApplyRoundedRegion();
         }
+        else if (posChanged)
+            ApplyDwmAttributes();
     }
 
     /// <summary>把窗口裁成设定的圆角。系统亚克力跟着这个区域走，不会比按钮色块大出一圈。</summary>
@@ -361,6 +381,7 @@ internal sealed class DesktopWidgetHost : IDisposable
         else ex |= WsExNoActivate;
         SetWindowLongPtr(_hwnd, GwlExStyle, ex);
         SetWindowPos(_hwnd, 0, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+        ApplyDwmAttributes();
         UpdateDesktopAnchor();
     }
 
@@ -374,6 +395,7 @@ internal sealed class DesktopWidgetHost : IDisposable
         else ex &= ~WsExTransparent;
         SetWindowLongPtr(_hwnd, GwlExStyle, ex);
         SetWindowPos(_hwnd, 0, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoZOrder | SwpNoActivate | SwpFrameChanged);
+        ApplyDwmAttributes();
     }
 
     public void ConfigureBackdrop(bool useDesktopAcrylic, DesktopCornerMode cornerMode, Color tintColor, float tintOpacity, float luminosityOpacity)
@@ -462,12 +484,14 @@ internal sealed class DesktopWidgetHost : IDisposable
         if (_regionRadius <= 0 || _width < 2 || _height < 2)
         {
             SetWindowRgn(_hwnd, 0, true);
+            ApplyDwmAttributes();
             return;
         }
         int diameter = Math.Min(_regionRadius * 2, Math.Min(_width, _height));
         nint region = CreateRoundRectRgn(0, 0, _width + 1, _height + 1, diameter, diameter);
         if (SetWindowRgn(_hwnd, region, true) == 0)
             DeleteObject(region);
+        ApplyDwmAttributes();
     }
 
     private static nint GetDesktopOwnerHandle()
@@ -479,13 +503,40 @@ internal sealed class DesktopWidgetHost : IDisposable
 
     private void ApplyDwmAttributes()
     {
-        if (_hwnd == 0) return;
-        Margins margins = new() { Left = -1, Right = -1, Top = -1, Bottom = -1 };
-        DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+        if (_hwnd == 0 || _applyingFrame) return;
+        _applyingFrame = true;
+        try
+        {
+            Margins margins = new() { Left = -1, Right = -1, Top = -1, Bottom = -1 };
+            DwmExtendFrameIntoClientArea(_hwnd, ref margins);
+            StripBorder(_hwnd);
+            int corner = (int)_cornerMode;
+            DwmSetWindowAttribute(_hwnd, DwmwaWindowCornerPreference, ref corner, 4);
+            // 扩展进客户区的系统底板默认是白色。亚克力控制器自己管理底板，这里再关掉会把毛玻璃一起关了。
+            if (!_acrylic || _backdropSuppressed)
+            {
+                int backdrop = DwmsbtNone;
+                DwmSetWindowAttribute(_hwnd, DwmwaSystemBackdropType, ref backdrop, 4);
+            }
+            EnumChildWindows(_hwnd, StripChildBorderDelegate, _hwnd);
+        }
+        finally
+        {
+            _applyingFrame = false;
+        }
+    }
+
+    private static void StripBorder(nint hwnd)
+    {
         int borderColor = DwmwaColorNone;
-        DwmSetWindowAttribute(_hwnd, DwmwaBorderColor, ref borderColor, 4);
-        int corner = (int)_cornerMode;
-        DwmSetWindowAttribute(_hwnd, DwmwaWindowCornerPreference, ref corner, 4);
+        DwmSetWindowAttribute(hwnd, DwmwaBorderColor, ref borderColor, 4);
+    }
+
+    private static bool StripChildBorder(nint child, nint _)
+    {
+        // 岛的子窗口自己还有一条边。底板类型只改顶层，避免把岛里的内容一起关掉。
+        StripBorder(child);
+        return true;
     }
 
     private void ApplyBackdrop()
@@ -505,6 +556,7 @@ internal sealed class DesktopWidgetHost : IDisposable
         {
             Trace($"ApplyBackdrop EX: {ex}");
         }
+        ApplyDwmAttributes();
     }
 
     public void Dispose()
@@ -547,7 +599,9 @@ internal sealed class DesktopWidgetHost : IDisposable
             lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
             hInstance = GetModuleHandle(null),
             lpszClassName = "WorkTilesDesktopHostClass",
-            hCursor = LoadCursor(0, (nint)32512)
+            hCursor = LoadCursor(0, (nint)32512),
+            // 类画刷留空时，系统会用 COLOR_WINDOW 把没盖住的边填白。
+            hbrBackground = GetStockObject(HollowBrush)
         };
         _classAtom = RegisterClassEx(ref wc);
     }
@@ -604,6 +658,7 @@ internal sealed class DesktopWidgetHost : IDisposable
         if (_disposed || !_visible || _hwnd == 0) return;
         if (IsIconic(_hwnd)) ShowWindow(_hwnd, SwShowNoActivate);
         SetWindowPos(_hwnd, HwndTop, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
+        ApplyDwmAttributes();
     }
 
     private static bool IsDesktopShellWindow(nint hwnd)
@@ -630,6 +685,14 @@ internal sealed class DesktopWidgetHost : IDisposable
             {
                 case WmEraseBkgnd:
                     return 1;
+                case WmNcPaint:
+                    return 0;
+                case WmNcActivate:
+                    // lParam 为 -1 时 DefWindowProc 不会重画非客户区边框。
+                    return DefWindowProc(hwnd, msg, wParam, -1);
+                case WmDwmCompositionChanged:
+                    host.ApplyDwmAttributes();
+                    return 0;
                 case WmNcCalcSize:
                     if (wParam != 0) return 0;
                     break;
@@ -655,6 +718,7 @@ internal sealed class DesktopWidgetHost : IDisposable
                         host._height = h;
                         host._xamlSource?.SiteBridge?.MoveAndResize(new RectInt32(0, 0, w, h));
                     }
+                    host.ApplyDwmAttributes();
                     return 0;
                 }
                 case WmSetFocus:
@@ -716,6 +780,7 @@ internal sealed class DesktopWidgetHost : IDisposable
 
     private delegate nint WndProc(nint hwnd, uint msg, nint wParam, nint lParam);
     private delegate void WinEventProc(nint hook, uint eventType, nint hwnd, int idObject, int idChild, uint thread, uint time);
+    private delegate bool EnumChildProc(nint hwnd, nint lParam);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
     private static extern ushort RegisterClassEx(ref WndClassEx wc);
@@ -741,6 +806,12 @@ internal sealed class DesktopWidgetHost : IDisposable
 
     [DllImport("gdi32.dll")]
     private static extern bool DeleteObject(nint obj);
+
+    [DllImport("gdi32.dll")]
+    private static extern nint GetStockObject(int obj);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(nint hwnd, EnumChildProc callback, nint lParam);
 
     [DllImport("user32.dll")]
     private static extern bool IsIconic(nint hwnd);

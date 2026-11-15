@@ -730,8 +730,11 @@ internal sealed class DesktopCommandWindow
 
     private void ApplyFrame(Segment segment, double width, double height)
     {
-        segment.Frame.Width = Math.Max(0, width);
-        segment.Frame.Height = Math.Max(0, height);
+        // 不把外框锁死在计算尺寸上。窗口像素四舍五入后会大出一圈，锁死的外框盖不住，露出白边。
+        segment.Frame.ClearValue(FrameworkElement.WidthProperty);
+        segment.Frame.ClearValue(FrameworkElement.HeightProperty);
+        segment.Frame.MinWidth = Math.Max(0, width);
+        segment.Frame.MinHeight = Math.Max(0, height);
         segment.Frame.Padding = new Thickness(_padding);
         segment.Frame.BorderThickness = new Thickness(_border);
     }
@@ -808,8 +811,8 @@ internal sealed class DesktopCommandWindow
             Frame = new Border
             {
                 Child = content,
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Top,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
                 CornerRadius = new CornerRadius(8)
             };
             Root.Children.Add(Frame);
