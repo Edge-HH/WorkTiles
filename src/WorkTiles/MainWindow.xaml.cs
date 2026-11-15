@@ -207,16 +207,8 @@ public sealed partial class MainWindow : Window
     {
         _instanceGate = gate;
         gate.SecondLaunchRequested += request => DispatcherQueue.TryEnqueue(() => _ = HandleSecondLaunchAsync(request));
+        gate.QuitRequested += () => DispatcherQueue.TryEnqueue(Close);
         Closed += (_, _) => gate.Dispose();
-    }
-
-    /// <summary>关闭允许多实例后认领启动闸门；闸门已被其他窗口持有时保持现状，下次启动仍按新设置转发。</summary>
-    private void ClaimSingleInstanceGate()
-    {
-        if (_instanceGate is not null) return;
-        SingleInstanceService gate = SingleInstanceService.Start();
-        if (gate.IsFirstInstance) AttachSingleInstanceGate(gate);
-        else gate.Dispose();
     }
 
     /// <summary>

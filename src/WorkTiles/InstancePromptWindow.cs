@@ -1,0 +1,54 @@
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Windows.Graphics;
+
+namespace WorkTiles;
+
+/// <summary>第二次启动时的选择窗口。没有主窗口，所以不能用依赖 XamlRoot 的对话框。</summary>
+internal sealed class InstancePromptWindow : Window
+{
+    private readonly TextBlock _message;
+    private readonly Button _replace;
+    private readonly Button _back;
+
+    public InstancePromptWindow(Func<Task> replace, Action back)
+    {
+        Title = "WorkTiles";
+        StackPanel root = new() { Spacing = 20, Padding = new Thickness(28), Width = 460 };
+        _message = new TextBlock
+        {
+            Text = "检测到正在运行的WorkTiles实例",
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 18
+        };
+        StackPanel actions = new()
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            HorizontalAlignment = HorizontalAlignment.Right
+        };
+        _replace = new Button { Content = "退出正在运行的实例并启动" };
+        _back = new Button { Content = "返回" };
+        _replace.Click += async (_, _) =>
+        {
+            _replace.IsEnabled = false;
+            _back.IsEnabled = false;
+            await replace();
+        };
+        _back.Click += (_, _) => back();
+        actions.Children.Add(_replace);
+        actions.Children.Add(_back);
+        root.Children.Add(_message);
+        root.Children.Add(actions);
+        Content = root;
+        AppWindow.Resize(new SizeInt32(520, 200));
+    }
+
+    public void SetBusy(string message)
+    {
+        _message.Text = message;
+        _replace.IsEnabled = false;
+    }
+
+    public void AllowBack() => _back.IsEnabled = true;
+}

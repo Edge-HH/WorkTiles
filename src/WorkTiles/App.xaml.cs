@@ -113,22 +113,44 @@ public partial class App : Application
             return;
         }
 #endif
-        // 允许多实例关闭时拦下重复启动：转成对已有窗口的一次唤醒后直接退出。
+        // 同一安装目录只开一个窗口。已经有实例时先问用户：退出那个实例再启动，或返回。
         // 冒烟与验证模式已在上面提前返回，各自跑隔离副本，不参与互斥。
-        (bool allowMultipleInstances, string secondLaunchAction) = SingleInstanceService.ReadLaunchSettings();
-        SingleInstanceService? instanceGate = null;
-        if (!allowMultipleInstances)
+        SingleInstanceService instanceGate = SingleInstanceService.Start();
+        if (!instanceGate.IsFirstInstance)
         {
-            instanceGate = SingleInstanceService.Start();
-            if (!instanceGate.IsFirstInstance)
+            ShowInstancePrompt(instanceGate, startFullScreen, launchArgs);
+            return;
+        }
+        StartMainWindow(instanceGate, startFullScreen, launchArgs);
+    }
+
+    private void StartMainWindow(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
+    {
+        _window = new MainWindow(startFullScreen, launchArgs.View, launchArgs.Project);
+        _window.AttachSingleInstanceGate(instanceGate);
+        _window.Activate();
+    }
+
+    private void ShowInstancePrompt(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
+    {
+        InstancePromptWindow? prompt = null;
+        prompt = new InstancePromptWindow(async () =>
+        {
+            prompt!.SetBusy("正在退出正在运行的实例…");
+            SingleInstanceService? owned = await SingleInstanceService.ReplaceRunningInstanceAsync(instanceGate);
+            if (owned is null)
             {
-                instanceGate.ForwardToRunningInstance(secondLaunchAction, launchArgs);
-                instanceGate.Dispose();
+                prompt.SetBusy("没能退出正在运行的实例，请先手动关掉它。");
+                prompt.AllowBack();
                 return;
             }
-        }
-        _window = new MainWindow(startFullScreen, launchArgs.View, launchArgs.Project);
-        if (instanceGate is not null) _window.AttachSingleInstanceGate(instanceGate);
-        _window.Activate();
+            StartMainWindow(owned, startFullScreen, launchArgs);
+            prompt.Close();
+        }, () =>
+        {
+            instanceGate.Dispose();
+            prompt!.Close();
+        });
+        prompt.Activate();
     }
 }

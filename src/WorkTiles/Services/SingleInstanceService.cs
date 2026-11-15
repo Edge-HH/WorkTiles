@@ -9,8 +9,8 @@ namespace WorkTiles.Services;
 public sealed record SecondLaunchRequest(string Action, LaunchArgs? Arguments);
 
 /// <summary>
-/// 窗口启动闸门：“允许多实例”关闭后，同一安装目录只允许同时打开一个软件窗口；
-/// 再次启动按“已打开时再次启动的行为”唤醒已有窗口（移至前台 / 全屏 / 不执行任何操作）后退出。
+/// 窗口启动闸门：同一安装目录只允许同时打开一个软件窗口。
+/// 再次启动会弹出选择窗口，可以退出正在运行的实例再启动，或直接返回。
 /// 互斥体和唤醒事件按数据目录命名，不同便携副本互不干扰。
 /// </summary>
 public sealed class SingleInstanceService : IDisposable
@@ -32,6 +32,8 @@ public sealed class SingleInstanceService : IDisposable
 
     /// <summary>已有窗口收到再次启动时触发；在监听线程上触发。</summary>
     public event Action<SecondLaunchRequest>? SecondLaunchRequested;
+    /// <summary>已有窗口收到退出请求时触发；在监听线程上触发。调用方需要自己切回界面线程再关窗口。</summary>
+    public event Action? QuitRequested;
 
     private SingleInstanceService(Mutex mutex, EventWaitHandle foregroundSignal, EventWaitHandle fullScreenSignal, EventWaitHandle quitSignal, bool owned)
     {
@@ -41,7 +43,8 @@ public sealed class SingleInstanceService : IDisposable
         _quitSignal = quitSignal;
         _owned = owned;
         if (!_owned) return;
-        // 只有闸门的认领者监听唤醒信号；监听线程随进程退出，Dispose 负责正常收尾。
+        // 上一次退出会把手动复位的退出信号留在触发态。认领者先清掉，避免新窗口一启动就把自己关掉。
+        _quitSignal.Reset();
         _listener = new Thread(Listen) { IsBackground = true, Name = "WorkTiles.SingleInstance" };
         _listener.Start();
     }
@@ -56,8 +59,40 @@ public sealed class SingleInstanceService : IDisposable
         EventWaitHandle foregroundSignal = new(false, EventResetMode.AutoReset, ForegroundSignalPrefix + suffix);
         EventWaitHandle fullScreenSignal = new(false, EventResetMode.AutoReset, FullScreenSignalPrefix + suffix);
         EventWaitHandle quitSignal = new(false, EventResetMode.ManualReset, QuitSignalPrefix + suffix);
-        Mutex mutex = new(true, MutexPrefix + suffix, out bool createdNew);
+        Mutex mutex;
+        bool createdNew;
+        try
+        {
+            mutex = new Mutex(true, MutexPrefix + suffix, out createdNew);
+        }
+        catch (AbandonedMutexException)
+        {
+            // 上一个进程崩溃后互斥体仍被占用。这次认领到的是被遗弃的闸门，可以继续启动。
+            mutex = new Mutex(false, MutexPrefix + suffix);
+            try { createdNew = mutex.WaitOne(TimeSpan.Zero); }
+            catch (AbandonedMutexException) { createdNew = true; }
+        }
         return new SingleInstanceService(mutex, foregroundSignal, fullScreenSignal, quitSignal, createdNew);
+    }
+
+    /// <summary>通知正在运行的实例退出。只有没认领闸门的后来者会调用。</summary>
+    public void RequestQuit() => _quitSignal.Set();
+
+    /// <summary>
+    /// 请正在运行的实例退出，并等到本进程认领闸门。对方没有在时限内退出时返回 null。
+    /// </summary>
+    public static async Task<SingleInstanceService?> ReplaceRunningInstanceAsync(SingleInstanceService current)
+    {
+        current.RequestQuit();
+        current.Dispose();
+        for (int attempt = 0; attempt < 40; attempt++)
+        {
+            SingleInstanceService gate = Start();
+            if (gate.IsFirstInstance) return gate;
+            gate.Dispose();
+            await Task.Delay(250);
+        }
+        return null;
     }
 
     /// <summary>
@@ -173,8 +208,14 @@ public sealed class SingleInstanceService : IDisposable
     private void Listen()
     {
         WaitHandle[] signals = [_foregroundSignal, _fullScreenSignal, _quitSignal];
-        while (WaitHandle.WaitAny(signals) is int index && index != 2)
+        while (true)
         {
+            int index = WaitHandle.WaitAny(signals);
+            if (index == 2)
+            {
+                QuitRequested?.Invoke();
+                return;
+            }
             LaunchArgs? arguments = index == 0 ? TryReadPayload() : null;
             SecondLaunchRequested?.Invoke(new SecondLaunchRequest(index == 0 ? ForegroundAction : FullScreenAction, arguments));
         }
@@ -190,6 +231,11 @@ public sealed class SingleInstanceService : IDisposable
         {
             _quitSignal.Set();
             _listener?.Join(TimeSpan.FromSeconds(2));
+            try { _mutex.ReleaseMutex(); }
+            catch (ApplicationException)
+            {
+                // 互斥体已经不在本线程名下时，关掉句柄即可。
+            }
         }
         _mutex.Dispose();
         _foregroundSignal.Dispose();

@@ -64,36 +64,10 @@ public sealed partial class MainWindow
         RegisterSettingsPage("Layout", LayoutSettingsPanel, layout, "布局", "调整布局模式、无限作业板与网格。");
 
         StackPanel window = SettingsStack();
-        StackPanel multiInstanceBlock = new() { Spacing = 3 };
-        multiInstanceBlock.Children.Add(Toggle("允许多实例", _settings.AllowMultipleInstances, value =>
-        {
-            _settings.AllowMultipleInstances = value;
-            // 允许多实例期间启动的窗口没有认领过启动闸门，关闭后要补上，后续启动才会被拦下。
-            if (!value) ClaimSingleInstanceGate();
-        }, read: () => _settings.AllowMultipleInstances));
-        multiInstanceBlock.Children.Add(new TextBlock
-        {
-            Text = "不建议开启，可能导致未知问题", TextWrapping = TextWrapping.Wrap, FontSize = 12,
-            Foreground = (Brush)Application.Current.Resources["BoardTextMutedBrush"]
-        });
-        window.Children.Add(multiInstanceBlock);
-        StackPanel secondLaunchBlock = new() { Spacing = 3 };
-        ComboBox secondLaunch = Choice("已打开时再次启动行为", ["移至前台", "全屏", "不执行任何操作"],
-            [SingleInstanceService.ForegroundAction, SingleInstanceService.FullScreenAction, SingleInstanceService.NoneAction],
-            _settings.SecondLaunchAction, value => _settings.SecondLaunchAction = value, read: () => _settings.SecondLaunchAction);
-        secondLaunchBlock.Children.Add(secondLaunch);
-        secondLaunchBlock.Children.Add(new TextBlock
-        {
-            Text = "仅在关闭允许多实例时生效。", TextWrapping = TextWrapping.Wrap, FontSize = 12,
-            Foreground = (Brush)Application.Current.Resources["BoardTextMutedBrush"]
-        });
-        window.Children.Add(secondLaunchBlock);
         window.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
             _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
         window.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
-        // 允许多实例时再次启动会直接开新窗口，再次启动行为没有作用对象。
-        _refreshSettingAvailability.Add(() => secondLaunch.IsEnabled = !_settings.AllowMultipleInstances);
-        RegisterSettingsPage("Window", WindowSettingsPanel, window, "窗口", "调整同时打开的窗口数量与再次启动的行为。");
+        RegisterSettingsPage("Window", WindowSettingsPanel, window, "窗口", "同一安装目录只打开一个窗口。再次启动时可以选择退出正在运行的实例。");
 
         StackPanel menuBar = SettingsStack();
         menuBar.Children.Add(Toggle("预览下显示菜单栏", _settings.ShowMenuBarInPreview, value =>
