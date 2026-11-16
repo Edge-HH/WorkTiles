@@ -574,6 +574,8 @@ public sealed class SubjectTileControl : Grid
 
     private void RebuildEntries()
     {
+        // 停手后的富文本还在计时器里。先写回作业，再建新的编辑器，否则新编辑器会读到旧的 RTF，刚打的字和格式会消失。
+        FlushPendingText();
         // 重建编辑器前先结算统计，避免未失焦的作业被漏计。
         foreach (HomeworkAutofillInput input in _entryAutofills) input.Flush();
         _entryAutofills.Clear();
