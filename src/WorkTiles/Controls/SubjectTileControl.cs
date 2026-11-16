@@ -91,6 +91,7 @@ public sealed class SubjectTileControl : Grid
         _addAttachment = addAttachment;
         _contentChanged = contentChanged;
         _settings = settings;
+        Unloaded += (_, _) => FlushPendingText();
         _autofill = autofill;
         _autofillPopup = autofillPopup;
 
@@ -575,6 +576,8 @@ public sealed class SubjectTileControl : Grid
 
     private void RebuildEntries()
     {
+        // 停手后的富文本还在计时器里。先写回作业，再建新的编辑器，否则新编辑器会读到旧的 RTF，刚打的字和格式会消失。
+        FlushPendingText();
         // 重建编辑器前先结算统计，避免未失焦的作业被漏计。
         foreach (HomeworkAutofillInput input in _entryAutofills) input.Flush();
         _entryAutofills.Clear();
@@ -693,7 +696,9 @@ public sealed class SubjectTileControl : Grid
         editor.TextChanged += (_, _) =>
         {
             if (!documentReady || _aligningParagraph) return;
-            CaptureRichText(editor, homework);
+            // 纯文本马上记下，补全和中途保存能看到刚打的字；整篇 RTF 等停手后再导出，避免每个按键都走一遍字体规范化。
+            RememberPlainText(editor, homework);
+            ScheduleRichCapture(editor, homework);
         };
         editor.Loaded += (_, _) =>
         {
@@ -892,15 +897,52 @@ public sealed class SubjectTileControl : Grid
         return tools;
     }
 
-    private void CaptureRichText(RichEditBox editor, HomeworkEntry homework)
+    private readonly Dictionary<RichEditBox, HomeworkEntry> _pendingRichText = [];
+    private DispatcherTimer? _richTextTimer;
+
+    /// <summary>把还没导出的富文本写回作业。保存、切换项目和卸载磁贴前都要调用，避免最后几十个字只留在输入框里。</summary>
+    public void FlushPendingText()
     {
-        var contentRange = editor.Document.GetRange(0, int.MaxValue);
+        _richTextTimer?.Stop();
+        foreach (var (editor, homework) in _pendingRichText.ToArray()) CaptureRichText(editor, homework);
+        _pendingRichText.Clear();
+    }
+
+    private void ScheduleRichCapture(RichEditBox editor, HomeworkEntry homework)
+    {
+        _pendingRichText[editor] = homework;
+        _richTextTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+        _richTextTimer.Tick -= FlushRichTextTick;
+        _richTextTimer.Tick += FlushRichTextTick;
+        _richTextTimer.Stop();
+        _richTextTimer.Start();
+    }
+
+    private void FlushRichTextTick(object? sender, EventArgs e) => FlushPendingText();
+
+    private void RememberPlainText(RichEditBox editor, HomeworkEntry homework)
+    {
+        ContentRange(editor).GetText(TextGetOptions.None, out string plain);
+        if (homework.Content == plain) return;
+        homework.Content = plain;
+        _contentChanged();
+    }
+
+    private static ITextRange ContentRange(RichEditBox editor)
+    {
+        ITextRange contentRange = editor.Document.GetRange(0, int.MaxValue);
         if (contentRange.EndPosition > 0)
         {
             // RichEditBox 的最后一个字符是控件维护的段落标记，不属于用户内容。
             contentRange.EndPosition -= 1;
         }
+        return contentRange;
+    }
 
+    private void CaptureRichText(RichEditBox editor, HomeworkEntry homework)
+    {
+        _pendingRichText.Remove(editor);
+        ITextRange contentRange = ContentRange(editor);
         contentRange.GetText(TextGetOptions.None, out string plain);
         contentRange.GetText(TextGetOptions.FormatRtf, out string rtf);
         homework.FontFallbacks = FontService.CaptureFallbacks(editor);
@@ -1201,11 +1243,16 @@ public sealed class SubjectTileControl : Grid
 
     private void EraseStrokeAt(Point point)
     {
-        var hit = _renderedStrokes.LastOrDefault(pair => InkGeometry.HitTest(pair.Value.Points.Select(p => (p.X, p.Y)).ToList(), point.X, point.Y,
-            Math.Max(8, pair.Value.Thickness * Math.Max(pair.Value.TipScaleX, pair.Value.TipScaleY))));
-        Polyline? shape = hit.Key;
-        if (shape is null) return;
-        InkStrokeData stroke = hit.Value;
+        Polyline? shape = null;
+        InkStrokeData? stroke = null;
+        foreach (var pair in _renderedStrokes)
+        {
+            double radius = Math.Max(8, pair.Value.Thickness * Math.Max(pair.Value.TipScaleX, pair.Value.TipScaleY));
+            if (!InkHit.Contains(pair.Value.Points, point.X, point.Y, radius)) continue;
+            shape = pair.Key;
+            stroke = pair.Value;
+        }
+        if (shape is null || stroke is null) return;
         _renderedStrokes.Remove(shape);
         _subject.InkStrokes.Remove(stroke);
         _inkCanvas.Children.Remove(shape);

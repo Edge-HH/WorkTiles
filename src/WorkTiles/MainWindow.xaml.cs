@@ -27,7 +27,9 @@ public sealed partial class MainWindow : Window
     private readonly DispatcherTimer _clockTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private readonly DispatcherTimer _fullScreenLabelTimer = new() { Interval = TimeSpan.FromSeconds(2.2) };
     private readonly DispatcherTimer _weatherTimer = new() { Interval = TimeSpan.FromMinutes(10) };
-    private readonly NoiseMonitorService _noiseMonitor = new();
+        private readonly NoiseMonitorService _noiseMonitor = new();
+        private long _pendingNoiseBits;
+        private int _noiseAlertQueued;
     private readonly XiaomiWeatherService _weatherService = new();
     private readonly WeatherCityCatalog _weatherCityCatalog = new();
     private readonly ReleaseUpdateService _updateService = new();
@@ -191,7 +193,14 @@ public sealed partial class MainWindow : Window
         };
         _autoBackupTimer.Tick += (_, _) => RunAutoBackupIfDue();
 
-        _noiseMonitor.FastLevelAvailable += (_, level) => DispatcherQueue.TryEnqueue(() => ProcessNoiseAlert(level));
+        // 采集块大约 50 毫秒来一次。界面忙的时候只保留最新电平，避免把提示判断排成一长队。
+        _noiseMonitor.FastLevelAvailable += (_, level) =>
+        {
+            Interlocked.Exchange(ref _pendingNoiseBits, BitConverter.DoubleToInt64Bits(level));
+            if (Interlocked.Exchange(ref _noiseAlertQueued, 1) == 1) return;
+            if (!DispatcherQueue.TryEnqueue(PublishNoiseAlert))
+                Interlocked.Exchange(ref _noiseAlertQueued, 0);
+        };
         _noiseMonitor.LevelAvailable += (_, level) => DispatcherQueue.TryEnqueue(() => UpdateNoiseDisplay(level));
         _noiseMonitor.CaptureFailed += (_, message) => DispatcherQueue.TryEnqueue(() =>
         {
@@ -1393,6 +1402,21 @@ public sealed partial class MainWindow : Window
     {
         try { _noiseAlertPlayer.Prepare(); }
         catch (Exception exception) { MicrophoneStatusInfoBar.Message = $"提示音设备不可用：{exception.Message}"; }
+    }
+
+    /// <summary>
+    /// 取出当前电平并放行下一次入队。清空标记之后如果又写入了更新的采样，补排一次，
+    /// 否则那一次超阈值会因为标记还没清掉而被丢掉。
+    /// </summary>
+    private void PublishNoiseAlert()
+    {
+        double seen = BitConverter.Int64BitsToDouble(Interlocked.Read(ref _pendingNoiseBits));
+        Interlocked.Exchange(ref _noiseAlertQueued, 0);
+        ProcessNoiseAlert(seen);
+        if (Interlocked.Read(ref _pendingNoiseBits) == BitConverter.DoubleToInt64Bits(seen)) return;
+        if (Interlocked.CompareExchange(ref _noiseAlertQueued, 1, 0) != 0) return;
+        if (!DispatcherQueue.TryEnqueue(PublishNoiseAlert))
+            Interlocked.Exchange(ref _noiseAlertQueued, 0);
     }
 
     private void ProcessNoiseAlert(double level)

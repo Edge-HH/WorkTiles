@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using WorkTiles.Server;
+using WorkTiles.Server.Services;
 using WorkTiles.Services;
 using WorkTiles.Shared;
 
@@ -41,6 +42,7 @@ var app = WorkTilesServer.Build([
     "--Urls=http://127.0.0.1:0",
     $"--ConnectionStrings:WorkTiles=Data Source={Path.Combine(root, "server.db")};Pooling=False",
     $"--WorkTiles:AssetsPath={Path.Combine(root, "server-assets")}",
+    "--WorkTiles:MaxAssetMegabytes=1",
     "--Logging:LogLevel:Default=Warning"
 ]);
 await app.StartAsync();
@@ -93,6 +95,17 @@ try
     CloudSyncService.Queue(libA, project);
     await syncA.SynchronizeAsync(libA, Hooks("大屏A"));
     Check(await ServerRevision(project.Id) == 1 && libA.SyncQueue.Count == 0, "内容没变时排队也不会产生新修订");
+    byte[] oversized = new byte[1_200_000];
+    oversized[0] = 9;
+    File.WriteAllBytes(Path.Combine(root, "huge.png"), oversized);
+    var syncedAttachments = project.Subjects[0].Entries[0].Attachments;
+    syncedAttachments.Add(new AttachmentState { Name = "大图", Kind = "图片", Path = storeA.CopyAttachment(project.Id, Path.Combine(root, "huge.png")) });
+    CloudSyncService.Queue(libA, project);
+    await syncA.SynchronizeAsync(libA, Hooks("大屏A"));
+    Check(libA.SyncQueue.Count == 1 && await ServerRevision(project.Id) == 1 && syncA.LastSyncError is not null, "图片上传失败时不把缺图内容写成已同步：" + syncA.LastSyncError);
+    syncedAttachments.RemoveAt(syncedAttachments.Count - 1);
+    await syncA.SynchronizeAsync(libA, Hooks("大屏A"));
+    Check(syncA.LastSyncError is null && libA.SyncQueue.Count == 0 && await ServerRevision(project.Id) == 1, "去掉传不上去的图片后，内容与服务器一致，队列清空");
     var serverDoc = JsonNode.Parse((await admin.GetFromJsonAsync<JsonObject>($"/api/classes/{classId}/projects/{project.Id}"))!["payloadJson"]!.GetValue<string>())!;
     string attachmentPath = serverDoc["Subjects"]![0]!["Entries"]![0]!["Attachments"]![0]!["Path"]!.GetValue<string>();
     Check(attachmentPath.StartsWith("asset:") && !serverDoc.ToJsonString().Contains(root.Replace("\\", "\\\\")), "服务器内容只含资源引用，不含本机路径");
@@ -291,7 +304,7 @@ try
     realtime.Stop();
 
     // ---------------------------------------------------------------- 考试模式
-    DateOnly examDate = DateOnly.FromDateTime(DateTime.Now);
+    DateOnly examDate = ExamClock.Today();
     DateTime examDayStart = examDate.ToDateTime(TimeOnly.MinValue);
     var sample = new ExamScheduleDto(Guid.NewGuid(), "期中考试",
     [
@@ -532,6 +545,12 @@ try
     await syncC.ReportScreenAsync(libC.Settings.CloudSync, new DeviceScreenReport(1920, 1080, 1.5, "Split", .4, false, new ScreenRegion(0, 0, 768, 1080), new ScreenRegion(768, 0, 1152, 1080), lockId));
     var screens = await admin.GetFromJsonAsync<JsonArray>($"/api/classes/{classId}/devices");
     Check(screens!.Any(d => d!["screen"]?["board"]?["width"]?.GetValue<double>() == 1152 && d["activeProjectId"]?.GetValue<Guid>() == lockId), "大屏上报屏幕与分区");
+
+    string savedToken = libB.Settings.CloudSync.DeviceToken;
+    libB.Settings.CloudSync.DeviceToken = "not-a-token";
+    await syncB.SyncProjectsOnlyAsync(libB, [Guid.NewGuid()], Hooks("大屏B"));
+    Check(syncB.CredentialsRejected && syncB.LastSyncError!.Contains("重新配对"), "只同步指定项目时，失效凭据同样提示重新配对");
+    libB.Settings.CloudSync.DeviceToken = savedToken;
 
     // ---------------------------------------------------------------- 吊销后提示重新配对
     Guid deviceA = libA.Settings.CloudSync.DeviceId!.Value;

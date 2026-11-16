@@ -127,10 +127,86 @@ public sealed partial class MainWindow
         return CloudSync.SynchronizeAsync(_library, CloudHooks());
     });
 
-    /// <summary>执行一次同步（完整或定向），之后统一落盘、回收附件目录、展示提示并刷新状态。</summary>
-    private async Task RunCloudSyncAsync(Func<Task> sync)
+    private bool _cloudSyncBusy;
+    private bool _cloudSyncFollowUp;
+    private int _cloudSyncGeneration;
+    private readonly List<TaskCompletionSource> _cloudSyncWaiters = [];
+    private readonly object _cloudSyncGate = new();
+
+    /// <summary>
+    /// 执行一次同步（完整或定向），之后统一落盘、回收附件目录、展示提示并刷新状态。
+    /// 已有一轮在跑时，后来的调用合并进随后的完整同步，并且要等那一轮结束才返回。
+    /// </summary>
+    private Task RunCloudSyncAsync(Func<Task> sync)
     {
-        if (!_settings.CloudSync.Enabled || !_storageReady) return;
+        if (!_settings.CloudSync.Enabled || !_storageReady) return Task.CompletedTask;
+        var waiter = new TaskCompletionSource();
+        int generation;
+        lock (_cloudSyncGate)
+        {
+            if (_cloudSyncBusy)
+            {
+                _cloudSyncFollowUp = true;
+                _cloudSyncWaiters.Add(waiter);
+                return waiter.Task;
+            }
+            _cloudSyncBusy = true;
+            generation = ++_cloudSyncGeneration;
+        }
+        _ = RunCloudSyncLoop(sync, waiter, generation);
+        return waiter.Task;
+    }
+
+    private async Task RunCloudSyncLoop(Func<Task> sync, TaskCompletionSource waiter, int generation)
+    {
+        List<TaskCompletionSource> finished = [];
+        try
+        {
+            while (true)
+            {
+                await RunCloudSyncBody(sync);
+                lock (_cloudSyncGate)
+                {
+                    if (_cloudSyncGeneration != generation) return;
+                    if (!_cloudSyncFollowUp || !_settings.CloudSync.Enabled || !_storageReady)
+                    {
+                        _cloudSyncFollowUp = false;
+                        _cloudSyncBusy = false;
+                        finished = _cloudSyncWaiters.ToList();
+                        _cloudSyncWaiters.Clear();
+                        break;
+                    }
+                    _cloudSyncFollowUp = false;
+                }
+                sync = SynchronizeAfterCurrent;
+            }
+        }
+        finally
+        {
+            lock (_cloudSyncGate)
+            {
+                if (_cloudSyncGeneration == generation && _cloudSyncBusy)
+                {
+                    _cloudSyncFollowUp = false;
+                    _cloudSyncBusy = false;
+                    finished.AddRange(_cloudSyncWaiters);
+                    _cloudSyncWaiters.Clear();
+                }
+            }
+            waiter.TrySetResult();
+            foreach (TaskCompletionSource pending in finished) pending.TrySetResult();
+        }
+    }
+
+    private Task SynchronizeAfterCurrent()
+    {
+        CaptureCurrentProject();
+        if (CurrentProject is { } project) CloudSyncService.Queue(_library, project);
+        return CloudSync.SynchronizeAsync(_library, CloudHooks());
+    }
+
+    private async Task RunCloudSyncBody(Func<Task> sync)
+    {
         try
         {
             _library.Settings = _settings;

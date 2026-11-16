@@ -104,8 +104,18 @@ public sealed partial class MainWindow
 
     private void CaptureCurrentProject()
     {
+        FlushOpenTileEditors();
         if (CurrentProject is { } project) project.Subjects = AppDataStore.CaptureSubjects(ViewModel.Subjects);
         CaptureClockInk();
+    }
+
+    /// <summary>看板上的磁贴和桌面磁贴各有自己的编辑器。先刷桌面，再刷看板，正在看板上输入的格式仍以看板为准。</summary>
+    private void FlushOpenTileEditors()
+    {
+        ForEachDesktopTile(tile => tile.FlushPendingText());
+        if (BoardCanvas is null) return;
+        foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
+            tile.FlushPendingText();
     }
 
     private void PersistProjects()
