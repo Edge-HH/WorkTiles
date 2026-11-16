@@ -944,6 +944,8 @@ public sealed partial class MainWindow
         SettingsPageTitle.Text = selected.Title;
         SettingsPageDescription.Text = selected.Description;
         SettingsContentScrollViewer.ChangeView(null, 0, null, true);
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+            () => HoverTransition.ApplyTo(selected.Content));
         RefreshAppearancePreviews();
     }
 

@@ -1,6 +1,8 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:Microsoft.UI.Xaml.Controls"
+    xmlns:services="using:WorkTiles.Services">
 
     <ResourceDictionary.ThemeDictionaries>
         <ResourceDictionary x:Key="Dark">
@@ -21,7 +23,7 @@
             <!-- 普通按钮 -->
             <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#3A3A3E" />
-            <!-- 开关按钮（控制窗自动排列等）：补齐悬停/按下/选中，不再回退系统淡灰。 -->
+            <!-- 开关按钮：悬停、按下和选中用中性灰。网格吸附选中时改回 Windows 强调色，不走这里的选中灰。 -->
             <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#3A3A3E" />
             <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#2C2C2C" />
@@ -62,6 +64,7 @@
             <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="ScrollBarButtonBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="TextControlButtonBackgroundPointerOver" Color="#2F2F33" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPressed" Color="#3A3A3E" />
             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#3A3A3E" />
             <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#2F2F33" />
@@ -89,7 +92,9 @@
             <SolidColorBrush x:Key="BoardDangerBrush" Color="#F87171" />
             <SolidColorBrush x:Key="BoardPaperBrush" Color="#FFFDF7" />
             <!-- 悬停过渡不插值透明度。静止色若是透明白，第一帧会按白色铺满。
-                 幽灵按钮的静止色用悬停色 #2F2F33 的 RGB，透明度设为 0。 -->
+                 幽灵按钮的静止色用悬停色 #2F2F33 的 RGB，透明度设为 0。
+                 普通按钮的静止色是系统淡填充 #0FFFFFFF，不能改成这支透明灰，否则按钮会失去淡填充。
+                 那些按钮改由 HoverTransition 拿掉画刷过渡。数字框微调按钮仍走自己的模板，静止色在这里对齐。 -->
             <SolidColorBrush x:Key="BoardButtonClearBrush" Color="#002F2F33" />
             <StaticResource x:Key="HyperlinkButtonBackground" ResourceKey="BoardButtonClearBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
@@ -103,6 +108,11 @@
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
             <StaticResource x:Key="MenuBarItemBackground" ResourceKey="BoardButtonClearBrush" />
             <StaticResource x:Key="MenuBarItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="TextControlButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="AppBarButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="AppBarButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="AppBarToggleButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="ScrollBarButtonBackground" ResourceKey="BoardButtonClearBrush" />
         </ResourceDictionary>
         <ResourceDictionary x:Key="Light">
             <!-- 浅色交互态：悬停 #D6D6D6、按下 #C4C4C4、选中 #E6E6E6，与深色一套逻辑。 -->
@@ -153,6 +163,7 @@
             <SolidColorBrush x:Key="HyperlinkButtonBackgroundPointerOver" Color="#D6D6D6" />
             <SolidColorBrush x:Key="ScrollBarButtonBackgroundPointerOver" Color="#D6D6D6" />
             <SolidColorBrush x:Key="TextControlButtonBackgroundPointerOver" Color="#D6D6D6" />
+            <SolidColorBrush x:Key="TextControlButtonBackgroundPressed" Color="#C4C4C4" />
             <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#D6D6D6" />
             <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#C4C4C4" />
             <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#D6D6D6" />
@@ -177,7 +188,8 @@
             <SolidColorBrush x:Key="BoardWarningBrush" Color="#B45309" />
             <SolidColorBrush x:Key="BoardDangerBrush" Color="#DC2626" />
             <SolidColorBrush x:Key="BoardPaperBrush" Color="#FFFFFF" />
-            <!-- 浅色悬停是 #D6D6D6。静止色用同一 RGB、透明度为 0，避免悬停第一帧闪白。 -->
+            <!-- 浅色悬停是 #D6D6D6。静止色用同一 RGB、透明度为 0，避免悬停第一帧闪白。
+                 普通按钮的静止色仍是系统填充，过渡由 HoverTransition 去掉。 -->
             <SolidColorBrush x:Key="BoardButtonClearBrush" Color="#00D6D6D6" />
             <StaticResource x:Key="HyperlinkButtonBackground" ResourceKey="BoardButtonClearBrush" />
             <StaticResource x:Key="HyperlinkButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
@@ -191,6 +203,11 @@
             <StaticResource x:Key="MenuFlyoutSubItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
             <StaticResource x:Key="MenuBarItemBackground" ResourceKey="BoardButtonClearBrush" />
             <StaticResource x:Key="MenuBarItemBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="TextControlButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="AppBarButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="AppBarButtonBackgroundDisabled" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="AppBarToggleButtonBackground" ResourceKey="BoardButtonClearBrush" />
+            <StaticResource x:Key="ScrollBarButtonBackground" ResourceKey="BoardButtonClearBrush" />
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 
@@ -215,12 +232,24 @@
         <Setter Property="FontFamily" Value="{StaticResource BoardIconFontFamily}" />
     </Style>
 
+    <!-- 控制窗「网格吸附」：未选中与其它图标按钮相同；选中时的底色和图标色由窗口按强调色单独铺上。 -->
+    <Style x:Key="BoardSnapToggleButtonStyle" TargetType="ToggleButton">
+        <Setter Property="MinWidth" Value="44" />
+        <Setter Property="MinHeight" Value="44" />
+        <Setter Property="Padding" Value="10" />
+        <Setter Property="Background" Value="{ThemeResource BoardButtonClearBrush}" />
+        <Setter Property="Foreground" Value="{ThemeResource BoardTextBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="services:HoverTransition.Suppress" Value="True" />
+    </Style>
+
     <Style x:Key="BoardIconButtonStyle" TargetType="Button">
         <Setter Property="MinWidth" Value="44" />
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="10" />
         <Setter Property="CornerRadius" Value="8" />
         <Setter Property="Background" Value="{ThemeResource BoardButtonClearBrush}" />
+        <Setter Property="services:HoverTransition.Suppress" Value="True" />
         <!-- 底部工具栏的所有可用操作使用同一高对比度颜色，避免前两个图标被误解为禁用状态。 -->
         <Setter Property="Foreground" Value="{ThemeResource BoardTextBrush}" />
         <Setter Property="BorderThickness" Value="0" />
@@ -263,6 +292,7 @@
     </Style>
 
     <Style x:Key="BoardPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+        <Setter Property="services:HoverTransition.Suppress" Value="True" />
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="18,10" />
         <Setter Property="CornerRadius" Value="8" />
@@ -270,6 +300,7 @@
     </Style>
 
     <Style x:Key="BoardSecondaryButtonStyle" TargetType="Button">
+        <Setter Property="services:HoverTransition.Suppress" Value="True" />
         <Setter Property="MinHeight" Value="44" />
         <Setter Property="Padding" Value="16,10" />
         <Setter Property="CornerRadius" Value="8" />

@@ -125,9 +125,6 @@ public sealed partial class MainWindow : Window
         SetTitleBar(DragRegion);
         SystemBackdrop = new PersistentMicaBackdrop();
         InitializeAppWindow();
-        ImeCandidateFix.Attach(WinRT.Interop.WindowNative.GetWindowHandle(this));
-        // 输入子窗口延迟创建，激活时再补一次重定向位图与输入法上下文（不再用全局焦点钩子）。
-        Activated += (_, _) => ImeCandidateFix.Refresh(WinRT.Interop.WindowNative.GetWindowHandle(this));
         InitializeDesktopTiles();
         InitializeTimersAndServices();
         InitializePresentationBehavior();
@@ -159,6 +156,8 @@ public sealed partial class MainWindow : Window
             {
                 DispatcherQueue.TryEnqueue(() => SetFullScreen(true));
             }
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                () => HoverTransition.ApplyTo(RootShell));
         };
         Closed += (_, _) =>
         {
@@ -934,6 +933,7 @@ public sealed partial class MainWindow : Window
         IsGridSnappingEnabled = true;
         // 设置页的“吸附到网格”是同一个开关，这里同步它的显示状态。
         if (_gridSnapToggle is not null) _gridSnapToggle.IsOn = true;
+        ApplyGridSnapIconForeground();
         UpdateGridSnapHint();
         UpdateAutoLayoutGapStep();
         ScheduleSave();
@@ -943,9 +943,85 @@ public sealed partial class MainWindow : Window
     {
         IsGridSnappingEnabled = false;
         if (_gridSnapToggle is not null) _gridSnapToggle.IsOn = false;
+        ApplyGridSnapIconForeground();
         UpdateGridSnapHint();
         UpdateAutoLayoutGapStep();
         ScheduleSave();
+    }
+
+    private static readonly SolidColorBrush GridSnapOnForeground = new(Windows.UI.Color.FromArgb(255, 255, 255, 255));
+
+    /// <summary>
+    /// 选中态改回 Windows 强调色底、白色图标。全局开关选中色是中性灰，只这一颗按钮例外。
+    /// 画笔引用主题字典里已经涂好的强调色，深浅主题和系统强调色变化后不用再铺一遍。
+    /// </summary>
+    private void ApplyGridSnapAccent()
+    {
+        ResourceDictionary resources = GridSnapToggleButton.Resources;
+        foreach (string theme in new[] { "Default", "Dark", "Light" })
+        {
+            if (!resources.ThemeDictionaries.TryGetValue(theme, out object? existing) || existing is not ResourceDictionary dictionary)
+            {
+                dictionary = new ResourceDictionary();
+                resources.ThemeDictionaries[theme] = dictionary;
+            }
+            Brush fill = ThemeAccentFill(theme == "Light");
+            dictionary["ToggleButtonBackgroundChecked"] = fill;
+            dictionary["ToggleButtonBackgroundCheckedPointerOver"] = fill;
+            dictionary["ToggleButtonBackgroundCheckedPressed"] = fill;
+            dictionary["ToggleButtonForegroundChecked"] = GridSnapOnForeground;
+            dictionary["ToggleButtonForegroundCheckedPointerOver"] = GridSnapOnForeground;
+            dictionary["ToggleButtonForegroundCheckedPressed"] = GridSnapOnForeground;
+        }
+        ApplyGridSnapIconForeground();
+        // 模板若已按全局灰色进入选中态，资源换掉后不会自己重读，这里再进一次选中态。
+        GridSnapToggleButton.ApplyTemplate();
+        bool on = GridSnapToggleButton.IsChecked == true;
+        VisualStateManager.GoToState(GridSnapToggleButton, "Normal", false);
+        VisualStateManager.GoToState(GridSnapToggleButton, on ? "Checked" : "Normal", false);
+    }
+
+    private static Brush ThemeAccentFill(bool light)
+    {
+        string theme = light ? "Light" : "Dark";
+        ResourceDictionary application = Application.Current.Resources;
+        for (int index = application.MergedDictionaries.Count - 1; index >= 0; index--)
+        {
+            if (FindThemeBrush(application.MergedDictionaries[index], theme, "AccentFillColorDefaultBrush") is Brush brush)
+                return brush;
+        }
+        return (Brush)application["AccentFillColorDefaultBrush"];
+    }
+
+    private static Brush? FindThemeBrush(ResourceDictionary dictionary, string theme, string key)
+    {
+        if (dictionary.ThemeDictionaries.TryGetValue(theme, out object? themed)
+            && themed is ResourceDictionary themeDictionary
+            && themeDictionary.TryGetValue(key, out object? value)
+            && value is Brush brush)
+            return brush;
+        foreach (ResourceDictionary merged in dictionary.MergedDictionaries)
+        {
+            if (FindThemeBrush(merged, theme, key) is Brush nested)
+                return nested;
+        }
+        return null;
+    }
+
+    /// <summary>图标包在说明文字外面，选中态的前景有时传不进去，这里直接写成白色。</summary>
+    private void ApplyGridSnapIconForeground()
+    {
+        FluentIcon? icon = null;
+        if (_toolbarLabels.TryGetValue(GridSnapToggleButton, out var pair))
+            icon = pair.Icon as FluentIcon;
+        icon ??= GridSnapToggleButton.Content as FluentIcon;
+        if (icon is null && GridSnapToggleButton.Content is Panel panel)
+            icon = panel.Children.OfType<FluentIcon>().FirstOrDefault();
+        if (icon is null) return;
+        if (GridSnapToggleButton.IsChecked == true)
+            icon.Foreground = GridSnapOnForeground;
+        else
+            icon.ClearValue(IconElement.ForegroundProperty);
     }
 
     private void UpdateGridSnapHint()
@@ -996,6 +1072,8 @@ public sealed partial class MainWindow : Window
     {
         BoardTheme.IsLight = RootShell.ActualTheme == ElementTheme.Light;
         SystemAccent.Apply(BoardTheme.IsLight);
+        // 强调色画笔刚涂完，吸附按钮要引用同一支，主题和系统强调色变化后才会跟着变。
+        ApplyGridSnapAccent();
         if (!_isLoaded) return;
         ApplyExtendedSettings();
         // 设置页里代码生成的学科/作业列表用的是当前主题画笔，切浅色后必须重建，否则会留下深色模式下的白字。
@@ -1144,7 +1222,6 @@ public sealed partial class MainWindow : Window
     private void InstallTrayIcon()
     {
         nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        ImeCandidateFix.Attach(hwnd);
         _tray = new TrayIcon(hwnd, () => _settings.DesktopTilesEnabled);
         _tray.Command += command => DispatcherQueue.TryEnqueue(() => HandleTrayCommand(command));
     }
