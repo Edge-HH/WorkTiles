@@ -73,7 +73,17 @@ public sealed partial class MainWindow
         AttachmentImageControl Image() => FindVisuals<AttachmentImageControl>(tile).Single();
         AttachmentArea Area() => (AttachmentArea)Image().Parent;
         Grid Frame() => FindVisuals<Grid>(Image()).First(grid => grid.Clip is not null);
-        Grid SecondRow() => FindVisuals<RichEditBox>(tile).Select(editor => (Grid)editor.Parent).Last();
+        Grid SecondRow()
+        {
+            RichEditBox editor = FindVisuals<RichEditBox>(tile).Last(box => !TransparentInputMarkers.IsOverlayMirror(box));
+            DependencyObject? node = editor;
+            while (VisualTreeHelper.GetParent(node) is DependencyObject parent)
+            {
+                if (parent is StackPanel && node is Grid row) return row;
+                node = parent;
+            }
+            return (Grid)editor.Parent;
+        }
         // 隔离目录下解码可能受环境影响，只记录结果；拖动与缩放不依赖图片内容。
         evidence.Add($"Image decoded: {await Image().ImageReady}");
 

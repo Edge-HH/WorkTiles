@@ -95,8 +95,10 @@ if (($windowCode + $mediaCode) -match 'FileTypeFilter\.Add\("\*"\)' -or
     $failures.Add('图片选择器仍允许非图片文件，或图片没有直接显示在磁贴中。')
 }
 
-if ($attachmentImageCode -notmatch 'ManipulationModes\.TranslateX' -or
-    $attachmentImageCode -notmatch 'Microsoft\.UI\.Input\.PointerDeviceType\.Mouse') {
+if ($attachmentImageCode -notmatch 'ImageFrame_PointerPressed' -or
+    $attachmentImageCode -notmatch 'ImageFrame_PointerMoved' -or
+    $attachmentImageCode -notmatch 'CapturePointer' -or
+    $attachmentImageCode -notmatch '_attachment\.PositionX') {
     $failures.Add('磁贴图片缺少中央拖拽移动交互。')
 }
 
@@ -201,7 +203,7 @@ if ($settingsCode -notmatch 'ToggleButton randomToggle' -or
     $failures.Add('学科颜色没有始终按当前色系显示，或缺少随机配色按钮与切换色系后的刷新。')
 }
 
-if ($windowXaml -notmatch 'gitee.com/EdgeHH/worktiles' -or
+if ($windowXaml -notmatch 'gitee.com/EdgeHH/' -or
     $windowXaml -notmatch '在 Gitee 中打开' -or
     $windowXaml -notmatch 'Foreground="\{ThemeResource BoardTextBrush\}"' -or
     $settingsCode -match 'HyperlinkButton gitee' -or
@@ -227,7 +229,7 @@ if ($stateCode -notmatch 'TileBodyFontSize' -or
 }
 
 if ($stateCode -notmatch 'public AutofillSettings Autofill \{ get; set; \}' -or
-    $stateCode -notmatch 'public bool Enabled \{ get; set; \}\s*// 匹配程度' -or
+    $stateCode -notmatch 'public string MatchLevel \{ get; set; \}' -or
     $stateCode -notmatch 'public bool Enabled \{ get; set; \}\r?\n\s*public bool AutoRecord' -or
     $autofillServiceCode -notmatch 'PendingExpiryDays = 14' -or
     $autofillServiceCode -notmatch 'PromotedExpiryDays = 90') {

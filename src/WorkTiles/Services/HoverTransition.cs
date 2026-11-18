@@ -46,6 +46,12 @@ public static class HoverTransition
             ApplyTo(VisualTreeHelper.GetChild(root, index));
     }
 
+    /// <summary>
+    /// 立刻尝试拿掉某个控件（含 ToggleButton）模板里的画刷过渡，模板没展开时排队等布局。
+    /// 选中底要在进 Checked 状态之前先去掉过渡，否则第一帧会被渲染成透明、直到悬停才恢复。
+    /// </summary>
+    public static void StripNow(FrameworkElement element) => StripWhenReady(element);
+
     private static readonly HashSet<FrameworkElement> Waiting = [];
 
     private static void StripWhenReady(FrameworkElement element)

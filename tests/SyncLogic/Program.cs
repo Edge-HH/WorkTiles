@@ -304,7 +304,7 @@ try
     realtime.Stop();
 
     // ---------------------------------------------------------------- 考试模式
-    DateOnly examDate = ExamClock.Today();
+    DateOnly examDate = DateOnly.FromDateTime(DateTime.Now);
     DateTime examDayStart = examDate.ToDateTime(TimeOnly.MinValue);
     var sample = new ExamScheduleDto(Guid.NewGuid(), "期中考试",
     [

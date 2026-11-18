@@ -29,7 +29,11 @@ public partial class App : Application
         {
             string directory = Path.Combine(AppContext.BaseDirectory, "data");
             Directory.CreateDirectory(directory);
-            File.AppendAllText(Path.Combine(directory, "crash.log"), $"[{DateTimeOffset.Now:O}] {exception}\n");
+            string path = Path.Combine(directory, "crash.log");
+            // 崩溃日志无限追加会撑大便携目录；超过 1 MB 滚存一份旧日志，总量封顶约 2 MB。
+            if (File.Exists(path) && new FileInfo(path).Length > 1024 * 1024)
+                File.Move(path, path + ".old", true);
+            File.AppendAllText(path, $"[{DateTimeOffset.Now:O}] {exception}\n");
         }
         catch
         {
@@ -98,6 +102,13 @@ public partial class App : Application
         {
             _window = new MainWindow(false, "verification");
             _window.ScheduleImageDragVerification();
+            _window.Activate();
+            return;
+        }
+        if (commandLine.Contains("--verify-selection", StringComparison.OrdinalIgnoreCase))
+        {
+            _window = new MainWindow(false, "verification");
+            _window.ScheduleSelectionVerification();
             _window.Activate();
             return;
         }

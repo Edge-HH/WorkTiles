@@ -9,6 +9,7 @@
     <Compile Include="../../src/WorkTiles/Services/BackgroundPlaylist.cs" Link="BackgroundPlaylist.cs" />
     <Compile Include="../../src/WorkTiles/Services/MediaLibrary.cs" Link="MediaLibrary.cs" />
     <Compile Include="../../src/WorkTiles/Services/WallpaperEngineLibrary.cs" Link="WallpaperEngineLibrary.cs" />
+    <Compile Include="../../src/WorkTiles/Services/WebWallpaperPackage.cs" Link="WebWallpaperPackage.cs" />
     <Compile Include="../../src/WorkTiles/Services/ColorPalette.cs" Link="ColorPalette.cs" />
     <Compile Include="../../src/WorkTiles/Services/XiaomiWeatherService.cs" Link="XiaomiWeatherService.cs" />
     <Compile Include="../../src/WorkTiles/Services/DefaultContentColors.cs" Link="DefaultContentColors.cs" />

@@ -207,6 +207,7 @@ public static class SettingsSchema
         ["LocalExam"] = "本机考试安排",
         ["DesktopTilesEnabled"] = "本机桌面磁贴",
         ["DesktopTileOrder"] = "本机桌面磁贴",
+        ["DesktopTileOrderIds"] = "本机桌面磁贴",
         ["DesktopTilesAutoArrange"] = "本机桌面磁贴",
         ["DesktopTilesZoom"] = "本机桌面磁贴",
         ["DesktopTilePlacements"] = "本机桌面磁贴",

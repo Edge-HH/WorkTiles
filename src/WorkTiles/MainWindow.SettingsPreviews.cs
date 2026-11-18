@@ -260,7 +260,8 @@ public sealed partial class MainWindow
                 "Clock" => $"{BoardTheme.IsLight}|{_settings.ClockFontFamily}|{_settings.ClockFontWeight}|{_settings.ClockColor}|{_settings.ClockShowSeconds}|{_settings.ClockSecondStyle}",
                 // 磁贴示例的主题色与高光色都取自当前色系，主题或色系变化必须重建示例才和真实磁贴一致。
                 "Tile" => $"{BoardTheme.IsLight}|{ColorPalette.IsMacaron}",
-                "Background" => $"{BoardTheme.IsLight}|{_settings.LayoutMode}|{_settings.SharedBackgroundEnabled}|{_settings.SplitRatio:0.####}",
+                // SplitRatio 由增量刷新器直接改列宽，放进缓存键会让拖分隔条重建整棵预览、丢掉视频播放进度。
+                "Background" => $"{BoardTheme.IsLight}|{_settings.LayoutMode}|{_settings.SharedBackgroundEnabled}",
                 _ => $"{BoardTheme.IsLight}|{_settings.LayoutMode}"
             };
             // 只有网格页每次重建；布局页缓存真实磁贴控件，拖动时只走刷新器，不重建控件与背景。

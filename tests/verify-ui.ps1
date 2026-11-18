@@ -8,7 +8,8 @@ param(
     [switch]$FontAuditOnly,
     [switch]$AutofillKeysOnly,
     [switch]$AutofillImeOnly,
-    [switch]$GridCoverageOnly
+    [switch]$GridCoverageOnly,
+    [switch]$SelectionOnly
 )
 $ErrorActionPreference = 'Stop'
 $source = (Resolve-Path -LiteralPath $PublishDirectory).Path
@@ -33,7 +34,7 @@ try {
         $env:WORKTILES_TEST_VIDEO = Join-Path $testRoot 'media-test-high.mp4'
         $env:WORKTILES_TEST_VIDEO_BASE = Join-Path $testRoot 'media-test-base.mp4'
     }
-    $verificationArgument = if ($MediaPerformanceOnly) { '--verify-media-performance' } elseif ($BackgroundMediaOnly) { '--verify-background-media' } elseif ($FullScreenHintOnly) { '--verify-fullscreen-hint' } elseif ($AutoLayoutOnly) { '--verify-ui --auto-layout-only' } elseif ($FontAuditOnly) { '--verify-font-audit' } elseif ($AutofillKeysOnly) { '--verify-autofill-keys' } elseif ($AutofillImeOnly) { '--verify-autofill-ime' } elseif ($GridCoverageOnly) { '--verify-grid-coverage' } else { '--verify-ui' }
+    $verificationArgument = if ($MediaPerformanceOnly) { '--verify-media-performance' } elseif ($BackgroundMediaOnly) { '--verify-background-media' } elseif ($FullScreenHintOnly) { '--verify-fullscreen-hint' } elseif ($AutoLayoutOnly) { '--verify-ui --auto-layout-only' } elseif ($FontAuditOnly) { '--verify-font-audit' } elseif ($AutofillKeysOnly) { '--verify-autofill-keys' } elseif ($AutofillImeOnly) { '--verify-autofill-ime' } elseif ($GridCoverageOnly) { '--verify-grid-coverage' } elseif ($SelectionOnly) { '--verify-selection' } else { '--verify-ui' }
     $process = Start-Process -FilePath (Join-Path $testRoot 'WorkTiles.exe') -ArgumentList $verificationArgument -WorkingDirectory $testRoot -WindowStyle Hidden -PassThru
     # 真实窗口检查数量随功能增加，慢机器上会接近一分钟；上限只用于兜住卡死，留足正常通过的时间。
     if (-not $process.WaitForExit(180000)) {
@@ -44,8 +45,8 @@ try {
         }
         throw '隔离 UI 验证在 180 秒内未结束。'
     }
-    $resultName = if ($MediaPerformanceOnly) { 'performance-result.txt' } elseif ($BackgroundMediaOnly) { 'media-result.txt' } elseif ($FullScreenHintOnly) { 'fullscreen-result.txt' } elseif ($FontAuditOnly) { 'font-audit-result.txt' } elseif ($AutofillKeysOnly) { 'autofill-key-result.txt' } elseif ($AutofillImeOnly) { 'ime-result.txt' } elseif ($GridCoverageOnly) { 'grid-coverage-result.txt' } else { 'result.txt' }
-    $successMarker = if ($MediaPerformanceOnly) { 'MEDIA_PERFORMANCE_VERIFICATION_OK' } elseif ($BackgroundMediaOnly) { 'BACKGROUND_MEDIA_VERIFICATION_OK' } elseif ($FullScreenHintOnly) { 'FULLSCREEN_HINT_VERIFICATION_OK' } elseif ($FontAuditOnly) { 'FONT_AUDIT_OK' } elseif ($AutofillKeysOnly) { 'AUTOFILL_KEY_VERIFICATION_OK' } elseif ($AutofillImeOnly) { 'AUTOFILL_IME_DIAGNOSTIC_OK' } elseif ($GridCoverageOnly) { 'GRID_COVERAGE_VERIFICATION_OK' } else { 'UI_VERIFICATION_OK' }
+    $resultName = if ($MediaPerformanceOnly) { 'performance-result.txt' } elseif ($BackgroundMediaOnly) { 'media-result.txt' } elseif ($FullScreenHintOnly) { 'fullscreen-result.txt' } elseif ($FontAuditOnly) { 'font-audit-result.txt' } elseif ($AutofillKeysOnly) { 'autofill-key-result.txt' } elseif ($AutofillImeOnly) { 'ime-result.txt' } elseif ($GridCoverageOnly) { 'grid-coverage-result.txt' } elseif ($SelectionOnly) { 'selection-result.txt' } else { 'result.txt' }
+    $successMarker = if ($MediaPerformanceOnly) { 'MEDIA_PERFORMANCE_VERIFICATION_OK' } elseif ($BackgroundMediaOnly) { 'BACKGROUND_MEDIA_VERIFICATION_OK' } elseif ($FullScreenHintOnly) { 'FULLSCREEN_HINT_VERIFICATION_OK' } elseif ($FontAuditOnly) { 'FONT_AUDIT_OK' } elseif ($AutofillKeysOnly) { 'AUTOFILL_KEY_VERIFICATION_OK' } elseif ($AutofillImeOnly) { 'AUTOFILL_IME_DIAGNOSTIC_OK' } elseif ($GridCoverageOnly) { 'GRID_COVERAGE_VERIFICATION_OK' } elseif ($SelectionOnly) { 'SELECTION_VERIFICATION_OK' } else { 'UI_VERIFICATION_OK' }
     $result = Join-Path $testRoot "verification/$resultName"
     $null = New-Item -ItemType Directory -Path $evidence -Force
     if (Test-Path -LiteralPath (Join-Path $testRoot 'verification')) {

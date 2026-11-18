@@ -16,6 +16,8 @@ public sealed partial class MainWindow
     private readonly List<SubjectBoard> _desktopSubjects = [];
     private readonly List<RectInt32> _desktopSlots = [];
     private DesktopCommandWindow? _desktopCommands;
+    private DesktopInsertionLineWindow? _desktopInsertLine;
+    private int _desktopInsertIndex = -1;
     private SubjectBoard? _desktopDragSubject;
     private SubjectBoard? _desktopResizeSubject;
     private DesktopResizeEdge _desktopResizeEdge;
@@ -239,6 +241,7 @@ public sealed partial class MainWindow
         {
             stale.PropertyChanged -= DesktopSubject_PropertyChanged;
             _desktopKnownNames.Remove(stale);
+            _desktopWindows[stale].Tile?.Detach();
             _desktopWindows[stale].CloseSurface();
             _desktopWindows.Remove(stale);
         }
@@ -317,18 +320,25 @@ public sealed partial class MainWindow
         tile.DesktopDragStarted += () =>
         {
             _desktopDragSubject = subject;
+            _desktopInsertIndex = -1;
             if (_desktopWindows.TryGetValue(subject, out DesktopTileWindow? dragging)) dragging.BeginExternalDrag();
+            UpdateDesktopInsertionLine();
         };
         tile.DesktopDragDelta += (_, _) =>
         {
             if (_desktopWindows.TryGetValue(subject, out DesktopTileWindow? dragging)) dragging.FollowCursor();
+            UpdateDesktopInsertionLine();
         };
         tile.DesktopDragCompleted += () =>
         {
+            UpdateDesktopInsertionLine();
             if (_desktopWindows.TryGetValue(subject, out DesktopTileWindow? dragging)) dragging.EndExternalDrag();
             SubjectBoard? dragged = _desktopDragSubject;
+            int insertAt = _desktopInsertIndex;
             _desktopDragSubject = null;
-            if (dragged is not null) FinishDesktopDrag(dragged);
+            _desktopInsertIndex = -1;
+            HideDesktopInsertionLine();
+            if (dragged is not null) FinishDesktopDrag(dragged, insertAt);
         };
         tile.DesktopResizeStarted += edge => BeginDesktopResize(subject, edge);
         tile.DesktopResizeDelta += FollowDesktopResize;
@@ -404,25 +414,35 @@ public sealed partial class MainWindow
 
     private List<SubjectBoard> OrderDesktopSubjects()
     {
-        _settings.DesktopTileOrder ??= new();
         string key = CurrentProject!.Id.ToString();
-        if (!_settings.DesktopTileOrder.TryGetValue(key, out List<string>? saved) || saved is null) saved = [];
-        List<string> merged = DesktopTileLayout.MergeOrder(saved, ViewModel.Subjects.Select(subject => subject.Name).ToList());
-        if (!saved.SequenceEqual(merged))
+        var current = ViewModel.Subjects.Select(subject => (subject.Id, subject.Name)).ToList();
+        _settings.DesktopTileOrderIds ??= new();
+        _settings.DesktopTileOrderIds.TryGetValue(key, out List<Guid>? savedIds);
+        _settings.DesktopTileOrder ??= new();
+        _settings.DesktopTileOrder.TryGetValue(key, out List<string>? savedNames);
+        List<Guid> mergedIds = DesktopTileLayout.MergeOrderIds(savedIds, savedNames, current);
+        if (savedIds is null || !savedIds.SequenceEqual(mergedIds))
         {
-            _settings.DesktopTileOrder[key] = merged;
+            _settings.DesktopTileOrderIds[key] = mergedIds;
             ScheduleSave();
         }
         List<SubjectBoard> remaining = ViewModel.Subjects.ToList();
         List<SubjectBoard> ordered = new(remaining.Count);
-        foreach (string name in merged)
+        foreach (Guid id in mergedIds)
         {
-            int index = remaining.FindIndex(subject => string.Equals(subject.Name, name, StringComparison.Ordinal));
+            int index = remaining.FindIndex(subject => subject.Id == id);
             if (index < 0) continue;
             ordered.Add(remaining[index]);
             remaining.RemoveAt(index);
         }
         ordered.AddRange(remaining);
+        // 同步旧的名字顺序，兼容仍按名读取的旧客户端。
+        List<string> names = ordered.Select(subject => subject.Name).ToList();
+        if (savedNames is null || !savedNames.SequenceEqual(names))
+        {
+            _settings.DesktopTileOrder[key] = names;
+            ScheduleSave();
+        }
         return ordered;
     }
 
@@ -494,7 +514,7 @@ public sealed partial class MainWindow
         ArrangeDesktopTiles();
     }
 
-    private void FinishDesktopDrag(SubjectBoard subject)
+    private void FinishDesktopDrag(SubjectBoard subject, int insertAt)
     {
         if (!DesktopEditActive || CurrentProject is null)
         {
@@ -507,44 +527,99 @@ public sealed partial class MainWindow
             ScheduleSave();
             return;
         }
-        if (!DesktopWindowNative.GetCursorPos(out DesktopWindowNative.DesktopPoint point))
-        {
-            ArrangeDesktopTiles();
-            return;
-        }
         int from = _desktopSubjects.FindIndex(item => ReferenceEquals(item, subject));
-        int hit = NearestDesktopSlot(point.X, point.Y);
-        if (from < 0 || hit < 0 || hit == from)
+        if (from < 0 || insertAt < 0 || insertAt == from)
         {
             ArrangeDesktopTiles();
             return;
         }
         List<SubjectBoard> ordered = _desktopSubjects.ToList();
         ordered.RemoveAt(from);
-        ordered.Insert(Math.Clamp(hit, 0, ordered.Count), subject);
+        ordered.Insert(Math.Clamp(insertAt, 0, ordered.Count), subject);
+        _desktopSubjects.Clear();
+        _desktopSubjects.AddRange(ordered);
+        _settings.DesktopTileOrderIds ??= new();
+        _settings.DesktopTileOrderIds[CurrentProject.Id.ToString()] = ordered.Select(item => item.Id).ToList();
         _settings.DesktopTileOrder ??= new();
         _settings.DesktopTileOrder[CurrentProject.Id.ToString()] = ordered.Select(item => item.Name).ToList();
         ScheduleSave();
+        ArrangeDesktopTiles();
         SyncDesktopTiles();
     }
 
-    /// <summary>松手时落到离光标最近的槽位。只认严格落在矩形里时，拖到缝隙上会弹回，看起来像卡住。</summary>
-    private int NearestDesktopSlot(int x, int y)
+    /// <summary>自动排列时按正在拖的窗口盖住哪一块槽来更新插入线和插入下标。关掉自动排列就只跟着光标走。</summary>
+    private void UpdateDesktopInsertionLine()
     {
-        int best = -1;
-        long bestDistance = long.MaxValue;
-        for (int i = 0; i < _desktopSlots.Count; i++)
+        if (!_settings.DesktopTilesAutoArrange || _desktopDragSubject is null || _desktopSubjects.Count < 2 || _desktopScale <= 0)
         {
-            RectInt32 slot = _desktopSlots[i];
-            long dx = x - (slot.X + slot.Width / 2);
-            long dy = y - (slot.Y + slot.Height / 2);
-            long distance = dx * dx + dy * dy;
-            if (distance >= bestDistance) continue;
-            bestDistance = distance;
-            best = i;
+            _desktopInsertIndex = -1;
+            HideDesktopInsertionLine();
+            return;
         }
-        return best;
+        int from = _desktopSubjects.FindIndex(item => ReferenceEquals(item, _desktopDragSubject));
+        double scale = _desktopScale;
+        double zoom = DesktopZoom;
+        List<DesktopTileSlot> slots = new(_desktopSubjects.Count);
+        foreach (SubjectBoard item in _desktopSubjects)
+            slots.Add(new DesktopTileSlot(0, 0, Math.Max(1, item.TileWidth * zoom), Math.Max(1, item.TileHeight * zoom)));
+        DesktopWorkArea work = new(_desktopWorkX / scale, _desktopWorkY / scale, _desktopWorkWidth / scale, _desktopWorkHeight / scale);
+        DesktopInsertionGuide? guide = null;
+        bool hasCursor = DesktopWindowNative.GetCursorPos(out DesktopWindowNative.DesktopPoint point);
+        if (from >= 0 && _desktopWindows.TryGetValue(_desktopDragSubject, out DesktopTileWindow? dragged))
+        {
+            RectInt32 bounds = dragged.PixelBounds;
+            if (bounds.Width > 0 && bounds.Height > 0)
+                guide = DesktopTileLayout.InsertionGuideForTile(
+                    slots, from, bounds.X / scale, bounds.Y / scale, bounds.Width / scale, bounds.Height / scale, work, DesktopLayoutGap,
+                    hasCursor ? point.X / scale : double.NaN, hasCursor ? point.Y / scale : double.NaN);
+        }
+        if (guide is null && hasCursor)
+            guide = DesktopTileLayout.InsertionGuide(slots, from, point.X / scale, point.Y / scale, work, DesktopLayoutGap);
+        if (guide is not { } line)
+        {
+            _desktopInsertIndex = -1;
+            HideDesktopInsertionLine();
+            return;
+        }
+        _desktopInsertIndex = line.Index;
+        ShowDesktopInsertionLine(line, scale);
     }
+
+    private void ShowDesktopInsertionLine(DesktopInsertionGuide guide, double scale)
+    {
+        int x1 = (int)Math.Round(guide.X1 * scale);
+        int y1 = (int)Math.Round(guide.Y1 * scale);
+        int x2 = (int)Math.Round(guide.X2 * scale);
+        int y2 = (int)Math.Round(guide.Y2 * scale);
+        bool vertical = Math.Abs(x2 - x1) <= Math.Abs(y2 - y1);
+        int cross = Math.Max(4, (int)Math.Round(8 * scale));
+        int left;
+        int top;
+        int width;
+        int height;
+        if (vertical)
+        {
+            int length = Math.Max(1, Math.Abs(y2 - y1));
+            left = (x1 + x2) / 2 - cross / 2;
+            top = Math.Min(y1, y2);
+            width = cross;
+            height = length;
+        }
+        else
+        {
+            int length = Math.Max(1, Math.Abs(x2 - x1));
+            left = Math.Min(x1, x2);
+            top = (y1 + y2) / 2 - cross / 2;
+            width = length;
+            height = cross;
+        }
+        bool wasShowing = _desktopInsertLine?.IsShowing == true;
+        _desktopInsertLine ??= new DesktopInsertionLineWindow();
+        _desktopInsertLine.ShowGuide(left, top, width, height, vertical);
+        if (!wasShowing) StackDesktopCommand();
+    }
+
+    private void HideDesktopInsertionLine() => _desktopInsertLine?.HideGuide();
 
     private void ArrangeDesktopTilesIfWorkAreaChanged()
     {
@@ -590,10 +665,12 @@ public sealed partial class MainWindow
     private void StackDesktopCommand()
     {
         if (_desktopCommands is null) return;
-        DesktopWindowNative.StackCommandAboveTiles(
-            _desktopCommands.Handles,
-            _desktopWindows.Values.Select(window => window.Handle),
-            DesktopEditActive);
+        List<nint> tiles = [];
+        foreach (DesktopTileWindow window in _desktopWindows.Values)
+            if (window.Handle != 0) tiles.Add(window.Handle);
+        if (_desktopInsertLine is { IsShowing: true, Handle: var line } && line != 0)
+            tiles.Add(line);
+        DesktopWindowNative.StackCommandAboveTiles(_desktopCommands.Handles, tiles, DesktopEditActive);
     }
 
     private RectInt32 ToPixels(DesktopTileSlot slot) => new(
@@ -621,12 +698,12 @@ public sealed partial class MainWindow
         {
             double width = subject.TileWidth * zoom;
             double height = subject.TileHeight * zoom;
-            DesktopTilePlacement? saved = pool.FirstOrDefault(item => string.Equals(item.Name, subject.Name, StringComparison.Ordinal));
-            if (saved is not null) pool.Remove(saved);
+            DesktopTilePlacement? saved = FindPlacement(pool, subject);
+            if (saved is not null) { pool.Remove(saved); saved.Id = subject.Id; }
             else
             {
                 (double x, double y) = NextFreeSpot(work, width, height, occupied, DesktopLayoutGap);
-                saved = new DesktopTilePlacement { Name = subject.Name, X = x, Y = y };
+                saved = new DesktopTilePlacement { Id = subject.Id, Name = subject.Name, X = x, Y = y };
                 list.Add(saved);
                 ScheduleSave();
             }
@@ -670,6 +747,11 @@ public sealed partial class MainWindow
         return list;
     }
 
+    /// <summary>按稳定 Id 找位置记录；旧数据 Id 为空时按名兜底，命中后由调用方回填 Id。</summary>
+    private static DesktopTilePlacement? FindPlacement(List<DesktopTilePlacement> list, SubjectBoard subject) =>
+        list.FirstOrDefault(placement => placement.Id == subject.Id)
+        ?? list.FirstOrDefault(placement => placement.Id == Guid.Empty && string.Equals(placement.Name, subject.Name, StringComparison.Ordinal));
+
     private void RememberArrangedSlot(SubjectBoard subject, DesktopTileSlot slot)
     {
         if (_desktopScale <= 0 || CurrentProject is null) return;
@@ -691,12 +773,13 @@ public sealed partial class MainWindow
     {
         if (CurrentProject is null || !double.IsFinite(x) || !double.IsFinite(y)) return;
         List<DesktopTilePlacement> list = Placements();
-        DesktopTilePlacement? item = list.FirstOrDefault(placement => string.Equals(placement.Name, subject.Name, StringComparison.Ordinal));
+        DesktopTilePlacement? item = FindPlacement(list, subject);
         if (item is null)
         {
-            item = new DesktopTilePlacement { Name = subject.Name };
+            item = new DesktopTilePlacement { Id = subject.Id, Name = subject.Name };
             list.Add(item);
         }
+        item.Id = subject.Id;
         item.X = x;
         item.Y = y;
     }
@@ -705,12 +788,13 @@ public sealed partial class MainWindow
     {
         if (_desktopScale <= 0) return;
         List<DesktopTilePlacement> list = Placements();
-        DesktopTilePlacement? item = list.FirstOrDefault(placement => string.Equals(placement.Name, subject.Name, StringComparison.Ordinal));
+        DesktopTilePlacement? item = FindPlacement(list, subject);
         if (item is null)
         {
-            item = new DesktopTilePlacement { Name = subject.Name };
+            item = new DesktopTilePlacement { Id = subject.Id, Name = subject.Name };
             list.Add(item);
         }
+        item.Id = subject.Id;
         item.X = (bounds.X - _desktopWorkX) / _desktopScale;
         item.Y = (bounds.Y - _desktopWorkY) / _desktopScale;
     }
@@ -831,11 +915,14 @@ public sealed partial class MainWindow
         foreach (SubjectBoard subject in _desktopKnownNames.Keys.ToList())
             subject.PropertyChanged -= DesktopSubject_PropertyChanged;
         _desktopKnownNames.Clear();
-        foreach (DesktopTileWindow window in _desktopWindows.Values) window.CloseSurface();
+        foreach (DesktopTileWindow window in _desktopWindows.Values) { window.Tile?.Detach(); window.CloseSurface(); }
         _desktopWindows.Clear();
         _desktopCommandAnimTimer.Stop();
         _desktopCommands?.CloseSurface();
         _desktopCommands = null;
+        _desktopInsertLine?.CloseSurface();
+        _desktopInsertLine = null;
+        _desktopInsertIndex = -1;
         _desktopSubjects.Clear();
         _desktopSlots.Clear();
         _desktopDragSubject = null;

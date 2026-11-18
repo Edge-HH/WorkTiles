@@ -133,8 +133,10 @@ public sealed class BoardSettingsState
     public bool LaunchAtStartup { get; set; }
     /// <summary>开机自启时不打开主窗口，只留托盘；桌面磁贴若已开启则照常显示。默认开启。</summary>
     public bool SilentStartup { get; set; } = true;
-    /// <summary>每个项目一份桌面顺序，键是项目 Id，值是科目名。不写回作业板坐标。</summary>
+    /// <summary>每个项目一份桌面顺序，键是项目 Id，值是科目名。旧数据按名读取，仅作迁移来源与旧客户端兼容。</summary>
     public Dictionary<string, List<string>> DesktopTileOrder { get; set; } = new();
+    /// <summary>每个项目一份桌面顺序，键是项目 Id，值是科目稳定 Id。同名科目也能区分，优先于按名的旧顺序。</summary>
+    public Dictionary<string, List<Guid>> DesktopTileOrderIds { get; set; } = new();
     /// <summary>桌面磁贴是否从右上角往空隙里自动排列。关掉后停在当前屏幕位置，不回到开启前的布局。</summary>
     public bool DesktopTilesAutoArrange { get; set; } = true;
     /// <summary>桌面磁贴的显示缩放，只影响桌面窗口，不改作业板上的尺寸。</summary>
@@ -315,6 +317,8 @@ public sealed class HomeworkSuggestion
 
 public sealed class SubjectState
 {
+    /// <summary>科目稳定 Id。旧数据为空，读取时生成并随下次保存落盘；桌面顺序与位置按它匹配，同名不再串位。</summary>
+    public Guid Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public string AccentHex { get; set; } = "#818CF8";
     public bool IsAccentExplicit { get; set; } = true;
@@ -369,6 +373,8 @@ public sealed class BackgroundSettings
 /// <summary>桌面磁贴在工作区里的自由位置。宽高仍用科目自己的尺寸，这里只记左上角。</summary>
 public sealed class DesktopTilePlacement
 {
+    /// <summary>科目稳定 Id。旧数据为空，按名匹配兜底；命中后回填 Id，之后按 Id 匹配。</summary>
+    public Guid Id { get; set; }
     public string Name { get; set; } = "";
     public double X { get; set; }
     public double Y { get; set; }

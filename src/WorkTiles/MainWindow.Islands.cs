@@ -732,8 +732,8 @@ public sealed partial class MainWindow
                 double? y = resetOffset ? 0 : null;
                 if (!resetOffset && !infinite && BoardScroller.ActualWidth > 1)
                 {
-                    x = Math.Min(BoardScroller.HorizontalOffset, BoardScroller.ActualWidth / 2);
-                    y = Math.Min(BoardScroller.VerticalOffset, BoardScroller.ActualHeight / 2);
+                    x = Math.Min(BoardScroller.HorizontalOffset, BoardLayout.FixedBoardPanLimit(BoardScroller.ActualWidth, BoardCanvas.Width, zoom));
+                    y = Math.Min(BoardScroller.VerticalOffset, BoardLayout.FixedBoardPanLimit(BoardScroller.ActualHeight, BoardCanvas.Height, zoom));
                 }
                 BoardScroller.ChangeView(x, y, zoom, true);
                 // 比例回写是异步的。标志再留一帧，避免旧比例把刚刚设下的值盖掉。
@@ -771,17 +771,22 @@ public sealed partial class MainWindow
     private bool FixedBoardPanExceedsLimit()
     {
         if (_settings.InfiniteBoard || BoardScroller.ActualWidth < 1) return false;
-        // HorizontalOffset 是屏幕上的滚动距离，半个屏幕就是视口宽高的一半。
-        return BoardScroller.HorizontalOffset > BoardScroller.ActualWidth / 2 + 1
-            || BoardScroller.VerticalOffset > BoardScroller.ActualHeight / 2 + 1;
+        // HorizontalOffset 是屏幕上的滚动距离。内容只比视口略大时上限是半个视口；磁贴超出视口时可以滚到内容尽头。
+        return BoardScroller.HorizontalOffset > FixedBoardPanLimit(true) + 1
+            || BoardScroller.VerticalOffset > FixedBoardPanLimit(false) + 1;
     }
 
-    /// <summary>固定作业板平移最多半个屏幕，避免把内容整个拖出画面。</summary>
+    private double FixedBoardPanLimit(bool horizontal) => BoardLayout.FixedBoardPanLimit(
+        horizontal ? BoardScroller.ActualWidth : BoardScroller.ActualHeight,
+        horizontal ? BoardCanvas.Width : BoardCanvas.Height,
+        BoardScroller.ZoomFactor);
+
+    /// <summary>固定作业板的平移停在内容尽头；内容只比视口略大时最多半个屏幕，避免把内容整个拖出画面。</summary>
     private void ClampFixedBoardPan()
     {
         if (!FixedBoardPanExceedsLimit()) return;
-        double x = Math.Min(BoardScroller.HorizontalOffset, BoardScroller.ActualWidth / 2);
-        double y = Math.Min(BoardScroller.VerticalOffset, BoardScroller.ActualHeight / 2);
+        double x = Math.Min(BoardScroller.HorizontalOffset, FixedBoardPanLimit(true));
+        double y = Math.Min(BoardScroller.VerticalOffset, FixedBoardPanLimit(false));
         _applyingBoardZoom = true;
         try { BoardScroller.ChangeView(x, y, (float)_boardZoom, true); }
         finally { _applyingBoardZoom = false; }

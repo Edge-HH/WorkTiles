@@ -62,7 +62,7 @@ public sealed class ExportTileVisual : Grid
                 TextWrapping = TextWrapping.Wrap,
                 Padding = new Thickness(2, 0, 2, 0), MinHeight = 42, IsHitTestVisible = false
             };
-            SubjectTileControl.ApplyTransparentInputChrome(editor);
+            SubjectTileControl.ApplyTransparentInputChrome(editor, showSelectionVeil: false);
             ScrollViewer.SetVerticalScrollBarVisibility(editor, ScrollBarVisibility.Disabled);
             ScrollViewer.SetHorizontalScrollBarVisibility(editor, ScrollBarVisibility.Disabled);
             Grid.SetColumn(editor, 1); row.Children.Add(editor); content.Children.Add(row);

@@ -181,6 +181,9 @@ public sealed class SubjectBoard : ObservableObject
     private string _accentHex = "#818CF8";
     private SolidColorBrush _accentBrush = new(Windows.UI.Color.FromArgb(255, 129, 140, 248));
 
+    /// <summary>科目稳定 Id，随项目持久化。桌面顺序与位置按它匹配，同名科目不再串位。</summary>
+    public Guid Id { get; init; } = Guid.NewGuid();
+
     public bool IsAccentExplicit { get; set; }
 
     public string AccentHex
@@ -243,6 +246,7 @@ public sealed class SubjectBoard : ObservableObject
     {
         SubjectBoard clone = new()
         {
+            Id = Id,
             Name = Name,
             AccentHex = AccentHex,
             IsAccentExplicit = IsAccentExplicit,

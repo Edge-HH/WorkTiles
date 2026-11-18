@@ -8,7 +8,8 @@ using Windows.Foundation;
 namespace WorkTiles.Controls;
 
 /// <summary>
-/// 补全输入的共用规则：候选只替换光标左侧正在输入的一段，词边界与作业切词保持一致。
+/// 补全输入的共用规则。作业候选只替换光标左侧正在输入的一段，词边界与作业切词保持一致。
+/// 学科候选不同：标题就是一个科目，采纳时整段覆盖当前标题。
 /// 键盘操作统一由窗口根面板处理，见 MainWindow 的补全按键拦截。
 /// </summary>
 internal static class AutofillInputText
@@ -50,6 +51,7 @@ internal static class AutofillInputText
         private Func<string>? _text;
         private Func<bool>? _focused;
         private Func<bool>? _looksReverted;
+        private Func<bool>? _deferWhile;
         private Action? _restore;
         private string _previous = string.Empty;
         private string _expected = string.Empty;
@@ -73,11 +75,16 @@ internal static class AutofillInputText
         /// 光标附近是否又变回采纳时被替换的那一段（老版判据），用于识别整段文本之外的覆盖方式。
         /// </param>
         /// <param name="restore">把被输入法改掉的那一段补写回采纳结果，且不改变焦点。</param>
-        public void Start(Func<string> text, Func<bool> focused, string previous, string expected, Func<bool> looksReverted, Action restore)
+        /// <param name="deferWhile">
+        /// 为真时先不要把文本变化当成用户的新输入。学科采纳发生在同一次中文组合里时，
+        /// 输入法会先把还没上屏的字接到候选后面，再发组合结束；这段时间要继续守着采纳结果。
+        /// </param>
+        public void Start(Func<string> text, Func<bool> focused, string previous, string expected, Func<bool> looksReverted, Action restore, Func<bool>? deferWhile = null)
         {
             _text = text;
             _focused = focused;
             _looksReverted = looksReverted;
+            _deferWhile = deferWhile;
             _previous = previous;
             _expected = expected;
             _restore = restore;
@@ -93,6 +100,7 @@ internal static class AutofillInputText
             _text = null;
             _focused = null;
             _looksReverted = null;
+            _deferWhile = null;
             _restore = null;
         }
 
@@ -140,7 +148,10 @@ internal static class AutofillInputText
                 (string.Equals(text, _previous, StringComparison.Ordinal) || (_looksReverted?.Invoke() ?? false));
             if (!committed && !reverted)
             {
-                // 组合还在进行且文本不是退回原样，说明是用户自己的输入，不再干预。
+                // 同一次组合还没结束时，多出来的字是输入法把剩余内容接上来，先继续守着。
+                // 用户另起一次组合时，组合开始事件会解除守护。
+                if (_deferWhile?.Invoke() == true) return;
+                // 没有组合、文本也不是退回原样，说明是用户自己的输入，不再干预。
                 Stop();
                 return;
             }
@@ -207,7 +218,14 @@ internal sealed class SubjectAutofillInput
         };
         box.SelectionChanged += (_, _) =>
         {
-            if (!_suppress) Refresh(allowExact: _afterComposition && !_justApplied);
+            if (_suppress) return;
+            // 拖选标题时选区起点经常是 0，按光标会误判成“还没输入”并弹出全部学科。
+            if (box.SelectionLength > 0)
+            {
+                Hide();
+                return;
+            }
+            Refresh(allowExact: _afterComposition && !_justApplied);
         };
         box.GotFocus += (_, _) => ClearDefaultTitle();
         // 失焦会让输入法把还没上屏的组合文本一次性提交，可能覆盖刚采纳的候选：
@@ -290,14 +308,16 @@ internal sealed class SubjectAutofillInput
         string text = _box.Text ?? string.Empty;
         int caret = Math.Clamp(_box.SelectionStart, 0, text.Length);
         string replaced = AutofillInputText.CurrentWord(text, caret);
-        WriteText(suggestion, focus: true);
-        _service.NotifySubjectCompleted(suggestion);
-        _applied(suggestion);
-        string expected = _box.Text ?? string.Empty;
-        int caretAfterApply = Math.Clamp(_box.SelectionStart, 0, expected.Length);
+        // 期望值取候选名本身，不回读输入框：输入法可能在写入的同时把剩余的字接上去。
+        string expected = suggestion.Name;
         _justApplied = true;
-        // 输入法会在采纳后把这次组合的内容按原始拼音再上屏一次（也可能拖到失焦时），
-        // 组合结束或失焦后核对并把被覆盖的内容补写回候选，避免要再点第二下。
+        bool wasComposing = _composing;
+        WriteText(suggestion, focus: true);
+        // 写入当时如果已经不是候选名（输入法把光标右侧的字接了回来），立刻整段覆盖回去。
+        if (!string.Equals(_box.Text ?? string.Empty, expected, StringComparison.Ordinal))
+            WriteText(expected, expected.Length);
+        // 输入法会在采纳后把这次组合的内容再上屏一次（也可能拖到失焦时），
+        // 组合结束或失焦后核对并把标题补写回候选，避免「数|学」采纳「数学」后变成「数学学」。
         _guard.Start(
             () => _box.Text ?? string.Empty,
             () => _box.FocusState != FocusState.Unfocused,
@@ -310,21 +330,25 @@ internal sealed class SubjectAutofillInput
                 // 补写属于回滚输入法上屏：不要再按“输入法刚上屏”重新弹出同名候选。
                 _afterComposition = false;
                 _justApplied = true;
-                // 标题是纯文本，整段写回采纳结果即可覆盖“整段回退”和“拼音补在候选前后”两种情况。
-                WriteText(expected, caretAfterApply);
-            });
+                // 标题是纯文本，整段写回候选名即可覆盖“整段回退”和“拼音或剩余汉字补在候选前后”两种情况。
+                WriteText(expected, expected.Length);
+            },
+            () => _composing);
+        // 写入过程中组合已经结束的话，结束事件发生在守护开始之前，这里补一次核对。
+        if (wasComposing && !_composing) _guard.CompositionEnded();
+        _service.NotifySubjectCompleted(suggestion);
+        _applied(suggestion);
     }
 
     /// <summary>
-    /// 把候选写进标题。写入不改变焦点，由调用方决定是否把焦点交回输入框，
-    /// 这样补写（回滚输入法上屏的拼音）时不会把用户已经点到别处的焦点抢回来。
+    /// 把候选写进标题。科目标题就是一个科目名，采纳时整段覆盖，
+    /// 不保留光标右侧已经输入的字：在「数|学」处采纳「数学」应得到「数学」，而不是「数学学」。
+    /// 写入不改变焦点，由调用方决定是否把焦点交回输入框，
+    /// 这样补写（回滚输入法上屏）时不会把用户已经点到别处的焦点抢回来。
     /// </summary>
     private void WriteText(SubjectSuggestion suggestion, bool focus)
     {
-        string text = _box.Text ?? string.Empty;
-        int caret = Math.Clamp(_box.SelectionStart, 0, text.Length);
-        int start = AutofillInputText.WordStart(text, caret);
-        WriteText(string.Concat(text.AsSpan(0, start), suggestion.Name, text.AsSpan(caret)), start + suggestion.Name.Length);
+        WriteText(suggestion.Name, suggestion.Name.Length);
         if (focus) _box.Focus(FocusState.Programmatic);
     }
 
@@ -396,7 +420,15 @@ internal sealed class HomeworkAutofillInput
         // 光标移动到另一个词上时重新计算候选，避免沿用上一次的列表。
         editor.SelectionChanged += (_, _) =>
         {
-            if (!_suppress && _ready()) Refresh();
+            if (_suppress || !_ready()) return;
+            ITextSelection selection = editor.Document.Selection;
+            // 有选区时用户是在选中文字，不是在输入下一个词。这时刷新候选会把选区折成光标。
+            if (selection.StartPosition != selection.EndPosition)
+            {
+                Hide();
+                return;
+            }
+            Refresh();
         };
         editor.Loaded += (_, _) =>
         {
@@ -553,8 +585,8 @@ internal sealed class HomeworkAutofillInput
     {
         try
         {
-            _editor.Document.Selection.SetRange(caret, caret);
-            _editor.Document.Selection.GetRect(PointOptions.ClientCoordinates, out Rect rect, out _);
+            ITextRange range = _editor.Document.GetRange(caret, caret);
+            range.GetRect(PointOptions.ClientCoordinates, out Rect rect, out _);
             double height = Math.Max(20, rect.Height);
             double top = Math.Clamp(rect.Y, 0, Math.Max(0, _editor.ActualHeight - height));
             return new Rect(rect.X, top, Math.Max(1, rect.Width), height);

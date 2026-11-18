@@ -61,8 +61,12 @@ public static class ColorPalette
     private static string ConvertColorTable(string table, bool macaron) => Regex.Replace(table,
         @"\\red(\d+)\\green(\d+)\\blue(\d+)", match =>
         {
-            string hex = $"#{int.Parse(match.Groups[1].Value):X2}{int.Parse(match.Groups[2].Value):X2}{int.Parse(match.Groups[3].Value):X2}";
+            // 分量钳到 0-255：超界值会让 X2 产出 3 位十六进制，后续按固定偏移切分就错位；超长数字会溢出。
+            int r = Component(match.Groups[1].Value), g = Component(match.Groups[2].Value), b = Component(match.Groups[3].Value);
+            string hex = $"#{r:X2}{g:X2}{b:X2}";
             string mapped = ConvertHex(hex, macaron);
             return $"\\red{Convert.ToInt32(mapped.Substring(1, 2), 16)}\\green{Convert.ToInt32(mapped.Substring(3, 2), 16)}\\blue{Convert.ToInt32(mapped.Substring(5, 2), 16)}";
         });
+
+    private static int Component(string value) => int.TryParse(value, out int parsed) ? Math.Clamp(parsed, 0, 255) : 0;
 }

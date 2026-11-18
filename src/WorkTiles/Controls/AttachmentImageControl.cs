@@ -158,6 +158,10 @@ public sealed class AttachmentImageControl : Grid
             StorageFile file = await StorageFile.GetFileFromPathAsync(_attachment.Path);
             using var stream = await file.OpenReadAsync();
             BitmapImage bitmap = new();
+            // 按显示框尺寸留 3 倍余量解码（供放大），上限 4096：避免数千像素原图为几百 DIP 的磁贴常驻整幅位图。
+            // 等比解码不改变宽高比，下方 AspectRatio 计算仍成立。
+            double scale = XamlRoot?.RasterizationScale ?? 1.0;
+            bitmap.DecodePixelWidth = Math.Clamp((int)Math.Ceiling(_imageFrame.Width * scale * 3), 768, 4096);
             await bitmap.SetSourceAsync(stream);
             _image.Source = bitmap;
             if (bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0)

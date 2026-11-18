@@ -147,6 +147,24 @@ try
     Check(free.X == 77 && free.Y == 73 && free.GuideX is null && free.GuideY is null, "远离参考线时不应吸附");
     var exportSnap = BoardLayout.Snap(new(347, 299, 300, 200), [], 1000, 700, 100);
     Check(exportSnap.Y == 300 && exportSnap.GuideY == 400, "导出吸附应按标题以下的作业区域居中");
+    LayoutRect[] keptTiles = [new(0, 0, 430, 320), new(900, 80, 430, 320)];
+    foreach ((double Width, double Height) viewport in new[] { (1600d, 900d), (640d, 480d), (2d, 2d), (1600d, 900d) })
+    {
+        (double boardWidth, double boardHeight) = BoardLayout.FixedBoardSize(viewport.Width, viewport.Height, 1, keptTiles);
+        Check(keptTiles[0] == new LayoutRect(0, 0, 430, 320) && keptTiles[1] == new LayoutRect(900, 80, 430, 320),
+            "视口变化不能改写磁贴矩形");
+        Check(boardWidth >= 1330 && boardHeight >= 400, $"画板必须装得下磁贴（{viewport.Width}x{viewport.Height} -> {boardWidth}x{boardHeight}）");
+        Check(boardWidth >= viewport.Width && boardHeight >= viewport.Height, "画板不能小于视口");
+    }
+    Check(BoardLayout.FixedBoardSize(1600, 900, 1, keptTiles) == (1600, 900), "磁贴已经落在视口内时画板等于视口");
+    Check(BoardLayout.FixedBoardSize(640, 480, 1, keptTiles) == (1330, 480), "视口变窄时画板仍保留磁贴右缘");
+    Check(BoardLayout.FixedBoardSize(2, 2, 1, keptTiles) == (1330, 400), "短暂的极小视口不能把画板收成磁贴叠在一起的尺寸");
+    (double zoomedOutWidth, double zoomedOutHeight) = BoardLayout.FixedBoardSize(1600, 900, 0.8, keptTiles);
+    Check(Math.Abs(zoomedOutWidth - 2000) < .001 && Math.Abs(zoomedOutHeight - 1125) < .001,
+        $"缩小后画板应按可见范围铺开（{zoomedOutWidth}x{zoomedOutHeight}）");
+    Check(BoardLayout.FixedBoardSize(1600, 900, 1.4, keptTiles) == (1600, 900), "放大不把已经落在视口内的磁贴所在画板裁小");
+    Check(BoardLayout.FixedBoardPanLimit(800, 800, 1.4) == 400, "放大到 140% 且内容未超出视口时，平移停在半个视口");
+    Check(BoardLayout.FixedBoardPanLimit(800, 1760, 1) == 960, "磁贴超出视口时可以滚到内容尽头");
     ProjectStore emptyAttachmentStore = new(Path.Combine(root, "legacy-empty-attachment"));
     Directory.CreateDirectory(emptyAttachmentStore.DirectoryPath);
     AppState legacyWithEmptyAttachment = new()
@@ -172,6 +190,67 @@ try
     Check(File.Exists(Path.Combine(legacyStore.DirectoryPath, "pancake.json.before-projects.bak")), "未保留旧备份");
     migrated.Projects.Clear(); migrated.ActiveProjectId = null; legacyStore.Save(migrated);
     Check(legacyStore.Load().Projects.Count == 0, "删除最后项目后重新迁入旧数据");
+
+    // 桌面磁贴自动排序：拖拽落点判定与重排语义（复刻 UpdateDesktopInsertionLine + FinishDesktopDrag）。
+    var deskWork = new DesktopWorkArea(0, 0, 1920, 1080);
+    const double deskGap = 12;
+    var deskSizes = new (double W, double H)[] { (400, 300), (400, 300), (400, 300), (400, 300) };
+    int DeskGuide((double W, double H)[] sizes, int from, double x, double y, double w, double h)
+    {
+        var slots = sizes.Select(s => new DesktopTileSlot(0, 0, Math.Max(1, s.W), Math.Max(1, s.H))).ToList();
+        return DesktopTileLayout.InsertionGuideForTile(slots, from, x, y, w, h, deskWork, deskGap)?.Index ?? -1;
+    }
+    List<int> DeskReorder(int count, int from, int insertAt)
+    {
+        var order = Enumerable.Range(0, count).ToList();
+        if (insertAt >= 0 && insertAt != from)
+        {
+            order.RemoveAt(from);
+            order.Insert(Math.Clamp(insertAt, 0, order.Count), from);
+        }
+        return order;
+    }
+    var deskArranged = DesktopTileLayout.Arrange(deskSizes, deskWork, deskGap);
+    // 完整盖住目标槽：唯一命名下每组交换都应换位，且等大磁贴精确落到目标原槽。
+    for (int from = 0; from < deskSizes.Length; from++)
+    for (int target = 0; target < deskSizes.Length; target++)
+    {
+        if (from == target) continue;
+        var t = deskArranged[target];
+        int insertAt = DeskGuide(deskSizes, from, t.X, t.Y, t.Width, t.Height);
+        Check(insertAt == target, $"完整盖住目标槽应返回目标下标（from={from} target={target} got={insertAt}）");
+        var order = DeskReorder(deskSizes.Length, from, insertAt);
+        Check(order.IndexOf(from) == target, $"重排后被拖磁贴应占住目标槽（from={from} target={target}）");
+        var moved = DesktopTileLayout.Arrange(order.Select(i => deskSizes[i]).ToArray(), deskWork, deskGap)[order.IndexOf(from)];
+        Check(Math.Abs(moved.X - t.X) < 1 && Math.Abs(moved.Y - t.Y) < 1, "等大磁贴交换后应精确落到目标原槽");
+    }
+    // 部分覆盖：窗口压住目标槽的比例超过原槽残留时换位，刚离开原槽则保持原序号。
+    var own = deskArranged[0];
+    Check(DeskGuide(deskSizes, 0, own.X, own.Y + 180, own.Width, own.Height) == 1, "盖住目标槽过半应换位");
+    Check(DeskGuide(deskSizes, 0, own.X, own.Y + 20, own.Width, own.Height) == 0, "刚离开原槽不应换位");
+    Check(DeskGuide(deskSizes, 0, own.X, own.Y, own.Width, own.Height) == 0, "停在原槽不应换位");
+    // 光标引导兜底仍按最近槽判定。
+    var cursorSlots = deskSizes.Select(s => new DesktopTileSlot(0, 0, s.W, s.H)).ToList();
+    var center = deskArranged[2];
+    var cursorGuide = DesktopTileLayout.InsertionGuide(cursorSlots, 0, center.X + center.Width / 2, center.Y + center.Height / 2, deskWork, deskGap);
+    Check(cursorGuide is { Index: 2 }, "光标落在目标槽中心应返回该槽下标");
+
+    // 阶段1：同名科目按稳定 Id 排序，拖动重排不再被名字合并抹平（复刻 OrderDesktopSubjects 的 MergeOrderIds）。
+    Guid idA = Guid.NewGuid(), idB = Guid.NewGuid(), idC = Guid.NewGuid(), idD = Guid.NewGuid();
+    var sameNameCurrent = new (Guid Id, string Name)[] { (idA, "新科目"), (idB, "新科目"), (idC, "英语") };
+    // 把第一块同名磁贴拖到末尾：保存的 Id 顺序应原样套回，名字相同也能区分。
+    var draggedIds = new[] { idB, idC, idA };
+    Check(DesktopTileLayout.MergeOrderIds(draggedIds, null, sameNameCurrent).SequenceEqual(draggedIds), "同名科目按 Id 重排后顺序应保留（拖动不再弹回）");
+    // 旧的名字顺序迁移：同名按出现次数一一对应到不同 Id。
+    var migratedIds = DesktopTileLayout.MergeOrderIds(null, new[] { "英语", "新科目", "新科目" }, sameNameCurrent);
+    Check(migratedIds.SequenceEqual(new[] { idC, idA, idB }), "旧名字顺序应按出现次数迁移到稳定 Id");
+    Check(migratedIds.Distinct().Count() == 3, "同名科目迁移后 Id 不能重复");
+    // Id 顺序优先于过期名字；新科目接末尾，已删科目丢掉，重复保存项去重。
+    var partialCurrent = new (Guid Id, string Name)[] { (idA, "甲"), (idC, "丙"), (idD, "丁") };
+    Check(DesktopTileLayout.MergeOrderIds(new[] { idA, idC, idB, idA }, new[] { "丙", "甲" }, partialCurrent).SequenceEqual(new[] { idA, idC, idD }), "Id 优先、去重、丢弃已删并把新科目接末尾");
+    // 没有任何保存顺序时按当前顺序原样返回。
+    Check(DesktopTileLayout.MergeOrderIds(null, null, sameNameCurrent).SequenceEqual(new[] { idA, idB, idC }), "无保存顺序时应保持当前顺序");
+
     Console.WriteLine($"PASS: {checks} project/package/migration/ink/layout checks.");
 }
 finally

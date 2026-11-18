@@ -21,9 +21,7 @@
             </Grid.ColumnDefinitions>
             <Grid x:Name="BrandRegion" Background="Transparent">
                 <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" IsHitTestVisible="False">
-                    <Border Width="38" Height="38" Background="{ThemeResource BoardSurfaceBrush}" CornerRadius="8">
-                        <icons:FluentIcon FontSize="18" Foreground="{ThemeResource BoardBrandBrush}" Symbol="Board" />
-                    </Border>
+                    <Image x:Name="BrandLogo" Width="40" Height="40" Stretch="Uniform" Source="ms-appx:///Assets/Logo/logo.png" />
                     <StackPanel VerticalAlignment="Center" Spacing="1">
                         <TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{ThemeResource BoardTextBrush}" Text="WorkTiles" />
                         <TextBlock FontSize="11" Foreground="{ThemeResource BoardTextBrush}" Text="班级作业看板" />
@@ -285,7 +283,10 @@
                 <StackPanel x:Name="AboutSettingsPanel" Spacing="24" Visibility="Collapsed">
                     <Border x:Name="VersionSettingsCard" Style="{StaticResource BoardCardStyle}">
                         <StackPanel Spacing="24">
-                            <TextBlock FontSize="22" Text="应用信息" />
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <Image Width="64" Height="64" Stretch="Uniform" Source="ms-appx:///Assets/Logo/logo.png" />
+                                <TextBlock FontSize="22" Text="应用信息" VerticalAlignment="Center" />
+                            </StackPanel>
                             <Grid ColumnSpacing="24">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="180" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <TextBlock Text="版本" VerticalAlignment="Center" />

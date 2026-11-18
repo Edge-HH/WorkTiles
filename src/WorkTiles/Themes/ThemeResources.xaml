@@ -23,7 +23,7 @@
             <!-- 普通按钮 -->
             <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="ButtonBackgroundPressed" Color="#3A3A3E" />
-            <!-- 开关按钮：悬停、按下和选中用中性灰。网格吸附选中时改回 Windows 强调色，不走这里的选中灰。 -->
+            <!-- 开关按钮：悬停、按下和选中用中性灰。网格吸附和桌面磁贴的自动排列选中时改回 Windows 强调色，不走这里的选中灰。 -->
             <SolidColorBrush x:Key="ToggleButtonBackgroundPointerOver" Color="#2F2F33" />
             <SolidColorBrush x:Key="ToggleButtonBackgroundPressed" Color="#3A3A3E" />
             <SolidColorBrush x:Key="ToggleButtonBackgroundChecked" Color="#2C2C2C" />

@@ -71,6 +71,11 @@ public sealed partial class MainWindow
                 evidence.Add($"AvailableFamilies: {FontService.AvailableFamilies.Count}");
                 evidence.Add($"Treated as missing after RTF round trip: {broken.Count}");
                 evidence.AddRange(broken.Select(item => "REPLACED " + item));
+                // 审计必须真正断言：枚举为空则测量无效；系统字体经 RTF 往返落到缺失替身即回归。
+                // 内置默认字体随包提供、非系统安装，其往返结果只作诊断，不计入失败。
+                if (FontService.AvailableFamilies.Count == 0) throw new Exception("字体枚举为空，字体审计无效。");
+                List<string> regressions = broken.Where(item => !item.StartsWith(FontService.FamilyName + " =>", StringComparison.OrdinalIgnoreCase)).ToList();
+                if (regressions.Count > 0) throw new Exception($"字体 RTF 往返后 {regressions.Count} 个系统字体落到缺失替身：{string.Join("; ", regressions)}");
                 evidence.Add("FONT_AUDIT_OK");
             }
             catch (Exception ex) { evidence.Add("FONT_AUDIT_FAILED\n" + ex); }
@@ -134,17 +139,40 @@ public sealed partial class MainWindow
                 Check(brandBrush.Color.R == windowsAccent.R && brandBrush.Color.G == windowsAccent.G && brandBrush.Color.B == windowsAccent.B
                     && accentFill.Color.R == windowsAccent.R && accentFill.Color.G == windowsAccent.G && accentFill.Color.B == windowsAccent.B,
                     "brand color and controls follow the Windows accent");
-                Check(FindVisuals<FluentIcon>(BrandRegion).Any(icon => icon.Symbol == "Board"
-                    && icon.Foreground is SolidColorBrush iconBrush
-                    && iconBrush.Color.R == windowsAccent.R && iconBrush.Color.G == windowsAccent.G && iconBrush.Color.B == windowsAccent.B),
-                    "menu bar icon follows the Windows accent");
+                Check(BrandLogo.Source is BitmapImage logo
+                    && logo.UriSource?.AbsoluteUri.Contains("logo.png", StringComparison.OrdinalIgnoreCase) == true,
+                    "menu bar shows the WorkTiles logo");
+                Check(AccentCheckedFill(GridSnapToggleButton, BoardTheme.IsLight),
+                    "grid snap checked background uses the Windows accent");
+                DesktopCommandWindow arrangeWindow = new();
+                try
+                {
+                    arrangeWindow.ApplyTheme(BoardTheme.IsLight ? ElementTheme.Light : ElementTheme.Dark);
+                    Check(AccentCheckedFill(arrangeWindow.AutoArrangeButton, true)
+                        && AccentCheckedFill(arrangeWindow.AutoArrangeButton, false),
+                        "desktop auto-arrange checked background uses the Windows accent");
+                    FluentIcon arrangeIcon = (FluentIcon)arrangeWindow.AutoArrangeButton.Content;
+                    Check(ReferenceEquals(arrangeIcon.Foreground, SystemAccent.CheckedForeground),
+                        "desktop auto-arrange checked icon is white");
+                    arrangeWindow.SetAutoArrange(false);
+                    Check(arrangeIcon.Foreground is SolidColorBrush offBrush
+                        && offBrush.Color.R == BoardTheme.TextColor.R
+                        && offBrush.Color.G == BoardTheme.TextColor.G
+                        && offBrush.Color.B == BoardTheme.TextColor.B,
+                        "desktop auto-arrange off icon uses the text color");
+                }
+                finally
+                {
+                    arrangeWindow.CloseSurface();
+                }
                 ShowSettings();
                 await NextLayoutAsync();
                 Check(ReferenceEquals(SettingsRoot.SelectedItem, GeneralNavItem),
                     "opening settings starts on the general page");
                 SettingsRoot.SelectedItem = AppearanceNavItem;
                 await NextLayoutAsync();
-                var settingsPreviewEditors = FindVisuals<RichEditBox>(_appearancePreviews["Tile"]).ToList();
+                var settingsPreviewEditors = FindVisuals<RichEditBox>(_appearancePreviews["Tile"])
+                    .Where(editor => !TransparentInputMarkers.IsOverlayMirror(editor)).ToList();
                 Check(settingsPreviewEditors.Count > 0 && settingsPreviewEditors.All(editor => editor.IsReadOnly),
                     "opening settings loads read-only tile preview editors");
                 _tileAppearancePreview!.ApplyBodyDefaults(_settings, overrideFormatted: true);
@@ -215,7 +243,7 @@ public sealed partial class MainWindow
                 NavigationViewItem windowNav = WindowNavigationGroup.MenuItems.OfType<NavigationViewItem>().First(item => Equals(item.Content, "窗口"));
                 Check(menuBarNav.Icon is FluentIcon menuIcon && windowNav.Icon is FluentIcon windowIcon && menuIcon.Symbol == windowIcon.Symbol,
                     "menu bar settings use the same icon as window settings");
-                var editor = FindVisuals<RichEditBox>(BoardCanvas).Last();
+                var editor = FindVisuals<RichEditBox>(BoardCanvas).Last(editor => !TransparentInputMarkers.IsOverlayMirror(editor));
                 editor.IsReadOnly = false;
                 ITextRange story = editor.Document.GetRange(0, int.MaxValue);
                 int storyEnd = story.EndPosition;
@@ -294,7 +322,7 @@ public sealed partial class MainWindow
                 evidence.Add("captured rtf fonts: " + string.Join(" | ", english.Entries.Concat(chinese.Entries).Select(entry => RtfFonts(entry.RtfContent))));
                 FinishEditing();
                 await NextLayoutAsync();
-                RichEditBox reloaded = FindVisuals<RichEditBox>(BoardCanvas).Last();
+                RichEditBox reloaded = FindVisuals<RichEditBox>(BoardCanvas).Last(editor => !TransparentInputMarkers.IsOverlayMirror(editor));
                 evidence.Add("font after save reload: " + reloaded.Document.GetRange(0, 2).CharacterFormat.Name);
                 Check(reloaded.Document.GetRange(0, 2).CharacterFormat.Name == "Arial", "chosen font survives save and tile rebuild");
                 EnterEditing();
@@ -1106,18 +1134,51 @@ public sealed partial class MainWindow
             LayoutChanged(zoomSubject);
             check(zoomSubject.X + zoomSubject.TileWidth > BoardScroller.ActualWidth + 40,
                 $"zoomed-out board lets a tile pass the old unscaled edge ({zoomSubject.X + zoomSubject.TileWidth:0.#} / {BoardScroller.ActualWidth:0.#})");
+            double farX = zoomSubject.X, farWidth = zoomSubject.TileWidth;
             SetBoardZoom(2); await NextLayoutAsync();
             check(Math.Abs(BoardZoom - FixedMaximumBoardZoom) < .01, "fixed board zoom stops at 140%");
+            check(Math.Abs(zoomSubject.X - farX) < .5 && Math.Abs(zoomSubject.TileWidth - farWidth) < .5
+                && BoardCanvas.Width + 1 >= zoomSubject.X + zoomSubject.TileWidth,
+                $"zooming in leaves the tile where it was ({zoomSubject.X:0.#}+{zoomSubject.TileWidth:0.#} / board {BoardCanvas.Width:0.#})");
             var visible = VisibleBoardRect();
             check(visible.Width < BoardScroller.ActualWidth * 0.8 && visible.Width > 10,
                 $"zoomed-in arrange area is the visible slice ({visible.Width:0.#} / {BoardScroller.ActualWidth:0.#})");
+            // 磁贴收回视口内之后，画板不再比视口大，平移仍停在半个屏幕。
+            var parked = ViewModel.Subjects
+                .Where(subject => !ReferenceEquals(subject, zoomSubject))
+                .Select(subject => (subject, subject.X, subject.Y, subject.TileWidth, subject.TileHeight))
+                .ToList();
+            foreach (var item in parked)
+            {
+                item.subject.X = 24;
+                item.subject.Y = 24;
+                item.subject.TileWidth = 280;
+                item.subject.TileHeight = 96;
+            }
+            zoomSubject.X = keptX; zoomSubject.Y = keptY; zoomSubject.TileWidth = keptWidth;
+            UpdateBoardBounds();
+            await NextLayoutAsync();
+            check(BoardCanvas.Width <= BoardScroller.ActualWidth + 1 && BoardCanvas.Height <= BoardScroller.ActualHeight + 1,
+                $"tiles inside the viewport do not enlarge the board ({BoardCanvas.Width:0.#}x{BoardCanvas.Height:0.#} / {BoardScroller.ActualWidth:0.#}x{BoardScroller.ActualHeight:0.#})");
             BoardScroller.ChangeView(10000, 10000, null, true); await NextLayoutAsync();
             double halfWidth = BoardScroller.ActualWidth / 2;
             double halfHeight = BoardScroller.ActualHeight / 2;
             check(BoardScroller.HorizontalOffset <= halfWidth + 2 && BoardScroller.VerticalOffset <= halfHeight + 2,
                 $"fixed board pan stays within half a screen ({BoardScroller.HorizontalOffset:0.#},{BoardScroller.VerticalOffset:0.#} / {halfWidth:0.#},{halfHeight:0.#})");
-            zoomSubject.X = keptX; zoomSubject.Y = keptY; zoomSubject.TileWidth = keptWidth;
-            LayoutChanged(zoomSubject);
+            foreach (var item in parked)
+            {
+                item.subject.X = item.X;
+                item.subject.Y = item.Y;
+                item.subject.TileWidth = item.TileWidth;
+                item.subject.TileHeight = item.TileHeight;
+            }
+            foreach (SubjectBoard subject in ViewModel.Subjects)
+            {
+                if (FindTile(subject) is not { } tile) continue;
+                Canvas.SetLeft(tile, subject.X);
+                Canvas.SetTop(tile, subject.Y);
+                tile.ApplyModelLayout();
+            }
             SetBoardZoom(1); await NextLayoutAsync();
         }
         // 查看模式：缩放岛收起，但缩放结果保留，作业板仍可平移。
@@ -1244,10 +1305,62 @@ public sealed partial class MainWindow
             "horizontal island restores the inline font picker");
     }
 
+    /// <summary>缩小再放大窗口时，固定作业板上分开的磁贴保持原坐标，不能叠到一起。</summary>
+    private async Task VerifyWindowResizeKeepsTilesAsync(Action<bool, string> check)
+    {
+        string layoutBeforeResize = _settings.LayoutMode;
+        bool infiniteBeforeResize = _settings.InfiniteBoard;
+        _settings.LayoutMode = "Board";
+        _settings.InfiniteBoard = false;
+        ApplyExtendedSettings();
+        SetBoardZoom(1);
+        await NextLayoutAsync();
+        ViewModel.ReplaceSubjects([]);
+        SubjectBoard leftTile = ViewModel.AddSubject("左");
+        leftTile.X = 40; leftTile.Y = 40; leftTile.TileWidth = 430; leftTile.TileHeight = 320;
+        SubjectBoard rightTile = ViewModel.AddSubject("右");
+        rightTile.X = 980; rightTile.Y = 40; rightTile.TileWidth = 430; rightTile.TileHeight = 320;
+        BuildTiles();
+        await NextLayoutAsync();
+        double leftX = leftTile.X, leftY = leftTile.Y, leftWidth = leftTile.TileWidth, leftHeight = leftTile.TileHeight;
+        double rightX = rightTile.X, rightY = rightTile.Y, rightWidth = rightTile.TileWidth, rightHeight = rightTile.TileHeight;
+        _appWindow!.Resize(new Windows.Graphics.SizeInt32(720, 560));
+        await NextLayoutAsync();
+        check(BoardScroller.ActualWidth + 40 < rightX + rightWidth,
+            $"small window shrinks the board below the tiles ({BoardScroller.ActualWidth:0.#} / tile ends at {rightX + rightWidth:0.#})");
+        check(leftTile.X == leftX && leftTile.Y == leftY && leftTile.TileWidth == leftWidth && leftTile.TileHeight == leftHeight
+            && rightTile.X == rightX && rightTile.Y == rightY && rightTile.TileWidth == rightWidth && rightTile.TileHeight == rightHeight,
+            $"a smaller window does not rewrite tile geometry ({leftTile.X:0},{leftTile.Y:0} {leftTile.TileWidth:0}x{leftTile.TileHeight:0} / {rightTile.X:0},{rightTile.Y:0} {rightTile.TileWidth:0}x{rightTile.TileHeight:0})");
+        _appWindow.Resize(VerificationWindowSize());
+        await NextLayoutAsync();
+        check(leftTile.X == leftX && leftTile.Y == leftY && leftTile.TileWidth == leftWidth && leftTile.TileHeight == leftHeight
+            && rightTile.X == rightX && rightTile.Y == rightY && rightTile.TileWidth == rightWidth && rightTile.TileHeight == rightHeight,
+            "restoring the window still leaves tile geometry unchanged");
+        SubjectTileControl[] resizedTiles = BoardCanvas.Children.OfType<SubjectTileControl>().ToArray();
+        check(resizedTiles.Length == 2, "both tiles remain on the board after resize");
+        if (resizedTiles.Length == 2)
+        {
+            Rect firstTile = resizedTiles[0].TransformToVisual(BoardCanvas).TransformBounds(new Rect(0, 0, resizedTiles[0].ActualWidth, resizedTiles[0].ActualHeight));
+            Rect secondTile = resizedTiles[1].TransformToVisual(BoardCanvas).TransformBounds(new Rect(0, 0, resizedTiles[1].ActualWidth, resizedTiles[1].ActualHeight));
+            bool tilesOverlap = firstTile.X < secondTile.X + secondTile.Width && secondTile.X < firstTile.X + firstTile.Width
+                && firstTile.Y < secondTile.Y + secondTile.Height && secondTile.Y < firstTile.Y + firstTile.Height;
+            check(!tilesOverlap,
+                $"tiles stay apart after resize ({firstTile.X:0},{firstTile.Y:0} {firstTile.Width:0}x{firstTile.Height:0} / {secondTile.X:0},{secondTile.Y:0} {secondTile.Width:0}x{secondTile.Height:0})");
+        }
+        check(BoardCanvas.Width + 1 >= rightTile.X + rightTile.TileWidth && BoardCanvas.Height + 1 >= rightTile.Y + rightTile.TileHeight,
+            $"the board stays large enough to hold the tiles ({BoardCanvas.Width:0.#}x{BoardCanvas.Height:0.#})");
+        _settings.LayoutMode = layoutBeforeResize;
+        _settings.InfiniteBoard = infiniteBeforeResize;
+        ApplyExtendedSettings();
+        await NextLayoutAsync();
+    }
+
     private async Task VerifyAutoLayoutExportAsync(string output, Action<bool, string> check)
     {
         if (CurrentProject is null) ProjectStore.Create(_library, false);
         ShowBoard(); EnterEditing();
+        await VerifyWindowResizeKeepsTilesAsync(check);
+
         _settings.InfiniteBoard = true; _settings.AutoLayoutGap = 20;
         _settings.AutoLayoutAlign = true; _settings.AutoLayoutResize = true;
         _settings.GridSnappingEnabled = false;
@@ -2440,9 +2553,11 @@ public sealed partial class MainWindow
 
     private async Task NextLayoutAsync()
     {
-        TaskCompletionSource ready = new();
-        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { RootShell.UpdateLayout(); ready.TrySetResult(); });
-        await ready.Task;
+        TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        // 调度失败（如窗口正在关闭）时直接放行，不让验证挂起；正常路径限时等待，卡死时快速失败而非拖到脚本超时。
+        if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { RootShell.UpdateLayout(); ready.TrySetResult(); }))
+            ready.TrySetResult();
+        await ready.Task.WaitAsync(TimeSpan.FromSeconds(10));
         await Task.Delay(150);
     }
 
@@ -2454,6 +2569,17 @@ public sealed partial class MainWindow
         encoder.SetPixelData(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied, (uint)bitmap.PixelWidth, (uint)bitmap.PixelHeight, 96, 96, (await bitmap.GetPixelsAsync()).ToArray());
         await encoder.FlushAsync(); memory.Seek(0);
         using Stream source = memory.AsStreamForRead(); using FileStream target = File.Create(path); await source.CopyToAsync(target);
+    }
+
+    private static bool AccentCheckedFill(ToggleButton button, bool light)
+    {
+        string theme = light ? "Light" : "Dark";
+        if (!button.Resources.ThemeDictionaries.TryGetValue(theme, out object? themed) || themed is not ResourceDictionary dictionary)
+            return false;
+        Brush fill = SystemAccent.ThemeFill(light);
+        return dictionary.TryGetValue("ToggleButtonBackgroundChecked", out object? background) && ReferenceEquals(background, fill)
+            && dictionary.TryGetValue("ToggleButtonBackgroundCheckedPointerOver", out object? over) && ReferenceEquals(over, fill)
+            && dictionary.TryGetValue("ToggleButtonBackgroundCheckedPressed", out object? pressed) && ReferenceEquals(pressed, fill);
     }
 
     private static IEnumerable<T> FindVisuals<T>(DependencyObject parent) where T : DependencyObject

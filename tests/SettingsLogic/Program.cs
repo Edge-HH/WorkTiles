@@ -522,6 +522,23 @@ try
     Check(File.Exists(restoredLibrary.Projects[0].Subjects[0].Entries[0].Attachments[0].Path), "图片附件落回本地资源目录");
     Check(File.Exists(restoredLibrary.Settings.BoardBackground.ImagePath), "背景媒体落回本地资源目录并改写引用");
 
+    // 网页壁纸整个项目目录随包走；project.json 曾被按扩展名一刀切跳过，还原后壁纸必坏。
+    string webRoot = Path.Combine(sourceData, "web-wallpapers", "demo");
+    Directory.CreateDirectory(webRoot);
+    File.WriteAllText(Path.Combine(webRoot, "project.json"), """{"type":"web","file":"index.html","title":"演示壁纸"}""");
+    File.WriteAllText(Path.Combine(webRoot, "index.html"), "<html><body>壁纸</body></html>");
+    library.Settings.BoardBackground.ImagePath = Path.Combine(webRoot, "index.html");
+    library.SyncQueue.Add(new SyncOperationState { ProjectId = project.Id, ExpectedRevision = 0, Name = project.Name });
+    sourceStore.Save(library);
+    string webArchive = Path.Combine(backupRoot, "web.wtb");
+    exporter.Create(webArchive, BackupScopes.All, library);
+    string webTarget = Path.Combine(backupRoot, "web-target");
+    new BackupService(webTarget).Restore(webArchive);
+    string restoredWebRoot = Path.Combine(webTarget, "web-wallpapers", "demo");
+    Check(File.Exists(Path.Combine(restoredWebRoot, "project.json")) && File.Exists(Path.Combine(restoredWebRoot, "index.html")), "网页壁纸目录完整还原");
+    Check(WebWallpaperPackage.Load(Path.Combine(restoredWebRoot, "index.html")).Directory == Path.GetFullPath(restoredWebRoot), "还原后的网页壁纸可正常加载");
+    Check(new ProjectStore(webTarget).Load().SyncQueue.Count == 0, "还原不复活备份里的历史待上传操作");
+
     // 只收作业范围时设置不随包走，还原后保留目标机器现有设置。
     string jobsArchive = Path.Combine(backupRoot, "jobs.wtb");
     exporter.Create(jobsArchive, BackupScopes.Jobs, library);
@@ -696,4 +713,47 @@ Check(DesktopTileLayout.RenameAt(desktopNames, 1, "数学", "代数") && desktop
     "改名只替换该位置上的旧名字");
 Check(!DesktopTileLayout.RenameAt(desktopNames, 0, "数学", "几何") && desktopNames[0] == "语文", "位置上的名字对不上时不改顺序");
 Check(!DesktopTileLayout.RenameAt(desktopNames, 5, "英语", "外语"), "越界的改名不做任何事");
+
+var column = new DesktopWorkArea(0, 0, 500, 400);
+DesktopTileSlot[] columnSlots = [new(0, 0, 100, 80), new(0, 0, 100, 80), new(0, 0, 100, 80)];
+Check(SameLine(DesktopTileLayout.InsertionGuide(columnSlots, 2, 450, 40, column, 12), 0, 400, 0, 500, 0),
+    "光标靠近最上面一块的上沿时，插入线贴着这一列的上沿");
+Check(SameLine(DesktopTileLayout.InsertionGuide(columnSlots, 1, 450, 120, column, 12), 1, 400, 86, 500, 86),
+    "光标在磁贴上半部分时，插入线取上方那条交界");
+Check(SameLine(DesktopTileLayout.InsertionGuide(columnSlots, 0, 450, 160, column, 12), 1, 400, 178, 500, 178),
+    "光标在磁贴下半部分时，插入线取下方那条交界");
+Check(SameLine(DesktopTileLayout.InsertionGuide(columnSlots, 0, 450, 250, column, 12), 2, 400, 270, 500, 270),
+    "光标靠近最下面一块的下沿时，插入线画在它下方");
+Check(SameLine(DesktopTileLayout.InsertionGuide(columnSlots, 0, 450, 100, column, 12), 1, 400, 86, 500, 86),
+    "拖到下一块的上半部分时占住这一块，插入线仍取上方交界");
+var row = new DesktopWorkArea(0, 0, 400, 80);
+DesktopTileSlot[] rowSlots = [new(0, 0, 100, 60), new(0, 0, 100, 60)];
+Check(SameLine(DesktopTileLayout.InsertionGuide(rowSlots, 1, 238, 20, row, 12), 1, 188, 0, 288, 0),
+    "光标更靠近上沿时，并排的磁贴也取上面那条线");
+Check(SameLine(DesktopTileLayout.InsertionGuide(rowSlots, 0, 238, 20, row, 12), 1, 188, 0, 288, 0),
+    "拖到左侧那块的上半部分时占住这一块，插入线仍取上方交界");
+Check(SameLine(DesktopTileLayout.InsertionGuide(rowSlots, 1, 238, 50, row, 12), 1, 188, 66, 288, 66),
+    "光标更靠近下沿时，并排的磁贴取下面那条线");
+Check(SameLine(DesktopTileLayout.InsertionGuide(desktopSlots, 1, 900, 80, desktopArea), 1, 840, 56, 1000, 56),
+    "右上角往下排时，插回原位的线画在上下两块的间隔正中");
+var columnPlaced = DesktopTileLayout.Arrange([(100, 80), (100, 80), (100, 80)], column, 12);
+Check(DesktopTileLayout.InsertionGuide(columnSlots, 0, columnPlaced[0].X + 50, columnPlaced[0].Y + 54, column, 12) is { Index: 0 },
+    "标题光标还在原槽里时，按点计算的下标仍是原位");
+Check(DesktopTileLayout.InsertionGuideForTile(columnSlots, 0, columnPlaced[0].X, columnPlaced[0].Y + 50, columnPlaced[0].Width, columnPlaced[0].Height, column, 12) is { Index: 1 },
+    "窗口大部分压住下一块时占住这一块，即使标题光标还在原槽");
+Check(DesktopTileLayout.InsertionGuideForTile(columnSlots, 0, columnPlaced[0].X, columnPlaced[0].Y + 10, columnPlaced[0].Width, columnPlaced[0].Height, column, 12) is { Index: 0 },
+    "窗口只离开原槽一点时保持原序号");
+var rowPlaced = DesktopTileLayout.Arrange([(100, 60), (100, 60)], row, 12);
+Check(DesktopTileLayout.InsertionGuideForTile(rowSlots, 0, rowPlaced[0].X - rowPlaced[0].Width * 0.7, rowPlaced[0].Y, rowPlaced[0].Width, rowPlaced[0].Height, row, 12) is { Index: 1 },
+    "窗口大部分压住左侧那块时占住这一块");
+Check(DesktopTileLayout.InsertionGuideForTile(rowSlots, 0, rowPlaced[0].X - 10, rowPlaced[0].Y, rowPlaced[0].Width, rowPlaced[0].Height, row, 12) is { Index: 0 },
+    "窗口只向左挪一点时保持原序号");
+Check(DesktopTileLayout.InsertionGuide([columnSlots[0]], 0, 10, 10, column, 12) is null, "只有一块时没有插入位置");
+Check(DesktopTileLayout.InsertionGuide(columnSlots, -1, 450, 40, column, 12) is null, "拖动下标无效时不给插入线");
+Check(DesktopTileLayout.InsertionGuide(columnSlots, 1, double.NaN, 40, column, 12) is null, "光标坐标无效时不给插入线");
 Console.WriteLine("PASS: desktop tiles pack toward the top-right, honor the requested gap, and keep an independent order.");
+
+static bool SameLine(DesktopInsertionGuide? guide, int index, double x1, double y1, double x2, double y2) =>
+    guide is { } line && line.Index == index
+    && Math.Abs(line.X1 - x1) < 0.01 && Math.Abs(line.Y1 - y1) < 0.01
+    && Math.Abs(line.X2 - x2) < 0.01 && Math.Abs(line.Y2 - y2) < 0.01;

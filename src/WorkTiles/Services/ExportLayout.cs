@@ -19,7 +19,9 @@ public static class ExportLayout
         double availableHeight = height - titleHeight;
         if (availableHeight <= 0) throw new InvalidOperationException("标题过高，画布没有足够的磁贴空间。");
         // 先按原尺寸靠左上排列；仅在导出画布不足时等比缩放整个磁贴，文字和笔迹一起缩放。
-        for (int percent = 100; percent >= 1; percent--)
+        // 可行性随缩放单调：同一套摆放位置在更小尺寸下仍不越界、不重叠，故可二分找最大可行整数百分比，
+        // 取代最多 100 次“缩小 1% 再试”的暴力回退。先试原尺寸，常见情形一次命中。
+        List<ExportTilePlacement>? Try(int percent)
         {
             double scale = percent / 100d;
             try
@@ -29,9 +31,18 @@ public static class ExportLayout
                 return layout.Select(p => new ExportTilePlacement
                 { X = p.X, Y = p.Y + titleHeight, Width = p.Width, Height = p.Height, Scale = scale }).ToList();
             }
-            catch (InvalidOperationException) { }
+            catch (InvalidOperationException) { return null; }
         }
-        throw new InvalidOperationException("画布无法容纳这些磁贴，请增大画布或减小间隔。");
+        if (Try(100) is { } full) return full;
+        int low = 1, high = 99;
+        List<ExportTilePlacement>? best = null;
+        while (low <= high)
+        {
+            int mid = (low + high) / 2;
+            if (Try(mid) is { } fit) { best = fit; low = mid + 1; }
+            else high = mid - 1;
+        }
+        return best ?? throw new InvalidOperationException("画布无法容纳这些磁贴，请增大画布或减小间隔。");
     }
 
     public static bool Overlap(ExportTilePlacement a, ExportTilePlacement b) =>

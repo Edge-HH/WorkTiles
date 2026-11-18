@@ -33,6 +33,7 @@ public sealed class AppDataStore
         {
             SubjectBoard subject = new()
             {
+                Id = saved.Id == Guid.Empty ? Guid.NewGuid() : saved.Id,
                 Name = saved.Name, AccentHex = saved.AccentHex, IsAccentExplicit = saved.IsAccentExplicit,
                 AccentBrush = MainViewModel.BrushFromHex(ColorPalette.ResolveAccent(saved.AccentHex, saved.IsAccentExplicit, ColorPalette.IsMacaron)),
                 X = saved.X, Y = saved.Y, TileWidth = saved.Width, TileHeight = saved.Height
@@ -86,6 +87,7 @@ public sealed class AppDataStore
 
     public static List<SubjectState> CaptureSubjects(IEnumerable<SubjectBoard> source) => source.Select(subject => new SubjectState
     {
+        Id = subject.Id,
         Name = subject.Name, AccentHex = subject.AccentHex, IsAccentExplicit = subject.IsAccentExplicit, InkCoordinateVersion = 1, X = subject.X, Y = subject.Y,
         Width = subject.TileWidth, Height = subject.TileHeight,
         Entries = subject.Entries.Select(item => new HomeworkState

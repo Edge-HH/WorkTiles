@@ -62,7 +62,10 @@ public sealed class SubjectTileControl : Grid
     public event Action<SubjectBoard>? InkActivated;
     private bool _isEditing;
     private bool _clampingSelection;
+    private bool _keyboardNav;
+    private RichEditBox? _formattingEditor;
     private bool _aligningParagraph;
+    private readonly HashSet<RichEditBox> _paragraphAlignSkipped = [];
     private bool _lockBoardGeometry;
     private bool _applyingModel;
     private string _modelStamp = "";
@@ -242,6 +245,7 @@ public sealed class SubjectTileControl : Grid
         _inkCanvas.PointerCanceled += InkCanvas_PointerReleased;
         _inkCanvas.PointerCaptureLost += InkCanvas_PointerReleased;
 
+        PointerPressed += OnTilePointerPressed;
         AddResizeHandles();
         _subject.Entries.CollectionChanged += Entries_CollectionChanged;
         RebuildEntries();
@@ -380,7 +384,7 @@ public sealed class SubjectTileControl : Grid
             _watermark.Text = _subject.Watermark;
             _watermark.Foreground = _subject.AccentBrush;
             _frame.BorderBrush = _subject.AccentBrush;
-            _nameEditor.Foreground = _subject.AccentBrush;
+            ApplyTitleForeground(_subject.AccentBrush);
             RebuildEntries();
             RenderStoredStrokes();
             _modelStamp = ModelStamp();
@@ -418,6 +422,7 @@ public sealed class SubjectTileControl : Grid
         editor.IsTabStop = editing;
         editor.IsHitTestVisible = editing;
         ApplyTransparentInputChrome(editor);
+        PinTitleForeground(editor, editor.Foreground);
     }
 
     /// <summary>
@@ -426,14 +431,14 @@ public sealed class SubjectTileControl : Grid
     /// 控件自身保留几乎全透明的背景，空白处仍能点中。
     /// 系统选区会把选中字画成白色并抹掉荧光笔。选中时改由一层浅灰盖住原文，字色和高亮都透出来。
     /// </summary>
-    internal static void ApplyTransparentInputChrome(Control editor, bool showSelectionVeil = true)
+    internal static void ApplyTransparentInputChrome(Control editor, bool showSelectionVeil = true, Func<bool>? keepSelectionVisible = null)
     {
         editor.Background = InvisibleHitBrush();
         editor.BorderBrush = InvisibleHitBrush();
         editor.BorderThickness = new Thickness(0);
         foreach (string theme in new[] { "Light", "Dark", "HighContrast" })
         {
-            ResourceDictionary dictionary = new();
+            ResourceDictionary dictionary = new() { [LocalThemeMarker] = true };
             foreach (string key in InlineEditorChromeKeys)
                 dictionary[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
             dictionary["TextControlBorderThemeThickness"] = new Thickness(0);
@@ -444,10 +449,53 @@ public sealed class SubjectTileControl : Grid
             editor.Resources[key] = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         editor.Resources["TextControlBorderThemeThickness"] = new Thickness(0);
         editor.Resources["TextControlBorderThemeThicknessFocused"] = new Thickness(0);
-        if (showSelectionVeil) TransparentInputMarkers.Attach(editor);
+        if (showSelectionVeil) TransparentInputMarkers.Attach(editor, keepSelectionVisible);
     }
 
     private static SolidColorBrush InvisibleHitBrush() => new(Windows.UI.Color.FromArgb(1, 0, 0, 0));
+
+    /// <summary>标题前景跟着学科色走。模板在悬停、聚焦和禁用时会改读这些主题画刷，不钉住就会变成白色。</summary>
+    private void ApplyTitleForeground(Brush brush)
+    {
+        _nameEditor.Foreground = brush;
+        PinTitleForeground(_nameEditor, brush);
+    }
+
+    private static readonly string[] TitleForegroundKeys =
+    [
+        "TextControlForeground",
+        "TextControlForegroundPointerOver",
+        "TextControlForegroundFocused",
+        "TextControlForegroundDisabled"
+    ];
+
+    private const string LocalThemeMarker = "WorkTilesLocalTheme";
+
+    private static void PinTitleForeground(TextBox editor, Brush brush)
+    {
+        if (brush is not SolidColorBrush solid) return;
+        foreach (string theme in new[] { "Light", "Dark", "HighContrast" })
+            WriteForeground(LocalThemeDictionary(editor, theme), solid.Color);
+        WriteForeground(editor.Resources, solid.Color);
+    }
+
+    /// <summary>只往这个控件自己建的主题字典里写。取出来的系统主题字典是只读的，里面的画刷也不能改颜色。</summary>
+    private static ResourceDictionary LocalThemeDictionary(FrameworkElement editor, string theme)
+    {
+        if (editor.Resources.ThemeDictionaries[theme] is ResourceDictionary dictionary && dictionary.ContainsKey(LocalThemeMarker))
+            return dictionary;
+        ResourceDictionary created = new() { [LocalThemeMarker] = true };
+        editor.Resources.ThemeDictionaries[theme] = created;
+        return created;
+    }
+
+    private static void WriteForeground(ResourceDictionary dictionary, Windows.UI.Color color)
+    {
+        // 字典里查不到本地项时，索引会拿到主题里那支冻结画刷。改它的 Color 会抛 UnauthorizedAccessException。
+        // 每次放一支新的，只盖住这个输入框自己的状态色。
+        foreach (string key in TitleForegroundKeys)
+            dictionary[key] = new SolidColorBrush(color);
+    }
 
     private static readonly string[] InlineEditorChromeKeys =
     [
@@ -578,9 +626,11 @@ public sealed class SubjectTileControl : Grid
     {
         // 停手后的富文本还在计时器里。先写回作业，再建新的编辑器，否则新编辑器会读到旧的 RTF，刚打的字和格式会消失。
         FlushPendingText();
+        _formattingEditor = null;
         // 重建编辑器前先结算统计，避免未失焦的作业被漏计。
         foreach (HomeworkAutofillInput input in _entryAutofills) input.Flush();
         _entryAutofills.Clear();
+        _paragraphAlignSkipped.Clear();
         _titleAutofill?.Hide();
         _entriesPanel.Children.Clear();
         int index = 1;
@@ -614,8 +664,12 @@ public sealed class SubjectTileControl : Grid
                 editor.GotFocus += (_, _) =>
                 {
                     // 工具栏由窗口统一承载，只在当前作业获得焦点时创建并切换。
+                    RichEditBox? previous = _formattingEditor;
+                    _formattingEditor = editor;
                     formatting ??= BuildFormattingToolbar(editor, homework);
                     FormattingToolbarChanged?.Invoke(formatting, true);
+                    if (previous is not null && !ReferenceEquals(previous, editor))
+                        TransparentInputMarkers.Refresh(previous);
                 };
                 editor.Unloaded += (_, _) =>
                 {
@@ -680,7 +734,7 @@ public sealed class SubjectTileControl : Grid
             PlaceholderText = _isEditing ? HomeworkState.PlaceholderText : string.Empty,
             Tag = homework
         };
-        ApplyTransparentInputChrome(editor);
+        ApplyTransparentInputChrome(editor, keepSelectionVisible: () => ReferenceEquals(_formattingEditor, editor));
         editor.Paste += async (_, args) =>
         {
             if (!_settings.PastePlainTextOnly) return;
@@ -736,14 +790,13 @@ public sealed class SubjectTileControl : Grid
                 _contentChanged));
         }
 
-        editor.SelectionChanged += (_, _) => ClampSelectionAwayFromParagraphMark(editor);
-        // 鼠标拖选时 SelectionChanged 总在画完选区后才纠正，行末那一格会闪一下。拖动过程中持续收选区，松开再收一次。
-        editor.PointerMoved += (_, args) =>
+        editor.PointerPressed += (_, _) => _keyboardNav = false;
+        editor.SelectionChanged += (_, _) =>
         {
-            if (args.GetCurrentPoint(editor).Properties.IsLeftButtonPressed)
-                ClampSelectionAwayFromParagraphMark(editor);
+            if (_clampingSelection || !_keyboardNav) return;
+            _keyboardNav = false;
+            PullSelectionOffParagraphMark(editor);
         };
-        editor.PointerReleased += (_, _) => ClampSelectionAwayFromParagraphMark(editor);
         editor.TextChanged += (_, _) =>
         {
             if (_aligningParagraph) return;
@@ -753,27 +806,34 @@ public sealed class SubjectTileControl : Grid
         {
             bool ctrl = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
             bool shift = Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Shift).HasFlag(Windows.UI.Core.CoreVirtualKeyStates.Down);
-            // 全选和到行末的方向键都会把选区推进段落标记，提前停在最后一个字，免得选中那一格闪一下。
-            bool selectAll = ctrl && args.Key == VirtualKey.A;
-            if (!selectAll && args.Key is not (VirtualKey.Right or VirtualKey.End or VirtualKey.Down)) return;
+            if (args.Key is VirtualKey.Left or VirtualKey.Right or VirtualKey.Up or VirtualKey.Down
+                or VirtualKey.Home or VirtualKey.End or VirtualKey.A)
+                _keyboardNav = true;
             int end = editor.Document.GetRange(0, int.MaxValue).EndPosition;
-            if (end <= 0) return;
+            if (end <= 1) return;
             int limit = end - 1;
-            var selection = editor.Document.Selection;
-            if (selectAll)
+            ITextSelection selection = editor.Document.Selection;
+            // 全选和行末方向键会把选区推进段落标记。只收回越过标记的那一端，鼠标落点不动。
+            if (ctrl && !shift && args.Key == VirtualKey.A)
             {
-                _clampingSelection = true;
-                try { selection.SetRange(0, limit); }
-                finally { _clampingSelection = false; }
+                SetSelection(selection, 0, limit);
+                _keyboardNav = false;
                 args.Handled = true;
                 return;
             }
-            bool extending = args.Key == VirtualKey.End || shift;
-            if (!extending && args.Key != VirtualKey.End) return;
-            if (selection.EndPosition < limit && args.Key != VirtualKey.End) return;
-            _clampingSelection = true;
-            try { selection.SetRange(extending ? Math.Min(selection.StartPosition, limit) : limit, limit); }
-            finally { _clampingSelection = false; }
+            if (args.Key == VirtualKey.End)
+            {
+                int anchor = Math.Min(selection.StartPosition, limit);
+                SetSelection(selection, shift ? anchor : limit, limit);
+                _keyboardNav = false;
+                args.Handled = true;
+                return;
+            }
+            if (args.Key is not (VirtualKey.Right or VirtualKey.Down) || selection.EndPosition < limit) return;
+            int active = Math.Min(selection.EndPosition, limit);
+            int start = Math.Min(selection.StartPosition, limit);
+            SetSelection(selection, shift ? start : active, active);
+            _keyboardNav = false;
             args.Handled = true;
         };
         return editor;
@@ -814,9 +874,10 @@ public sealed class SubjectTileControl : Grid
         }
     }
 
-    /// <summary>行末段落标记沿用前一个字的格式，并藏起来，避免光标再往后一格时字号跳回 15 或闪一下。</summary>
+    /// <summary>行末段落标记沿用前一个字的字号，但保持可见，点击行末外侧才能落到这一行。</summary>
     private void AlignTrailingParagraphMark(RichEditBox editor)
     {
+        if (_paragraphAlignSkipped.Contains(editor)) return;
         bool readOnly = editor.IsReadOnly;
         if (readOnly) editor.IsReadOnly = false;
         // 已经对齐过就立刻返回。每次按键都重写格式会让 RichEdit 连续重排，输入会卡到无法使用。
@@ -833,7 +894,8 @@ public sealed class SubjectTileControl : Grid
             sample.GetText(TextGetOptions.None, out string sampleText);
             if (sampleText is "\r" or "\n" || sample.CharacterFormat.Size is < 8 or > 96) return;
             bool sizeMatches = Math.Abs(mark.CharacterFormat.Size - sample.CharacterFormat.Size) < 0.1;
-            if (sizeMatches && mark.CharacterFormat.Hidden == FormatEffect.On) return;
+            bool shown = mark.CharacterFormat.Hidden != FormatEffect.On;
+            if (sizeMatches && shown) return;
             if (!sizeMatches)
             {
                 mark.CharacterFormat.Name = sample.CharacterFormat.Name;
@@ -842,8 +904,12 @@ public sealed class SubjectTileControl : Grid
                 mark.CharacterFormat.Italic = sample.CharacterFormat.Italic;
                 mark.CharacterFormat.Underline = sample.CharacterFormat.Underline;
             }
-            if (mark.CharacterFormat.Hidden != FormatEffect.On)
-                mark.CharacterFormat.Hidden = FormatEffect.On;
+            if (mark.CharacterFormat.Hidden == FormatEffect.On)
+                mark.CharacterFormat.Hidden = FormatEffect.Off;
+            // 写回去仍然对不上时就不能再写。选中标题会让这段格式来回触发文本变化，布局循环后进程直接崩掉。
+            bool settled = Math.Abs(mark.CharacterFormat.Size - sample.CharacterFormat.Size) < 0.1
+                && mark.CharacterFormat.Hidden != FormatEffect.On;
+            if (!settled) _paragraphAlignSkipped.Add(editor);
         }
         finally
         {
@@ -852,25 +918,77 @@ public sealed class SubjectTileControl : Grid
         }
     }
 
-    /// <summary>行末那一格是控件自己的段落标记，选区和光标都停在最后一个字上。</summary>
-    private void ClampSelectionAwayFromParagraphMark(RichEditBox editor)
+    /// <summary>键盘把选区推进全文最后一个段落标记时，只收回越过标记的那一端。</summary>
+    private void PullSelectionOffParagraphMark(RichEditBox editor)
     {
-        if (_clampingSelection) return;
-        ITextSelection selection = editor.Document.Selection;
         int end = editor.Document.GetRange(0, int.MaxValue).EndPosition;
-        if (end <= 0) return;
+        if (end <= 1) return;
         int limit = end - 1;
+        ITextSelection selection = editor.Document.Selection;
         if (selection.StartPosition <= limit && selection.EndPosition <= limit) return;
+        SetSelection(selection, Math.Min(selection.StartPosition, limit), Math.Min(selection.EndPosition, limit));
+    }
+
+    private void SetSelection(ITextSelection selection, int start, int end)
+    {
+        if (selection.StartPosition == start && selection.EndPosition == end) return;
         _clampingSelection = true;
-        try { selection.SetRange(Math.Min(selection.StartPosition, limit), Math.Min(selection.EndPosition, limit)); }
+        try { selection.SetRange(start, end); }
         finally { _clampingSelection = false; }
+    }
+
+    /// <summary>点在输入框以外时收起选区。输入框内部的点击仍由控件自己放置光标。</summary>
+    private void OnTilePointerPressed(object sender, PointerRoutedEventArgs args)
+    {
+        if (args.OriginalSource is not DependencyObject source || IsInsideEditor(source)) return;
+        if (_nameEditor.SelectionLength > 0)
+            _nameEditor.Select(_nameEditor.SelectionStart, 0);
+        foreach (RichEditBox editor in FindHomeworkEditors())
+        {
+            ITextSelection selection = editor.Document.Selection;
+            if (selection.StartPosition == selection.EndPosition) continue;
+            int caret = selection.StartPosition;
+            selection.SetRange(caret, caret);
+        }
+    }
+
+    private static bool IsInsideEditor(DependencyObject source)
+    {
+        for (DependencyObject? node = source; node is not null; node = VisualTreeHelper.GetParent(node))
+        {
+            if (node is TextBox or RichEditBox) return true;
+        }
+        return false;
+    }
+
+    private IEnumerable<RichEditBox> FindHomeworkEditors()
+    {
+        foreach (RichEditBox editor in FindVisualEditors(_entriesPanel))
+        {
+            if (editor.Tag is HomeworkEntry) yield return editor;
+        }
+    }
+
+    private static IEnumerable<RichEditBox> FindVisualEditors(DependencyObject root)
+    {
+        int count = VisualTreeHelper.GetChildrenCount(root);
+        for (int index = 0; index < count; index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(root, index);
+            if (child is RichEditBox editor) yield return editor;
+            foreach (RichEditBox nested in FindVisualEditors(child)) yield return nested;
+        }
     }
 
     private StackPanel BuildFormattingToolbar(RichEditBox editor, HomeworkEntry homework)
     {
         StackPanel tools = new() { Orientation = Orientation.Horizontal, Spacing = 2 };
         tools.Children.Add(FontService.CreateFontPicker(editor, () => CaptureRichText(editor, homework)));
-        tools.Children.Add(FontService.CreateFontSizePicker(editor, () => CaptureRichText(editor, homework)));
+        tools.Children.Add(FontService.CreateFontSizePicker(editor, () =>
+        {
+            TransparentInputMarkers.FitCaret(editor);
+            CaptureRichText(editor, homework);
+        }));
         tools.Children.Add(CreateIconButton(FluentGlyphs.Bold, "加粗", (_, _) =>
         {
             editor.Document.Selection.CharacterFormat.Bold = FormatEffect.Toggle;
@@ -908,6 +1026,19 @@ public sealed class SubjectTileControl : Grid
         _pendingRichText.Clear();
     }
 
+    /// <summary>重建看板前解除对长寿命模型的订阅。否则模型事件持有旧磁贴，整棵视觉树随每次重建永久滞留。</summary>
+    public void Detach()
+    {
+        FlushPendingText();
+        _subject.Entries.CollectionChanged -= Entries_CollectionChanged;
+        if (_richTextTimer is not null)
+        {
+            _richTextTimer.Stop();
+            _richTextTimer.Tick -= FlushRichTextTick;
+            _richTextTimer = null;
+        }
+    }
+
     private void ScheduleRichCapture(RichEditBox editor, HomeworkEntry homework)
     {
         _pendingRichText[editor] = homework;
@@ -918,7 +1049,7 @@ public sealed class SubjectTileControl : Grid
         _richTextTimer.Start();
     }
 
-    private void FlushRichTextTick(object? sender, EventArgs e) => FlushPendingText();
+    private void FlushRichTextTick(object? sender, object e) => FlushPendingText();
 
     private void RememberPlainText(RichEditBox editor, HomeworkEntry homework)
     {
@@ -1083,8 +1214,8 @@ public sealed class SubjectTileControl : Grid
         _subject.AccentHex = hex;
         _subject.AccentBrush = MainViewModel.BrushFromHex(ColorPalette.ResolveAccent(hex, true, ColorPalette.IsMacaron));
         _frame.BorderBrush = _subject.AccentBrush;
-        _nameEditor.Foreground = _subject.AccentBrush;
         _watermark.Foreground = _subject.AccentBrush;
+        ApplyTitleForeground(_subject.AccentBrush);
         _contentChanged();
     }
 
@@ -1101,6 +1232,8 @@ public sealed class SubjectTileControl : Grid
             TextWrapping = singleLine ? TextWrapping.NoWrap : TextWrapping.Wrap
         };
         ApplyTransparentInputChrome(editor);
+        // 悬停和聚焦会把标题前景换成主题色（深色下是白字）。状态色钉在学科色上，光标和悬停都不再变白。
+        PinTitleForeground(editor, foreground);
         return editor;
     }
 

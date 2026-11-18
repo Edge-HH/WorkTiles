@@ -101,6 +101,9 @@ public sealed class MainViewModel : ObservableObject
     public static SolidColorBrush BrushFromHex(string hex, bool usePalette = false)
     {
         string value = (usePalette ? WorkTiles.Services.ColorPalette.Resolve(hex) : hex).TrimStart('#');
+        // 畸形颜色（手工编辑、旧数据、云端下发）回退默认强调色，避免构建磁贴/学科行时在 UI 线程抛异常。
+        if (value.Length < 6 || !value[..6].All(Uri.IsHexDigit))
+            return new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x81, 0x8C, 0xF8));
         return new SolidColorBrush(Windows.UI.Color.FromArgb(
             255,
             Convert.ToByte(value[..2], 16),

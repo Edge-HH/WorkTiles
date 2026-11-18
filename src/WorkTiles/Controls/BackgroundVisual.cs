@@ -382,7 +382,7 @@ public sealed class BackgroundVisual : Grid
         int token = ++_imageLoadToken;
         bool opened = false;
         target.ImageOpened += (_, _) => { if (ReferenceEquals(_image, target)) opened = true; };
-        target.Source = new BitmapImage(new Uri(path));
+        target.Source = new BitmapImage(new Uri(path)) { DecodePixelWidth = BackgroundDecodeWidth() };
         _ = RecoverAsync();
 
         async Task RecoverAsync()
@@ -394,7 +394,7 @@ public sealed class BackgroundVisual : Grid
             {
                 StorageFile file = await StorageFile.GetFileFromPathAsync(path);
                 using var stream = await file.OpenReadAsync();
-                BitmapImage bitmap = new();
+                BitmapImage bitmap = new() { DecodePixelWidth = BackgroundDecodeWidth() };
                 await bitmap.SetSourceAsync(stream);
                 if (opened || token != _imageLoadToken || !ReferenceEquals(_image, target)) return;
                 target.Source = bitmap;
@@ -404,6 +404,14 @@ public sealed class BackgroundVisual : Grid
                 if (token == _imageLoadToken && ReferenceEquals(_image, target)) Failed();
             }
         }
+    }
+
+    // 背景铺满窗口，按窗口宽度留少量余量解码；尚未布局时退回常见宽度，上限 4096 防全景图撑爆内存。
+    private int BackgroundDecodeWidth()
+    {
+        double scale = XamlRoot?.RasterizationScale ?? 1.0;
+        double width = ActualSize.X > 0 ? ActualSize.X : 1920;
+        return Math.Clamp((int)Math.Ceiling(width * scale * 1.5), 1280, 4096);
     }
 
     private static Brush SafeColor(string value, Brush fallback)

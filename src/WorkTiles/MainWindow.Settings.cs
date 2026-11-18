@@ -133,6 +133,7 @@ public sealed partial class MainWindow
         tile.Children.Add(Toggle("正文默认斜体", _settings.TileBodyItalic, value => _settings.TileBodyItalic = value, TileBodyStyleChanged, read: () => _settings.TileBodyItalic));
         tile.Children.Add(Toggle("右下角显示学科字样", _settings.ShowTileSubjectLabel, value => _settings.ShowTileSubjectLabel = value, read: () => _settings.ShowTileSubjectLabel));
         tile.Children.Add(Range("磁贴圆角", 0, 40, _settings.TileCornerRadius, value => _settings.TileCornerRadius = value, QueueTileSurface, read: () => _settings.TileCornerRadius));
+        tile.Children.Add(Toggle("仅粘贴纯文本", _settings.PastePlainTextOnly, value => _settings.PastePlainTextOnly = value, read: () => _settings.PastePlainTextOnly));
         tile.Children.Add(Note("默认正文样式用于新建和尚未单独设置格式的正文；已有的局部字体、粗体、斜体、颜色与高光不会被覆盖。开启纯文本粘贴后，Ctrl+V 和右键粘贴都会移除来源格式。"));
         tile.Children.Add(BackgroundEditor(_settings.TileBackground, () => true, () => true, surface: true, scope: MediaScope.Tile, surfaceChanged: QueueTileSurface));
         StackPanel backgrounds = SettingsStack();
@@ -896,7 +897,7 @@ public sealed partial class MainWindow
         item.IsGlobal || item.Subjects.Count == 0 ? "全局" : string.Join("、", item.Subjects);
 
     private static string SafeColorHex(string value) =>
-        value.Length is 7 or 9 && value[0] == '#' ? value : "#818CF8";
+        value.Length is 7 or 9 && value[0] == '#' && value[1..].All(Uri.IsHexDigit) ? value : "#818CF8";
 
     private static Windows.UI.Color SafeColor(string value, Windows.UI.Color fallback)
     {

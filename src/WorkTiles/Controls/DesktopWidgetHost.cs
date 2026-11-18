@@ -230,6 +230,12 @@ internal sealed class DesktopWidgetHost : IDisposable
     private float _acrylicLuminosityOpacity;
 
     public bool IsAlwaysAboveTiles { get; set; }
+
+    /// <summary>
+    /// 为 false 时不挂到桌面壳上。编辑中弹出的插入线若挂到 Progman，桌面会被抬到所有磁贴前面。
+    /// </summary>
+    public bool AnchorToDesktop { get; set; } = true;
+
     public nint Handle => _hwnd;
     public int X => _x;
     public int Y => _y;
@@ -473,7 +479,7 @@ internal sealed class DesktopWidgetHost : IDisposable
     private void UpdateDesktopAnchor()
     {
         if (_hwnd == 0) return;
-        nint owner = _interactive ? 0 : GetDesktopOwnerHandle();
+        nint owner = _interactive || !AnchorToDesktop ? 0 : GetDesktopOwnerHandle();
         if (GetWindowLongPtr(_hwnd, GwlpHwndParent) != owner)
             SetWindowLongPtr(_hwnd, GwlpHwndParent, owner);
     }

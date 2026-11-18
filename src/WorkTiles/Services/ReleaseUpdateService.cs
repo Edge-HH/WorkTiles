@@ -36,15 +36,18 @@ public sealed class ReleaseUpdateService
 
     public static ReleaseSnapshot? ParseRelease(JsonElement release)
     {
-        string tag = release.GetProperty("tag_name").GetString() ?? "";
+        if (!release.TryGetProperty("tag_name", out var tagElement) || tagElement.ValueKind != JsonValueKind.String) return null;
+        string tag = tagElement.GetString() ?? "";
         if (!Version.TryParse(tag.TrimStart('v', 'V'), out Version? version)) return null;
         if (release.TryGetProperty("prerelease", out var pre) && pre.ValueKind == JsonValueKind.True) return null;
         // body 是 Release 的更新说明（Markdown 原文），应用内只读展示。
         string? notes = release.TryGetProperty("body", out var body) && body.ValueKind == JsonValueKind.String ? body.GetString() : null;
         List<ReleaseAsset> assets = [];
-        foreach (var item in release.GetProperty("assets").EnumerateArray())
+        if (!release.TryGetProperty("assets", out var assetsElement) || assetsElement.ValueKind != JsonValueKind.Array) return new(version, tag, notes, null);
+        foreach (var item in assetsElement.EnumerateArray())
         {
-            string name = item.GetProperty("name").GetString() ?? "", url = item.GetProperty("browser_download_url").GetString() ?? "";
+            if (!item.TryGetProperty("name", out var nameElement) || !item.TryGetProperty("browser_download_url", out var urlElement)) continue;
+            string name = nameElement.GetString() ?? "", url = urlElement.GetString() ?? "";
             // Gitee 将源码包也放入 assets，必须排除。
             if (!name.Contains("WorkTiles", StringComparison.OrdinalIgnoreCase) || name.Contains("arm64", StringComparison.OrdinalIgnoreCase) || url.Contains("/archive/", StringComparison.OrdinalIgnoreCase)) continue;
             if (Path.GetFileName(name) != name || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https") continue;
@@ -61,7 +64,7 @@ public sealed class ReleaseUpdateService
         if (Regex.IsMatch(first.Name, @"\.(zip|7z)\.001$", RegexOptions.IgnoreCase))
         {
             string prefix = first.Name[..^3];
-            volumes = assets.Where(a => a.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(a.Name[prefix.Length..], @"^\d{3,}$"))
+            volumes = assets.Where(a => a.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(a.Name[prefix.Length..], @"^\d{3,4}$"))
                 .OrderBy(a => int.Parse(a.Name[prefix.Length..])).ToList();
             for (int i = 0; i < volumes.Count; i++)
                 if (int.Parse(volumes[i].Name[prefix.Length..]) != i + 1) throw new InvalidDataException("Release 更新分卷缺失或重复。");
@@ -69,7 +72,7 @@ public sealed class ReleaseUpdateService
         else if (first.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
         {
             string prefix = first.Name[..^3];
-            var split = assets.Where(a => a.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(a.Name[prefix.Length..], @"^z\d{2,}$", RegexOptions.IgnoreCase))
+            var split = assets.Where(a => a.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(a.Name[prefix.Length..], @"^z\d{2,4}$", RegexOptions.IgnoreCase))
                 .OrderBy(a => int.Parse(a.Name[(prefix.Length + 1)..])).ToList();
             for (int i = 0; i < split.Count; i++)
                 if (int.Parse(split[i].Name[(prefix.Length + 1)..]) != i + 1) throw new InvalidDataException("Release ZIP 分卷缺失。");

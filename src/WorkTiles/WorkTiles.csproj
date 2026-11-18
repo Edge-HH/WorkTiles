@@ -16,6 +16,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <Version>2.1.1</Version>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <SatelliteResourceLanguages>zh-Hans;zh-Hant;en</SatelliteResourceLanguages>
   </PropertyGroup>
 
@@ -32,6 +33,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Content Include="Assets\Logo\logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\Settings\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\Fonts\**\*" Exclude="Assets\Fonts\*.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\Pinyin\**\*" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
@@ -46,6 +49,7 @@
     <Compile Include="../../tests/UiVerification.cs" Link="UiVerification.cs" />
     <Compile Include="../../tests/GridCoverageVerification.cs" Link="GridCoverageVerification.cs" />
     <Compile Include="../../tests/ImageDragVerification.cs" Link="ImageDragVerification.cs" />
+    <Compile Include="../../tests/SelectionVerification.cs" Link="SelectionVerification.cs" />
     <Compile Include="../../tests/MediaUiVerification.cs" Link="MediaUiVerification.cs" />
     <Compile Include="../../tests/MediaPerformanceVerification.cs" Link="MediaPerformanceVerification.cs" />
   </ItemGroup>

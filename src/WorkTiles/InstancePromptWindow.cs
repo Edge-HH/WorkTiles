@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.Graphics;
 using WorkTiles.Controls;
+using WorkTiles.Services;
 
 namespace WorkTiles;
 
@@ -28,6 +29,7 @@ internal sealed class InstancePromptWindow : Window
     public InstancePromptWindow(Func<Task> replace, Action back)
     {
         Title = "WorkTiles 已在运行";
+        AppIcon.Apply(AppWindow);
         SystemBackdrop = new MicaBackdrop();
         _root = new Grid { RequestedTheme = ElementTheme.Dark, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 0, 0, 0)) };
         _root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });

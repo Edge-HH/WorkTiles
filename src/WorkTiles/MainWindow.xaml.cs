@@ -218,6 +218,7 @@ public sealed partial class MainWindow : Window
         nint windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
+        AppIcon.Apply(_appWindow);
         _appWindow?.Resize(new SizeInt32(1440, 900));
         if (_appWindow is not null)
             _appWindow.Closing += (_, args) =>
@@ -489,6 +490,7 @@ public sealed partial class MainWindow : Window
         _previewScenes.Remove("Board");
         AlignmentCanvas.Children.Clear();
         UpdateRichTextToolbar();
+        foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>()) tile.Detach();
         BoardCanvas.Children.Clear();
         foreach (SubjectBoard subject in ViewModel.Subjects) AddTile(subject);
         ApplyGlobalInkMode();
@@ -666,7 +668,7 @@ public sealed partial class MainWindow : Window
     private async void DeleteSubject(SubjectBoard subject)
     {
         if (await ShowConfirmAsync("删除这个科目", $"确定删除“{subject.Name}”以及其中的文字、图片和笔迹吗？") != ContentDialogResult.Primary) return;
-        if (FindTile(subject) is { } tile) BoardCanvas.Children.Remove(tile);
+        if (FindTile(subject) is { } tile) { tile.Detach(); BoardCanvas.Children.Remove(tile); }
         ViewModel.Subjects.Remove(subject);
         if (RichTextToolbarHost is not null) RichTextToolbarHost.Content = null;
         RefreshIslands();
@@ -764,13 +766,10 @@ public sealed partial class MainWindow : Window
         else
         {
             _infiniteWidth = _infiniteHeight = 0;
-            // 缩小后看得见的范围比 100% 画板大。画板不跟着变大的话，多出来的一圈就是放不进磁贴的墙。
-            // 放大不把画板裁小，已经排好的磁贴还留在原来的板上；自动排列另按当前可见范围来排。
-            double zoom = Math.Max(0.05, _boardZoom);
-            width = Math.Max(width, width / zoom);
-            height = Math.Max(height, height / zoom);
+            // 视口变化只改画板视野。磁贴坐标和尺寸留在原处，窗口缩小、全屏切换和分屏都不会把它们叠到一起。
+            (width, height) = BoardLayout.FixedBoardSize(width, height, _boardZoom,
+                ViewModel.Subjects.Select(subject => new LayoutRect(subject.X, subject.Y, subject.TileWidth, subject.TileHeight)).ToList());
         }
-        double previousWidth = BoardCanvas.Width, previousHeight = BoardCanvas.Height;
         BoardSurface.Width = width;
         BoardSurface.Height = height;
         BoardCanvas.Width = width;
@@ -790,19 +789,6 @@ public sealed partial class MainWindow : Window
             _renderedGridHeight = height;
             _renderedGridWindow = gridWindow;
             _renderedGridAppearance = gridAppearance;
-        }
-        if (!_settings.InfiniteBoard && (width + 1 < previousWidth || height + 1 < previousHeight))
-        {
-            foreach (SubjectBoard subject in ViewModel.Subjects.ToList())
-            {
-                ClampSubjectToViewport(subject);
-                if (FindTile(subject) is { } tile)
-                {
-                    Canvas.SetLeft(tile, subject.X);
-                    Canvas.SetTop(tile, subject.Y);
-                    tile.ApplyModelLayout();
-                }
-            }
         }
         }
         finally { _updatingBoardBounds = false; }
@@ -949,63 +935,14 @@ public sealed partial class MainWindow : Window
         ScheduleSave();
     }
 
-    private static readonly SolidColorBrush GridSnapOnForeground = new(Windows.UI.Color.FromArgb(255, 255, 255, 255));
-
     /// <summary>
-    /// 选中态改回 Windows 强调色底、白色图标。全局开关选中色是中性灰，只这一颗按钮例外。
+    /// 选中态改回 Windows 强调色底、白色图标。全局开关选中色是中性灰。
     /// 画笔引用主题字典里已经涂好的强调色，深浅主题和系统强调色变化后不用再铺一遍。
     /// </summary>
     private void ApplyGridSnapAccent()
     {
-        ResourceDictionary resources = GridSnapToggleButton.Resources;
-        foreach (string theme in new[] { "Default", "Dark", "Light" })
-        {
-            if (!resources.ThemeDictionaries.TryGetValue(theme, out object? existing) || existing is not ResourceDictionary dictionary)
-            {
-                dictionary = new ResourceDictionary();
-                resources.ThemeDictionaries[theme] = dictionary;
-            }
-            Brush fill = ThemeAccentFill(theme == "Light");
-            dictionary["ToggleButtonBackgroundChecked"] = fill;
-            dictionary["ToggleButtonBackgroundCheckedPointerOver"] = fill;
-            dictionary["ToggleButtonBackgroundCheckedPressed"] = fill;
-            dictionary["ToggleButtonForegroundChecked"] = GridSnapOnForeground;
-            dictionary["ToggleButtonForegroundCheckedPointerOver"] = GridSnapOnForeground;
-            dictionary["ToggleButtonForegroundCheckedPressed"] = GridSnapOnForeground;
-        }
+        SystemAccent.ApplyCheckedFill(GridSnapToggleButton, refreshState: true);
         ApplyGridSnapIconForeground();
-        // 模板若已按全局灰色进入选中态，资源换掉后不会自己重读，这里再进一次选中态。
-        GridSnapToggleButton.ApplyTemplate();
-        bool on = GridSnapToggleButton.IsChecked == true;
-        VisualStateManager.GoToState(GridSnapToggleButton, "Normal", false);
-        VisualStateManager.GoToState(GridSnapToggleButton, on ? "Checked" : "Normal", false);
-    }
-
-    private static Brush ThemeAccentFill(bool light)
-    {
-        string theme = light ? "Light" : "Dark";
-        ResourceDictionary application = Application.Current.Resources;
-        for (int index = application.MergedDictionaries.Count - 1; index >= 0; index--)
-        {
-            if (FindThemeBrush(application.MergedDictionaries[index], theme, "AccentFillColorDefaultBrush") is Brush brush)
-                return brush;
-        }
-        return (Brush)application["AccentFillColorDefaultBrush"];
-    }
-
-    private static Brush? FindThemeBrush(ResourceDictionary dictionary, string theme, string key)
-    {
-        if (dictionary.ThemeDictionaries.TryGetValue(theme, out object? themed)
-            && themed is ResourceDictionary themeDictionary
-            && themeDictionary.TryGetValue(key, out object? value)
-            && value is Brush brush)
-            return brush;
-        foreach (ResourceDictionary merged in dictionary.MergedDictionaries)
-        {
-            if (FindThemeBrush(merged, theme, key) is Brush nested)
-                return nested;
-        }
-        return null;
     }
 
     /// <summary>图标包在说明文字外面，选中态的前景有时传不进去，这里直接写成白色。</summary>
@@ -1019,7 +956,7 @@ public sealed partial class MainWindow : Window
             icon = panel.Children.OfType<FluentIcon>().FirstOrDefault();
         if (icon is null) return;
         if (GridSnapToggleButton.IsChecked == true)
-            icon.Foreground = GridSnapOnForeground;
+            icon.Foreground = SystemAccent.CheckedForeground;
         else
             icon.ClearValue(IconElement.ForegroundProperty);
     }
@@ -1663,6 +1600,7 @@ public sealed partial class MainWindow : Window
             // 旧配置缺少本机考试安排或手改数据时补齐默认值。
             _settings.LocalExam ??= new LocalExamSettings();
             _settings.DesktopTileOrder ??= new();
+            _settings.DesktopTileOrderIds ??= new();
             _settings.DesktopTilePlacements ??= new();
             if (_settings.DesktopTilesZoom is < 0.5 or > 2 || double.IsNaN(_settings.DesktopTilesZoom))
                 _settings.DesktopTilesZoom = 1;

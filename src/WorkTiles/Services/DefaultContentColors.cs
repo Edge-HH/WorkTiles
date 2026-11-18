@@ -14,9 +14,11 @@ public static class DefaultContentColors
         return Regex.Replace(rtf, @"\{\\colortbl[^{}]*\}", table => Regex.Replace(table.Value,
             @"\\red(\d+)\\green(\d+)\\blue(\d+)", match =>
             {
-                int r = int.Parse(match.Groups[1].Value), g = int.Parse(match.Groups[2].Value), b = int.Parse(match.Groups[3].Value);
+                int r = Component(match.Groups[1].Value), g = Component(match.Groups[2].Value), b = Component(match.Groups[3].Value);
                 if (saving && r == 0 && g == 0 && b == 0) return @"\red247\green247\blue249";
                 return !saving && IsDefaultWhite(r, g, b) ? @"\red0\green0\blue0" : match.Value;
             }));
     }
+
+    private static int Component(string value) => int.TryParse(value, out int parsed) ? Math.Clamp(parsed, 0, 255) : 0;
 }

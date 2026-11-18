@@ -263,7 +263,7 @@ public static class ProjectValidation
         project.CustomPalettes ??= [];
         NamedPalette? named = project.CustomPalettes.FirstOrDefault(palette => palette.Name == project.Palette);
         return named?.Colors is { Count: 9 } colors
-            && colors.All(color => color.Length is 7 or 9 && color[0] == '#');
+            && colors.All(color => color is { Length: 7 or 9 } && color[0] == '#' && color.AsSpan(1).ToString().All(Uri.IsHexDigit));
     }
 
     private static bool Finite(params double[] values) => values.All(double.IsFinite);

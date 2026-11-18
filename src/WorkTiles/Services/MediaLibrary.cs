@@ -26,7 +26,9 @@ public sealed class MediaLibrary(string dataDirectory)
         MediaScope.Background => "recent-media-background.json",
         _ => "recent-images.json"
     });
-    private readonly SemaphoreSlim _gate = new(1);
+    // 同一数据目录会被多个 MediaLibrary 实例（设置页、导出、备份）同时读写同一批历史文件，
+    // 锁必须静态共享，实例级锁挡不住跨实例并发。
+    private static readonly SemaphoreSlim _gate = new(1);
     /// <summary>拆分使用面之前的合并历史，只作为新历史缺失时的起步来源。</summary>
     private string LegacyMediaHistoryPath => Path.Combine(_directory, "recent-media.json");
     public event Action? Changed;
@@ -95,10 +97,20 @@ public sealed class MediaLibrary(string dataDirectory)
 
     private static async Task Save(string path, IEnumerable<string> history, string owned)
     {
-        string temporary = path + ".tmp";
-        await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(history
-            .Where(item => !string.Equals(item, owned, StringComparison.OrdinalIgnoreCase)).Prepend(owned).Take(8)));
-        File.Move(temporary, path, true);
+        // 唯一临时名避免跨实例并发写同一目标时互相覆盖；Flush(true) 落盘后再原子替换，断电不留半份历史。
+        string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(history
+            .Where(item => !string.Equals(item, owned, StringComparison.OrdinalIgnoreCase)).Prepend(owned).Take(8));
+        try
+        {
+            using (FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write))
+            {
+                await stream.WriteAsync(bytes);
+                stream.Flush(true);
+            }
+            File.Move(temporary, path, true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
     }
 
     /// <summary>还原备份后整体替换各使用面的历史；空列表表示备份里有意清空。</summary>
@@ -107,9 +119,19 @@ public sealed class MediaLibrary(string dataDirectory)
         Directory.CreateDirectory(_directory);
         void Write(string path, IEnumerable<string> history)
         {
-            string temporary = path + ".tmp";
-            File.WriteAllText(temporary, JsonSerializer.Serialize(history.Take(8)));
-            File.Move(temporary, path, true);
+            // 还原是同步批量操作，不能同步等待异步导入持有的锁（会卡死 UI 线程续体）；
+            // 改用唯一临时名 + 落盘 + 原子替换，保证单次写入不撕裂。
+            string temporary = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                using (FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write))
+                {
+                    JsonSerializer.Serialize(stream, history.Take(8));
+                    stream.Flush(true);
+                }
+                File.Move(temporary, path, true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         Write(HistoryPath(MediaScope.Images), images);
         Write(HistoryPath(MediaScope.Tile), tile);
@@ -152,7 +174,7 @@ public sealed class MediaLibrary(string dataDirectory)
                 string destination = Path.Combine(_directory, hash[..16] + "_" + DisplayName(source));
                 if (!File.Exists(destination))
                 {
-                    string temporary = destination + ".tmp";
+                    string temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
                     try
                     {
                         input.Position = 0;
@@ -228,9 +250,18 @@ public sealed class MediaLibrary(string dataDirectory)
             Dictionary<string, MediaLabel> labels = ReadLabels();
             labels[owned] = new MediaLabel { Title = project.Title, Preview = preview };
             Directory.CreateDirectory(_directory);
-            string temporary = LabelsPath() + ".tmp";
-            await File.WriteAllTextAsync(temporary, JsonSerializer.Serialize(labels));
-            File.Move(temporary, LabelsPath(), true);
+            string temporary = LabelsPath() + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(labels);
+            try
+            {
+                using (FileStream stream = new(temporary, FileMode.CreateNew, FileAccess.Write))
+                {
+                    await stream.WriteAsync(bytes);
+                    stream.Flush(true);
+                }
+                File.Move(temporary, LabelsPath(), true);
+            }
+            finally { if (File.Exists(temporary)) File.Delete(temporary); }
         }
         finally { _gate.Release(); }
     }

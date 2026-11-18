@@ -14,6 +14,7 @@ public sealed partial class MainWindow
             string output = Path.Combine(AppContext.BaseDirectory, "verification");
             Directory.CreateDirectory(output);
             List<string> evidence = [];
+            bool failed = false;
             try
             {
                 string video = Environment.GetEnvironmentVariable("WORKTILES_TEST_VIDEO") ?? Path.Combine(AppContext.BaseDirectory, "media-test.mp4");
@@ -150,12 +151,13 @@ public sealed partial class MainWindow
                 evidence.Add("PASS: wallpaper resumes on the board and hidden previews stay paused");
                 evidence.Add("MEDIA_PERFORMANCE_VERIFICATION_OK");
             }
-            catch (Exception ex) { evidence.Add("MEDIA_PERFORMANCE_VERIFICATION_FAILED\n" + ex); }
+            catch (Exception ex) { failed = true; evidence.Add("MEDIA_PERFORMANCE_VERIFICATION_FAILED\n" + ex); }
             finally
             {
                 File.WriteAllLines(Path.Combine(output, "performance-result.txt"), evidence);
                 // 直接退出进程：媒体管线析构偶发挂起会拖过验证脚本的超时上限，进程内容已完成取证。
-                Environment.Exit(0);
+                // 退出码必须反映成败，失败时返回非零，不能只靠结果文件末行标记兜底。
+                Environment.Exit(failed ? 1 : 0);
             }
         };
     }

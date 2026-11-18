@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -9,6 +10,7 @@ using Microsoft.UI.Xaml.Media;
 using System.Numerics;
 using Windows.Foundation;
 using Windows.Graphics;
+using Windows.UI;
 using WorkTiles.Services;
 
 namespace WorkTiles.Controls;
@@ -348,6 +350,7 @@ internal sealed class DesktopCommandWindow
     private bool _editing;
     private bool _writingZoom;
     private bool _writingArrange;
+    private ElementTheme? _arrangeTheme;
     private bool _chromeApplied;
     private bool _layingOut;
     private bool _clickThrough;
@@ -383,8 +386,18 @@ internal sealed class DesktopCommandWindow
             Content = _arrangeIcon,
             IsChecked = true
         };
-        _arrangeButton.Checked += (_, _) => { if (!_writingArrange) AutoArrangeInvoked?.Invoke(true); };
-        _arrangeButton.Unchecked += (_, _) => { if (!_writingArrange) AutoArrangeInvoked?.Invoke(false); };
+        HoverTransition.SetSuppress(_arrangeButton, true);
+        _arrangeButton.Loaded += (_, _) => ApplyArrangeAccent(force: true);
+        _arrangeButton.Checked += (_, _) =>
+        {
+            ApplyArrangeAccent(force: false);
+            if (!_writingArrange) AutoArrangeInvoked?.Invoke(true);
+        };
+        _arrangeButton.Unchecked += (_, _) =>
+        {
+            ApplyArrangeAccent(force: false);
+            if (!_writingArrange) AutoArrangeInvoked?.Invoke(false);
+        };
         ToolTipService.SetToolTip(_arrangeButton, "关闭自动排列");
         _buttons.Add(_arrangeButton);
         _backButton = IconButton(_backIcon, "返回作业板", () => ReturnInvoked?.Invoke());
@@ -446,6 +459,7 @@ internal sealed class DesktopCommandWindow
         foreach (Segment segment in _segments)
             segment.ThemeChanged += Paint;
         Paint();
+        ApplyArrangeAccent(force: true);
         Layout(double.PositiveInfinity, notify: false);
     }
 
@@ -474,9 +488,18 @@ internal sealed class DesktopCommandWindow
     public void ApplyTheme(ElementTheme theme)
     {
         bool light = theme == ElementTheme.Light || (theme != ElementTheme.Dark && BoardTheme.IsLight);
+        ElementTheme effective = light ? ElementTheme.Light : ElementTheme.Dark;
         Brush clear = BoardTheme.ButtonClearBrushFor(light);
-        foreach (ButtonBase button in _buttons) button.Background = clear;
+        foreach (ButtonBase button in _buttons)
+        {
+            // 自动排列的选中底在后面单独铺。这里清成透明的话，画刷过渡会把强调色底吃掉，直到鼠标悬停才又出现。
+            if (ReferenceEquals(button, _arrangeButton)) continue;
+            button.Background = clear;
+        }
         foreach (Segment segment in _segments) segment.ApplyTheme(theme);
+        bool force = _arrangeTheme != effective;
+        _arrangeTheme = effective;
+        ApplyArrangeAccent(force);
     }
 
     public void CloseSurface()
@@ -515,6 +538,8 @@ internal sealed class DesktopCommandWindow
         Layout(double.PositiveInfinity, notify: true);
     }
 
+    internal ToggleButton AutoArrangeButton => _arrangeButton;
+
     public void SetAutoArrange(bool enabled)
     {
         _writingArrange = true;
@@ -522,6 +547,7 @@ internal sealed class DesktopCommandWindow
         _arrangeIcon.Opacity = 1;
         ToolTipService.SetToolTip(_arrangeButton, enabled ? "关闭自动排列" : "自动排列");
         _writingArrange = false;
+        ApplyArrangeAccent(force: false);
     }
 
     /// <summary>外观与主界面控制窗同一套。按钮变大时，每一段窗口的外框一起变大。</summary>
@@ -794,11 +820,38 @@ internal sealed class DesktopCommandWindow
         }
         _editIcon.Foreground = foreground;
         _addIcon.Foreground = foreground;
-        _arrangeIcon.Foreground = foreground;
         _backIcon.Foreground = foreground;
         _zoomOutIcon.Foreground = foreground;
         _zoomInIcon.Foreground = foreground;
         _zoomText.Foreground = foreground;
+        ApplyArrangeIcon();
+    }
+
+    /// <summary>
+    /// 自动排列打开时用 Windows 强调色底和白色图标。全局开关选中色是中性灰。
+    /// 选中底直接写在按钮上：模板里的画刷过渡不处理透明度，从透明静止色切到强调色时会停在看不见的状态。
+    /// </summary>
+    private void ApplyArrangeAccent(bool force)
+    {
+        SystemAccent.ApplyCheckedFill(_arrangeButton, force);
+        bool on = _arrangeButton.IsChecked == true;
+        bool light = _arrangeTheme == ElementTheme.Light || (_arrangeTheme is null && BoardTheme.IsLight);
+        _arrangeButton.Background = on
+            ? SystemAccent.ThemeFill(light)
+            : BoardTheme.ButtonClearBrushFor(light);
+        // 选中底由 Checked 状态设置器铺。模板里的 BrushTransition 不插值透明度，状态切换第一帧会把强调色底
+        // 渲染成透明、直到悬停才恢复；进状态前先递归拿掉过渡（模板没展开时排队等布局，Loaded 会再铺一次）。
+        HoverTransition.StripNow(_arrangeButton);
+        VisualStateManager.GoToState(_arrangeButton, "Normal", false);
+        VisualStateManager.GoToState(_arrangeButton, on ? "Checked" : "Normal", false);
+        ApplyArrangeIcon();
+    }
+
+    private void ApplyArrangeIcon()
+    {
+        _arrangeIcon.Foreground = _arrangeButton.IsChecked == true
+            ? SystemAccent.CheckedForeground
+            : new SolidColorBrush(BoardTheme.TextColor);
     }
 
     private Button IconButton(FluentIcon icon, string tooltip, Action click)
@@ -868,6 +921,103 @@ internal sealed class DesktopCommandWindow
         public double WidthDip { get; set; }
         public double HeightDip { get; set; }
         public event Action? ThemeChanged;
+    }
+}
+
+/// <summary>
+/// 自动排列时拖动磁贴的插入标记：一根横或竖的蓝线，透明度缓慢起伏。
+/// 窗口本身不接点击，避免挡住正在拖的标题。
+/// </summary>
+internal sealed class DesktopInsertionLineWindow : DesktopSurfaceWindow
+{
+    private const double LineThickness = 4;
+
+    private readonly Grid _bars = new() { IsHitTestVisible = false };
+    private readonly Border _line;
+    private bool _vertical;
+    private bool _hasOrientation;
+    private bool _chromeReady;
+    private bool _breathing;
+
+    public DesktopInsertionLineWindow()
+    {
+        TitleText = "插入位置";
+        AboveTiles = true;
+        // 拖动发生在编辑态，磁贴已经解除桌面归属。这条线再挂回去会把桌面抬到所有磁贴前面。
+        Host.AnchorToDesktop = false;
+        _line = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(255, 77, 163, 255)),
+            CornerRadius = new CornerRadius(LineThickness / 2),
+            IsHitTestVisible = false
+        };
+        _bars.Children.Add(_line);
+        Root.Children.Add(_bars);
+        Root.IsHitTestVisible = false;
+        _bars.Loaded += (_, _) => StartBreathing();
+    }
+
+    public bool IsShowing { get; private set; }
+
+    public void ShowGuide(int x, int y, int width, int height, bool vertical)
+    {
+        ApplyOrientation(vertical);
+        if (!_chromeReady)
+        {
+            ConfigureBackdrop(false, DesktopCornerMode.None, Microsoft.UI.Colors.Transparent, 0, 0);
+            SetClickThrough(true);
+            _chromeReady = true;
+        }
+        Place(x, y, Math.Max(1, width), Math.Max(1, height));
+        ShowSurface();
+        IsShowing = true;
+    }
+
+    public void HideGuide()
+    {
+        if (!IsShowing) return;
+        IsShowing = false;
+        HideSurface();
+    }
+
+    private void ApplyOrientation(bool vertical)
+    {
+        if (_hasOrientation && _vertical == vertical) return;
+        _hasOrientation = true;
+        _vertical = vertical;
+        if (vertical)
+        {
+            _line.Width = LineThickness;
+            _line.Height = double.NaN;
+            _line.HorizontalAlignment = HorizontalAlignment.Center;
+            _line.VerticalAlignment = VerticalAlignment.Stretch;
+        }
+        else
+        {
+            _line.Width = double.NaN;
+            _line.Height = LineThickness;
+            _line.HorizontalAlignment = HorizontalAlignment.Stretch;
+            _line.VerticalAlignment = VerticalAlignment.Center;
+        }
+    }
+
+    private void StartBreathing()
+    {
+        if (_breathing) return;
+        _breathing = true;
+        Visual visual = ElementCompositionPreview.GetElementVisual(_bars);
+        Compositor compositor = visual.Compositor;
+        ScalarKeyFrameAnimation breath = compositor.CreateScalarKeyFrameAnimation();
+        const int steps = 12;
+        for (int i = 0; i <= steps; i++)
+        {
+            float t = i / (float)steps;
+            float wave = (float)(0.5 - 0.5 * Math.Cos(2 * Math.PI * t));
+            breath.InsertKeyFrame(t, 0.38f + 0.62f * wave);
+        }
+        breath.Duration = TimeSpan.FromMilliseconds(1680);
+        breath.IterationBehavior = AnimationIterationBehavior.Forever;
+        visual.StartAnimation("Opacity", breath);
     }
 }
 

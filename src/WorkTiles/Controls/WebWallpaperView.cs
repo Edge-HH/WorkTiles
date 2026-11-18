@@ -30,7 +30,7 @@ public sealed class WebWallpaperView : Grid, IDisposable
             try
             {
                 WebWallpaperPackage package = await Task.Run(() => WebWallpaperPackage.Load(entry));
-                var environment = await (_environment ??= CreateEnvironmentAsync());
+                var environment = await GetEnvironmentAsync();
                 if (_disposed) return;
                 await _view.EnsureCoreWebView2Async(environment);
                 if (_disposed) return;
@@ -68,6 +68,26 @@ public sealed class WebWallpaperView : Grid, IDisposable
             }
             catch (Exception) { if (!_disposed) Failed?.Invoke(); }
         };
+    }
+
+    private static async Task<CoreWebView2Environment> GetEnvironmentAsync()
+    {
+        // 共享在途的初始化任务，但失败时清空缓存：Runtime 缺失或目录被占用导致失败后，装好再导入应能重试，不必重启。
+        Task<CoreWebView2Environment>? pending = _environment;
+        if (pending is null)
+        {
+            pending = CreateEnvironmentAsync();
+            _environment = pending;
+        }
+        try
+        {
+            return await pending;
+        }
+        catch
+        {
+            if (ReferenceEquals(_environment, pending)) _environment = null;
+            throw;
+        }
     }
 
     private static async Task<CoreWebView2Environment> CreateEnvironmentAsync()

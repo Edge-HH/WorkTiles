@@ -161,7 +161,10 @@ public sealed class BackupService(string dataDirectory)
         foreach (ZipArchiveEntry entry in archive.Entries)
         {
             string name = entry.FullName;
-            if (name.EndsWith('/') || name is ManifestEntry or JobsEntry or SettingsEntry || name.EndsWith(".json") || name.StartsWith("projects/")) continue;
+            // 只跳过根级清单与历史索引；网页壁纸目录里的 project.json 等文件必须还原，否则壁纸损坏。
+            bool isIndex = name is ManifestEntry or JobsEntry or SettingsEntry
+                or "backgrounds/recent-images.json" or "backgrounds/recent-media.json";
+            if (name.EndsWith('/') || isIndex || name.StartsWith("projects/")) continue;
             string destination = name.StartsWith("web/")
                 ? Path.Combine(dataDirectory, "web-wallpapers", name[4..].Replace('/', Path.DirectorySeparatorChar))
                 : Path.Combine(dataDirectory, "backgrounds", Path.GetFileName(name));
@@ -176,6 +179,8 @@ public sealed class BackupService(string dataDirectory)
         if (scope.Has(BackupScopes.Jobs) && ReadJson<ProjectLibrary>(archive, JobsEntry) is { } library)
         {
             library.Version = 1;
+            // 备份里的待上传操作是历史快照，还原后重放可能用旧内容覆盖云端较新修订。
+            library.SyncQueue.Clear();
             library.Settings = settings ?? store.Load().Settings;
             foreach (ProjectDocument project in library.Projects)
             {

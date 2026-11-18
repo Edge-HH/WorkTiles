@@ -399,7 +399,7 @@ public sealed partial class MainWindow
         if (_activeInkSubject is not null && !ViewModel.Subjects.Contains(_activeInkSubject)) _activeInkSubject = null;
     }
 
-    private async void ClearInk_Click(object sender, RoutedEventArgs e)
+    private async void ClearInk_Click(object sender, RoutedEventArgs e) => await RunProjectAction(async () =>
     {
         UpdateInkSubjectLabel();
         bool clockOnly = _settings.LayoutMode == "Clock";
@@ -410,7 +410,12 @@ public sealed partial class MainWindow
             IsPrimaryButtonEnabled = clockOnly || _activeInkSubject is not null,
             SecondaryButtonText = clockOnly ? "时钟与全部磁贴" : "全部磁贴", CloseButtonText = "取消"
         };
-        ContentDialogResult result = await dialog.ShowAsync();
+        // WinUI 同一时间只能显示一个 ContentDialog；已有对话框时按取消处理，避免异步点击崩溃。
+        if (_dialogOpen) return;
+        _dialogOpen = true;
+        ContentDialogResult result;
+        try { result = await dialog.ShowAsync(); }
+        finally { _dialogOpen = false; }
         if (result == ContentDialogResult.None) return;
         string scope = result == ContentDialogResult.Primary
             ? clockOnly ? "时钟区域" : _activeInkSubject?.Name ?? "当前磁贴"
@@ -419,7 +424,7 @@ public sealed partial class MainWindow
         if (clockOnly) ClockInkLayer.ClearStrokes();
         foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
             if (result == ContentDialogResult.Secondary || ReferenceEquals(tile.DataContext, _activeInkSubject)) tile.ClearStrokes();
-    }
+    });
 
     private async void ExportImage_Click(object sender, RoutedEventArgs e) => await RunProjectAction(async () =>
     {

@@ -668,12 +668,15 @@ public sealed class CloudSyncService(ProjectStore store)
         if (changed) BoardChanged?.Invoke();
     }
 
-    /// <summary>拉取本班的考试安排。旧服务端没有该接口（404）或没有启用计划（204）时都视为无安排。</summary>
+    /// <summary>拉取本班的考试安排。旧服务端没有该接口（404）时无法提供信息，保留本地缓存；
+    /// 服务端明确没有启用计划（204）才视为无安排并清空缓存。</summary>
     private async Task FetchExamAsync(ProjectLibrary library, CancellationToken cancellationToken)
     {
         CloudSyncSettings cloud = library.Settings.CloudSync;
         using HttpResponseMessage response = await _http.SendAsync(Request(cloud, HttpMethod.Get, "/exam"), cancellationToken);
-        if (response.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.NoContent)
+        // 404 只代表服务端不支持该接口，不代表本班没有考试；清空缓存会丢掉离线考试画面依赖的既有安排。
+        if (response.StatusCode == HttpStatusCode.NotFound) return;
+        if (response.StatusCode == HttpStatusCode.NoContent)
         {
             ApplyExam(null, cloud.ClassId);
             return;
@@ -851,10 +854,11 @@ public sealed class CloudSyncService(ProjectStore store)
         {
             using JsonDocument doc = JsonDocument.Parse(body);
             if (doc.RootElement.ValueKind == JsonValueKind.String) body = doc.RootElement.GetString() ?? "";
-            else if (doc.RootElement.TryGetProperty("detail", out var detail)) body = detail.GetString() ?? "";
-            else if (doc.RootElement.TryGetProperty("error", out var error)) body = error.GetString() ?? "";
+            // 服务端可能返回结构化错误（如 {"error":{"code":409}}）；非字符串取原文，避免 GetString 抛异常吞掉真实原因。
+            else if (doc.RootElement.TryGetProperty("detail", out var detail)) body = detail.ValueKind == JsonValueKind.String ? detail.GetString() ?? "" : detail.GetRawText();
+            else if (doc.RootElement.TryGetProperty("error", out var error)) body = error.ValueKind == JsonValueKind.String ? error.GetString() ?? "" : error.GetRawText();
         }
-        catch (JsonException) { }
+        catch (Exception ex) when (ex is JsonException or InvalidOperationException) { }
         return body.Length is > 0 and < 200 ? body : $"服务器返回 {(int)response.StatusCode}";
     }
 }

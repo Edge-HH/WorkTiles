@@ -1,5 +1,6 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Windows.UI;
 using Windows.UI.ViewManagement;
@@ -29,6 +30,51 @@ public static class SystemAccent
     {
         _light = light;
         ApplyCurrent();
+    }
+
+    /// <summary>选中态的白色图标。强调色底上不再沿用正文色。</summary>
+    public static readonly SolidColorBrush CheckedForeground = new(Color.FromArgb(255, 255, 255, 255));
+
+    /// <summary>主题字典里已经涂好的强调色填充。调用方拿引用，系统强调色变化后颜色跟着变。</summary>
+    public static Brush ThemeFill(bool light)
+    {
+        string theme = light ? "Light" : "Dark";
+        ResourceDictionary application = Application.Current.Resources;
+        for (int index = application.MergedDictionaries.Count - 1; index >= 0; index--)
+        {
+            if (FindThemeBrush(application.MergedDictionaries[index], theme, "AccentFillColorDefaultBrush") is Brush brush)
+                return brush;
+        }
+        return (Brush)application["AccentFillColorDefaultBrush"];
+    }
+
+    /// <summary>
+    /// 选中态改成 Windows 强调色底、白色字。全局开关选中色是中性灰，个别开关要改回强调色。
+    /// 模板若已按灰色进入选中态，资源换掉后不会自己重读；<paramref name="refreshState"/> 为真时再进一次选中态。
+    /// </summary>
+    public static void ApplyCheckedFill(ToggleButton button, bool refreshState)
+    {
+        ResourceDictionary resources = button.Resources;
+        foreach (string theme in new[] { "Default", "Dark", "Light" })
+        {
+            if (!resources.ThemeDictionaries.TryGetValue(theme, out object? existing) || existing is not ResourceDictionary dictionary)
+            {
+                dictionary = new ResourceDictionary();
+                resources.ThemeDictionaries[theme] = dictionary;
+            }
+            Brush fill = ThemeFill(theme == "Light");
+            dictionary["ToggleButtonBackgroundChecked"] = fill;
+            dictionary["ToggleButtonBackgroundCheckedPointerOver"] = fill;
+            dictionary["ToggleButtonBackgroundCheckedPressed"] = fill;
+            dictionary["ToggleButtonForegroundChecked"] = CheckedForeground;
+            dictionary["ToggleButtonForegroundCheckedPointerOver"] = CheckedForeground;
+            dictionary["ToggleButtonForegroundCheckedPressed"] = CheckedForeground;
+        }
+        if (!refreshState) return;
+        button.ApplyTemplate();
+        bool on = button.IsChecked == true;
+        VisualStateManager.GoToState(button, "Normal", false);
+        VisualStateManager.GoToState(button, on ? "Checked" : "Normal", false);
     }
 
     private static void ApplyCurrent()
@@ -106,6 +152,21 @@ public static class SystemAccent
         PaintAcrylic(theme, "AccentAcrylicBackgroundFillColorBaseBrush", light ? light2 : dark2);
         PaintAcrylic(theme, "AccentAcrylicInAppFillColorBaseBrush", light ? light2 : dark2);
         PaintFocusBorder(theme, fill);
+    }
+
+    private static Brush? FindThemeBrush(ResourceDictionary dictionary, string theme, string key)
+    {
+        if (dictionary.ThemeDictionaries.TryGetValue(theme, out object? themed)
+            && themed is ResourceDictionary themeDictionary
+            && themeDictionary.TryGetValue(key, out object? value)
+            && value is Brush brush)
+            return brush;
+        foreach (ResourceDictionary merged in dictionary.MergedDictionaries)
+        {
+            if (FindThemeBrush(merged, theme, key) is Brush nested)
+                return nested;
+        }
+        return null;
     }
 
     private static void PaintBrush(ResourceDictionary dictionary, string key, Color color)

@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
+using WorkTiles.Services;
 using Windows.Graphics;
 
 namespace WorkTiles;
@@ -30,6 +31,7 @@ internal sealed class CrashReportWindow : Window
     private CrashReportWindow(string text)
     {
         Title = "WorkTiles 遇到错误";
+        AppIcon.Apply(AppWindow);
         SystemBackdrop = new MicaBackdrop();
         Grid root = new() { RequestedTheme = ElementTheme.Dark, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(24, 0, 0, 0)) };
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
