@@ -4,3 +4,11 @@
 artifacts/
 .mimosa/
 worktiles.db*
+
+# IDE / editor local state
+.idea/
+.cursor/
+.zcode/
+
+# One-off scratch from debugging sessions
+.tmp-*
