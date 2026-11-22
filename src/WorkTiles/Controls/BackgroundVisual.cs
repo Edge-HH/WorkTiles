@@ -287,10 +287,10 @@ public sealed class BackgroundVisual : Grid
         {
             for (int attempt = 0; attempt < 25 && web.Core is null; attempt++)
                 await Task.Delay(200);
-            if (web.Core is null) { _snapshotPath = path; return; }
+            if (web.Core is null) return;
             await Task.Delay(500);
             string destination = path + ".preview.png";
-            if (!await web.TryCapturePreviewAsync(destination)) { _snapshotPath = path; return; }
+            if (!await web.TryCapturePreviewAsync(destination)) return;
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (!IsLoaded || _playlist.Current != path) return;

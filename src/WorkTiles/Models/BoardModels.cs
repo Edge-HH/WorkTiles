@@ -123,7 +123,10 @@ public sealed class HomeworkEntry : ObservableObject
 
             if (Attachments.Count > 0)
             {
-                details.Add($"{Attachments.Count} 张图片");
+                int images = Attachments.Count(item => item.Kind == "图片");
+                int files = Attachments.Count - images;
+                if (images > 0) details.Add($"{images} 张图片");
+                if (files > 0) details.Add($"{files} 个文件");
             }
 
             return details.Count == 0 ? "仅文字" : string.Join(" · ", details);

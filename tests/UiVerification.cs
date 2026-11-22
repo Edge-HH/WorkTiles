@@ -19,6 +19,8 @@ namespace WorkTiles;
 
 public sealed partial class MainWindow
 {
+    // 真实按键注入期间记住测试窗口；每次投递前复查前台，避免按键落到用户窗口。
+    private nint _verificationHwnd;
     internal void ScheduleFullScreenHintVerification()
     {
         RootShell.Loaded += async (_, _) =>
@@ -176,9 +178,11 @@ public sealed partial class MainWindow
                 Check(settingsPreviewEditors.Count > 0 && settingsPreviewEditors.All(editor => editor.IsReadOnly),
                     "opening settings loads read-only tile preview editors");
                 _tileAppearancePreview!.ApplyBodyDefaults(_settings, overrideFormatted: true);
+                float previewBodySize = (float)Math.Clamp(_settings.TileBodyFontSize, 12, 72);
                 Check(settingsPreviewEditors.All(editor => editor.IsReadOnly) &&
-                    settingsPreviewEditors.All(editor => !string.IsNullOrWhiteSpace(editor.Document.GetRange(0, 1).CharacterFormat.Name)),
-                    "body defaults can update a read-only settings preview and restore its state");
+                    settingsPreviewEditors.All(editor => !string.IsNullOrWhiteSpace(editor.Document.GetRange(0, 1).CharacterFormat.Name)) &&
+                    settingsPreviewEditors.All(editor => Math.Abs(editor.Document.GetRange(0, 1).CharacterFormat.Size - previewBodySize) < 0.5),
+                    "body defaults apply the configured font size to the read-only settings preview");
                 var initiallySelectedSettingsItems = SettingsRoot.MenuItems.Concat(SettingsRoot.FooterMenuItems)
                     .OfType<NavigationViewItem>()
                     .SelectMany(item => item.MenuItems.OfType<NavigationViewItem>().DefaultIfEmpty(item))
@@ -468,7 +472,7 @@ public sealed partial class MainWindow
                 var settingsSplitView = FindVisuals<SplitView>(SettingsRoot).First(view => view.Name == "RootSplitView");
                 Check(settingsSplitView.CornerRadius == new CornerRadius(0), "settings navigation pane joins the content with square corners");
                 await SaveVisualAsync(RootShell, Path.Combine(output, "about.png"), (int)RootShell.ActualWidth, (int)RootShell.ActualHeight);
-                await VerifyExtendedSettingsAsync(output, Check);
+                await VerifyExtendedSettingsAsync(output, evidence, Check);
                 await VerifyPresentationSettingsAsync(output, Check);
                 await VerifyAutofillAsync(output, Check);
                 await VerifyAutoLayoutExportAsync(output, Check);
@@ -516,6 +520,7 @@ public sealed partial class MainWindow
                 SubjectTileControl tile = BoardCanvas.Children.OfType<SubjectTileControl>().First();
                 TextBox box = FindVisuals<TextBox>(tile).First();
                 nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                _verificationHwnd = hwnd;
                 ForceForeground(hwnd);
                 await Task.Delay(600);
                 Check(GetForegroundWindow() == hwnd, "the verification window holds the foreground so real keys reach it");
@@ -641,6 +646,11 @@ public sealed partial class MainWindow
             string output = Path.Combine(AppContext.BaseDirectory, "verification");
             Directory.CreateDirectory(output);
             List<string> evidence = [];
+            nint hwnd = nint.Zero;
+            nint originalLayout = nint.Zero;
+            nint previousProcedure = nint.Zero;
+            WindowProcedure? procedure = null;
+            int executed = 0;
             try
             {
                 _settings.AutoUpdateEnabled = false;
@@ -662,7 +672,7 @@ public sealed partial class MainWindow
 
                 SubjectTileControl tile = BoardCanvas.Children.OfType<SubjectTileControl>().First();
                 TextBox box = FindVisuals<TextBox>(tile).First();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
 
                 void Check(bool condition, string message)
                 {
@@ -723,8 +733,8 @@ public sealed partial class MainWindow
                 }
 
                 // 组合期间窗口消息里是否还有 WM_KEYDOWN / WM_IME_*，决定应用层能不能截到被输入法占用的按键。
-                nint previousProcedure = GetWindowLongPtr(hwnd, -4 /* GWLP_WNDPROC */);
-                WindowProcedure procedure = (window, message, wparam, lparam) =>
+                previousProcedure = GetWindowLongPtr(hwnd, -4 /* GWLP_WNDPROC */);
+                procedure = (window, message, wparam, lparam) =>
                 {
                     if (message is 0x0100 or 0x0101 or 0x0104 or 0x0105 or 0x010D or 0x010E or 0x010F or 0x0281)
                     {
@@ -733,19 +743,20 @@ public sealed partial class MainWindow
 
                     return CallWindowProc(previousProcedure, window, message, wparam, lparam);
                 };
-                SetWindowLongPtr(hwnd, -4, System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(procedure));
+                SetWindowLongPtr(hwnd, -4, System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(procedure!));
 
                 // 先在不带输入法的状态下确认按键投递本身可用（对照组）。
                 box.Text = string.Empty;
                 if (await ReadyAsync())
                 {
+                    executed++;
                     SendLetter('a');
                     SendLetter('b');
                     await Task.Delay(300);
                     State("plain-typing");
                 }
 
-                nint original = GetKeyboardLayout(0);
+                originalLayout = GetKeyboardLayout(0);
                 nint chinese = LoadKeyboardLayout("00000804", 1);
                 PostMessage(hwnd, 0x0050, nint.Zero, chinese);
                 await Task.Delay(600);
@@ -769,6 +780,7 @@ public sealed partial class MainWindow
                 await NextLayoutAsync();
                 if (await ReadyAsync())
                 {
+                    executed++;
                     State("ime-idle");
                     SendKey(Windows.System.VirtualKey.Down);
                     await Task.Delay(400);
@@ -782,6 +794,7 @@ public sealed partial class MainWindow
                 await NextLayoutAsync();
                 if (await ReadyAsync())
                 {
+                    executed++;
                     State("armed");
                     foreach (char letter in "yuwen")
                     {
@@ -821,6 +834,7 @@ public sealed partial class MainWindow
                 await NextLayoutAsync();
                 if (await ReadyAsync())
                 {
+                    executed++;
                     foreach (char letter in "yuwen")
                     {
                         SendLetter(letter);
@@ -844,10 +858,9 @@ public sealed partial class MainWindow
                     }
                 }
 
-                PostMessage(hwnd, 0x0050, nint.Zero, original);
-                SetWindowLongPtr(hwnd, -4, previousProcedure);
-                GC.KeepAlive(procedure);
-                evidence.Add("AUTOFILL_IME_DIAGNOSTIC_OK");
+                evidence.Add(executed == 0
+                    ? "AUTOFILL_IME_DIAGNOSTIC_FAILED\n输入法诊断窗口始终没有取得前台，未执行任何检查。"
+                    : "AUTOFILL_IME_DIAGNOSTIC_OK");
             }
             catch (Exception ex)
             {
@@ -855,6 +868,16 @@ public sealed partial class MainWindow
             }
             finally
             {
+                try
+                {
+                    if (hwnd != nint.Zero)
+                    {
+                        if (originalLayout != nint.Zero) PostMessage(hwnd, 0x0050, nint.Zero, originalLayout);
+                        if (previousProcedure != nint.Zero) SetWindowLongPtr(hwnd, -4, previousProcedure);
+                    }
+                    GC.KeepAlive(procedure);
+                }
+                catch (Exception restore) { evidence.Add("restore failed: " + restore.Message); }
                 File.WriteAllLines(Path.Combine(output, "ime-result.txt"), evidence);
                 Close();
             }
@@ -866,9 +889,6 @@ public sealed partial class MainWindow
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
-
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ShowWindow(nint window, int command);
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern nint SetFocus(nint window);
@@ -952,8 +972,10 @@ public sealed partial class MainWindow
         [System.Runtime.InteropServices.FieldOffset(12)] public uint Flags;
     }
 
-    private static void SendKey(Windows.System.VirtualKey key)
+    private void SendKey(Windows.System.VirtualKey key)
     {
+        if (_verificationHwnd != nint.Zero && GetForegroundWindow() != _verificationHwnd)
+            throw new InvalidOperationException("测试窗口失去前台，已中止按键注入。");
         SendInput(1, [new INPUT { Type = 1, VirtualKey = (ushort)key }], 40);
         Thread.Sleep(30);
         SendInput(1, [new INPUT { Type = 1, VirtualKey = (ushort)key, Flags = 2 }], 40);
@@ -1467,7 +1489,7 @@ public sealed partial class MainWindow
         await NextLayoutAsync();
     }
 
-    private async Task VerifyExtendedSettingsAsync(string output, Action<bool, string> check)
+    private async Task VerifyExtendedSettingsAsync(string output, List<string> evidence, Action<bool, string> check)
     {
         FinishEditing();
         _appWindow!.Resize(new Windows.Graphics.SizeInt32(2400, 1500));
@@ -1654,7 +1676,7 @@ public sealed partial class MainWindow
                 source.Data.Bounds.Left > 0 && source.Data.Bounds.Top > 0 &&
                 source.Data.Bounds.Right < 20 && source.Data.Bounds.Bottom < 20;
             check(usesInsetVector, "ink tool vector stays inside its unclipped 20 DIP viewport");
-            check(true, $"ink tool vector bounds {vectorBounds}, inset left {vectorBounds.Left:0.##} right {20 - vectorBounds.Right:0.##}");
+            evidence.Add($"ink tool vector bounds {vectorBounds}, inset left {vectorBounds.Left:0.##} right {20 - vectorBounds.Right:0.##}");
         }
         // 画笔与橡皮按钮：图标必须在按钮内水平、垂直居中且完整可见，圆角必须跟随控制窗圆角。
         double originalScale = _settings.ToolbarScale, originalRadius = _settings.ToolbarRadius;
@@ -1672,7 +1694,7 @@ public sealed partial class MainWindow
                 check(iconBounds.Left >= 8 * scale && button.ActualWidth - iconBounds.Right >= 8 * scale,
                     $"ink icon keeps an even inset inside its button at scale {scale} ({iconBounds.Left:0.##})");
             }
-            check(true, $"ink toolbar geometry at scale {scale}: padding {GlobalInkToolbar.Padding.Left:0.##}, " +
+            evidence.Add($"ink toolbar geometry at scale {scale}: padding {GlobalInkToolbar.Padding.Left:0.##}, " +
                 $"button {_inkPen.ActualWidth:0.##}, corner {_inkPen.CornerRadius.TopLeft:0.##}");
         }
         foreach (double radius in new[] { 0d, 6d, 14d, 30d, 60d })

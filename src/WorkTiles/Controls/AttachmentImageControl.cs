@@ -46,6 +46,7 @@ public sealed class AttachmentImageControl : Grid
     private double _imageAspect;
     private double _imageBaseWidth;
     private readonly TaskCompletionSource<bool> _imageReady = new();
+    private TextBlock? _loadError;
     public Task<bool> ImageReady => _imageReady.Task;
 
     public AttachmentImageControl(AttachmentItem attachment, Action deleteAttachment, Action contentChanged, Action<bool> interactionChanged)
@@ -161,9 +162,13 @@ public sealed class AttachmentImageControl : Grid
             // 按显示框尺寸留 3 倍余量解码（供放大），上限 4096：避免数千像素原图为几百 DIP 的磁贴常驻整幅位图。
             // 等比解码不改变宽高比，下方 AspectRatio 计算仍成立。
             double scale = XamlRoot?.RasterizationScale ?? 1.0;
-            bitmap.DecodePixelWidth = Math.Clamp((int)Math.Ceiling(_imageFrame.Width * scale * 3), 768, 4096);
+            // 只限制长边，另一边按原图比例解码；同时设置宽高会拉伸位图并破坏宽高比。
+            int decode = Math.Clamp((int)Math.Ceiling(Math.Max(_imageFrame.Width, _imageFrame.Height) * scale * 3), 768, 4096);
+            if (_imageFrame.Height > _imageFrame.Width) bitmap.DecodePixelHeight = decode;
+            else bitmap.DecodePixelWidth = decode;
             await bitmap.SetSourceAsync(stream);
             _image.Source = bitmap;
+            if (_loadError is not null) { _imageFrame.Children.Remove(_loadError); _loadError = null; }
             if (bitmap.PixelWidth > 0 && bitmap.PixelHeight > 0)
             {
                 _imageAspect = (double)bitmap.PixelWidth / bitmap.PixelHeight;
@@ -182,14 +187,18 @@ public sealed class AttachmentImageControl : Grid
         catch
         {
             _imageReady.TrySetResult(false);
-            _imageFrame.Children.Insert(1, new TextBlock
+            if (_loadError is null)
             {
-                Text = $"无法读取图片：{_attachment.Name}",
-                HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(12),
-                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 244, 114, 114))
-            });
+                _loadError = new TextBlock
+                {
+                    Text = $"无法读取图片：{_attachment.Name}",
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(12),
+                    Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 244, 114, 114))
+                };
+                _imageFrame.Children.Insert(1, _loadError);
+            }
         }
     }
 
@@ -435,6 +444,7 @@ public sealed class AttachmentImageControl : Grid
         _attachment.OffsetY = 0;
         _attachment.PositionX = 0;
         _attachment.PositionY = 0;
+        _imageBaseWidth = 0;
         ApplyTransforms();
         Area?.InvalidateMeasure();
         _contentChanged();

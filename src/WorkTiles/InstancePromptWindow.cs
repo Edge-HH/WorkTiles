@@ -24,6 +24,7 @@ internal sealed class InstancePromptWindow : Window
     private bool _dismissed;
     private bool _positioned;
     private bool _placing;
+    private DispatcherQueueTimer? _fitTimer;
     private double _placedScale;
 
     public InstancePromptWindow(Func<Task> replace, Action back)
@@ -106,7 +107,7 @@ internal sealed class InstancePromptWindow : Window
         titleBar.ButtonHoverForegroundColor = Microsoft.UI.Colors.White;
         titleBar.ButtonPressedForegroundColor = Microsoft.UI.Colors.White;
 
-        Closed += (_, _) => _dismissed = true;
+        Closed += (_, _) => { _dismissed = true; _fitTimer?.Stop(); };
         nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
         WindowChrome.Round(hwnd);
         // 显示之前窗口 DPI 常常还是 96。缩放稳定后再量一次，否则客户区装不下取消按钮。
@@ -116,18 +117,18 @@ internal sealed class InstancePromptWindow : Window
                 _root.XamlRoot.Changed += (_, _) => PlaceOnScreen();
             DispatcherQueue.TryEnqueue(PlaceOnScreen);
         };
-        DispatcherQueueTimer fitTimer = DispatcherQueue.CreateTimer();
-        fitTimer.Interval = TimeSpan.FromMilliseconds(80);
+        _fitTimer = DispatcherQueue.CreateTimer();
+        _fitTimer.Interval = TimeSpan.FromMilliseconds(80);
         int fitTicks = 0;
-        fitTimer.Tick += (_, _) =>
+        _fitTimer.Tick += (_, _) =>
         {
             PlaceOnScreen();
             fitTicks++;
             uint dpi = WindowChrome.Dpi(WinRT.Interop.WindowNative.GetWindowHandle(this));
             if (fitTicks >= 8 || (dpi >= 96 && Math.Abs(_placedScale - dpi / 96d) < 0.01 && fitTicks >= 2))
-                fitTimer.Stop();
+                _fitTimer.Stop();
         };
-        fitTimer.Start();
+        _fitTimer.Start();
         PlaceOnScreen();
     }
 
@@ -196,7 +197,7 @@ internal sealed class InstancePromptWindow : Window
 
     private void PlaceOnScreen()
     {
-        if (_placing) return;
+        if (_dismissed || _placing) return;
         _placing = true;
         try
         {

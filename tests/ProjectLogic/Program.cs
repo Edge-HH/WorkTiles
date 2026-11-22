@@ -4,10 +4,11 @@ using WorkTiles.Services;
 
 int checks = 0;
 void Check(bool value, string message) { if (!value) throw new Exception(message); checks++; }
-void Reject(Action action, string message)
+void Reject(Action action, string message, params Type[] expected)
 {
     bool rejected = false;
-    try { action(); } catch (Exception ex) when (ex is InvalidDataException or IOException or JsonException or UnauthorizedAccessException or InvalidOperationException) { rejected = true; }
+    try { action(); }
+    catch (Exception ex) when (expected.Any(type => type.IsInstanceOfType(ex))) { rejected = true; }
     Check(rejected, message);
 }
 string root = Path.Combine(Path.GetTempPath(), "WorkTiles-project-tests-" + Guid.NewGuid().ToString("N"));
@@ -34,7 +35,18 @@ try
     ProjectLibrary restored = store.Load();
     Check(restored.ActiveProjectId == first.Id && restored.Projects[0].Subjects[0].X == 48, "项目与布局未恢复");
     Check(File.Exists(restored.Projects[0].Subjects[0].Entries[0].Attachments[0].Path), "附件未独立收纳");
-    Check(!File.ReadAllText(store.LibraryPath).Contains(root.Replace("\\", "\\\\")), "本地附件应使用相对路径");
+    string savedJson = File.ReadAllText(store.LibraryPath);
+    Check(!savedJson.Contains(root.Replace("\\", "\\\\")) && !savedJson.Contains(root.Replace("\\", "/")) &&
+        !savedJson.Contains("file:///"), "本地附件应使用相对路径");
+    // 凭据落盘：设备令牌与 TOTP 密钥必须由 DPAPI 保护，换用户或换机器后解密失败即按需要重新配对处理。
+    library.Settings.CloudSync.DeviceToken = "token-for-test";
+    library.Settings.Lock.TotpSecret = "JBSWY3DPEHPK3PXP";
+    store.Save(library);
+    string credentialFile = File.ReadAllText(store.LibraryPath);
+    Check(!credentialFile.Contains("token-for-test") && !credentialFile.Contains("JBSWY3DPEHPK3PXP"), "设备令牌与 TOTP 密钥不能明文落盘");
+    ProjectLibrary credentialRoundTrip = store.Load();
+    Check(credentialRoundTrip.Settings.CloudSync.DeviceToken == "token-for-test" &&
+        credentialRoundTrip.Settings.Lock.TotpSecret == "JBSWY3DPEHPK3PXP", "凭据应能在本机解密还原");
     Check(restored.Projects[0].ClockInkStrokes.Count == 1 && restored.Projects[0].ClockInkStrokes[0].Points[1].X == 1200, "仅时钟模式的整屏笔迹未随项目文件往返");
     ProjectDocument reset = ProjectStore.Create(library, true);
     Check(reset.Name != first.Name && reset.Subjects.Count == 1, "同日项目名或模板错误");
@@ -60,27 +72,27 @@ try
     Check(new WthPackageService(secondStore).Import(legacyPackage).Name == "重命名", "旧 .pch 作业包无法导入");
     byte[] before = File.ReadAllBytes(package);
     File.Delete(image.Path);
-    Reject(() => new WthPackageService(secondStore).Save(imported, package), "缺失附件应阻止保存");
+    Reject(() => new WthPackageService(secondStore).Save(imported, package), "缺失附件应阻止保存", typeof(FileNotFoundException));
     Check(File.ReadAllBytes(package).SequenceEqual(before), "失败保存损坏原包");
-    Reject(() => service.Save(first, store.DirectoryPath), "不可写目标应报告失败");
+    Reject(() => service.Save(first, store.DirectoryPath), "不可写目标应报告失败", typeof(IOException), typeof(UnauthorizedAccessException));
     Check(File.ReadAllBytes(package).SequenceEqual(before), "失败写入污染其他文件");
     foreach (string bad in new[] { "../escape", "assets/../../escape", "assets/.. ", "assets/x:stream", "assets/abc/def", "assets/CON", "assets/x\\..\\z" })
         Check(!WthPackageService.IsAssetPath(bad), "危险资源路径被接受：" + bad);
     string malicious = Path.Combine(root, "bad.wth");
     using (ZipArchive zip = ZipFile.Open(malicious, ZipArchiveMode.Create)) zip.CreateEntry("../escape");
-    Reject(() => service.Import(malicious), "ZIP 越界路径被接受");
+    Reject(() => service.Import(malicious), "ZIP 越界路径被接受", typeof(InvalidDataException));
     string broken = Path.Combine(root, "broken.wth"); File.WriteAllText(broken, "broken");
-    Reject(() => service.Import(broken), "损坏包被接受");
+    Reject(() => service.Import(broken), "损坏包被接受", typeof(JsonException), typeof(InvalidDataException));
     string incomplete = Path.Combine(root, "missing.wth");
     var noAssets = ProjectStore.Clone(first); noAssets.Subjects[0].Entries[0].Attachments[0].Path = "assets/" + new string('a', 32) + ".png";
     using (ZipArchive zip = ZipFile.Open(incomplete, ZipArchiveMode.Create))
     using (Stream s = zip.CreateEntry("project.json").Open()) JsonSerializer.Serialize(s, noAssets);
-    Reject(() => service.Import(incomplete), "包内缺少附件仍然导入");
+    Reject(() => service.Import(incomplete), "包内缺少附件仍然导入", typeof(InvalidDataException));
     noAssets.Version = 2;
-    Reject(() => ProjectValidation.Validate(noAssets, true), "未知版本被接受");
+    Reject(() => ProjectValidation.Validate(noAssets, true), "未知版本被接受", typeof(InvalidDataException));
     ProjectDocument badClockInk = ProjectStore.Clone(first);
     badClockInk.ClockInkStrokes[0].Thickness = 0;
-    Reject(() => ProjectValidation.Validate(badClockInk, false), "无效的整屏笔迹被接受");
+    Reject(() => ProjectValidation.Validate(badClockInk, false), "无效的整屏笔迹被接受", typeof(InvalidDataException));
     ProjectDocument missingClockInk = ProjectStore.Clone(first);
     missingClockInk.ClockInkStrokes = null!;
     ProjectValidation.Validate(missingClockInk, false);
@@ -90,7 +102,7 @@ try
     customPalette.CustomPalette = [..customPalette.CustomPalettes[0].Colors];
     ProjectValidation.Validate(customPalette, false);
     customPalette.Palette = "不存在的色系";
-    Reject(() => ProjectValidation.Validate(customPalette, false), "未登记的自定义色系被接受");
+    Reject(() => ProjectValidation.Validate(customPalette, false), "未登记的自定义色系被接受", typeof(InvalidDataException));
     (double cropX, double cropY) = ImageCropGeometry.RotateOffset(40, 10, 90);
     Check(cropX == -10 && cropY == 40, "顺时针旋转后裁切偏移应跟着画面转");
     (cropX, cropY) = ImageCropGeometry.RotateOffset(40, 10, -90);
@@ -123,7 +135,7 @@ try
     }
     var alignedSizes = BoardLayout.AlignSizes([(300, 100), (310, 112), (500, 300)]);
     Check(alignedSizes[0] == (310, 112) && alignedSizes[1] == (310, 112) && alignedSizes[2] == (500, 300), "相近尺寸只向上对齐且不扩张无关尺寸");
-    Reject(() => BoardLayout.Arrange([(500, 400)], 300, 200), "不能为自动排列裁掉内容");
+    Reject(() => BoardLayout.Arrange([(500, 400)], 300, 200), "不能为自动排列裁掉内容", typeof(InvalidOperationException));
     var exportPacked = ExportLayout.Arrange([(300, 100), (300, 100)], 1000, 500, 80, 20);
     Check(exportPacked[0].X == 0 && exportPacked[0].Y == 80 && exportPacked[1].X == 320 && exportPacked[1].Scale == 1, "导出继承间隔并向左上排紧");
     var packed = BoardLayout.Arrange([(432, 336), (432, 336), (432, 336)], 1100, 780, 0, true, 48);
@@ -138,7 +150,7 @@ try
         Check(compact.All(p => p.X >= 0 && p.Y >= 0 && p.X + p.Width <= 1200 && p.Y + p.Height <= 1600), "紧密排列不得越界");
         Check(!compact.SelectMany((p, i) => compact.Skip(i + 1).Select(q => p.X < q.X + q.Width && p.X + p.Width > q.X && p.Y < q.Y + q.Height && p.Y + p.Height > q.Y)).Any(v => v), "紧密排列不得重叠");
     }
-    Reject(() => BoardLayout.Arrange([(400, 300)], 250, 90), "空间不足应明确报错");
+    Reject(() => BoardLayout.Arrange([(400, 300)], 250, 90), "空间不足应明确报错", typeof(InvalidOperationException));
     var centered = BoardLayout.Snap(new(347, 249, 300, 200), [], 1000, 700);
     Check(centered.X == 350 && centered.Y == 250 && centered.GuideX == 500 && centered.GuideY == 350, "看板中心吸附错误");
     var adjacent = BoardLayout.Snap(new(397, 104, 300, 200), [new(100, 100, 300, 200)], 1200, 800);

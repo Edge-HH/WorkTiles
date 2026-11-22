@@ -28,7 +28,6 @@ public sealed class RecentImagesView : StackPanel
             VerticalScrollMode = ScrollMode.Disabled });
         Loaded += (_, _) => { _library.Changed += Refresh; Refresh(); };
         Unloaded += (_, _) => _library.Changed -= Refresh;
-        Refresh();
     }
     private void Refresh()
     {

@@ -19,6 +19,10 @@ public sealed class BoardSettingsState
 
     public string LayoutMode { get; set; } = "Split";
     public double SplitRatio { get; set; } = 0.4;
+    /// <summary>分屏方向：Horizontal 左右分屏（默认），Vertical 上下分屏。窗口大小不再自动改变方向。</summary>
+    public string SplitOrientation { get; set; } = "Horizontal";
+    /// <summary>分屏时对调两个区域：false 为时钟在前、作业在后，true 为作业在前、时钟在后。</summary>
+    public bool SplitSwapped { get; set; }
     public int DockedWidgetLayoutVersion { get; set; }
     // 按布局模式和稳定组件标识保存位置，避免受约束布局覆盖自由布局坐标。
     public Dictionary<string, RegionPlacement> Widgets { get; set; } = new();
@@ -246,7 +250,7 @@ public static class BackupScopeExtensions
 }
 
 /// <summary>
-/// 锁定设置属于软件设置，跨项目共享；只保存密码哈希与 2FA 密钥，不保存明文。
+/// 锁定设置属于软件设置，跨项目共享；密码只保存 PBKDF2 哈希与盐，2FA 密钥落盘时由 DPAPI 加密。
 /// 总开关开启但密码与 2FA 都未配置时不生效，具体判断见 LockService.IsEnforced。
 /// </summary>
 public sealed class LockSettings

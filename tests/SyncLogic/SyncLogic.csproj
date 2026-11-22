@@ -11,6 +11,7 @@
     <ProjectReference Include="$(WorkTilesServerDir)src/WorkTiles.Server/WorkTiles.Server.csproj" />
     <Compile Include="../../src/WorkTiles/Services/ProjectState.cs" Link="Desktop/ProjectState.cs" />
     <Compile Include="../../src/WorkTiles/Services/ProjectStore.cs" Link="Desktop/ProjectStore.cs" />
+    <Compile Include="../../src/WorkTiles/Services/SecretProtector.cs" Link="Desktop/SecretProtector.cs" />
     <Compile Include="../../src/WorkTiles/Services/CloudPayload.cs" Link="Desktop/CloudPayload.cs" />
     <Compile Include="../../src/WorkTiles/Services/CloudSyncService.cs" Link="Desktop/CloudSyncService.cs" />
     <Compile Include="../../src/WorkTiles/Services/CloudRealtimeClient.cs" Link="Desktop/CloudRealtimeClient.cs" />

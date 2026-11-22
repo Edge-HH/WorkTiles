@@ -64,8 +64,9 @@ public sealed partial class MainWindow
     {
         if ((!_isEditing && !_desktopEditing) || CurrentProject is not { } project || _editLockGranted != project.Id) { _editLockHeartbeat.Stop(); return; }
         CloudSyncService.EditLockResult result = await CloudSync.AcquireEditLockAsync(_settings.CloudSync, project.Id);
-        if (!result.Acquired && _isEditing && CurrentProject?.Id == project.Id && result.HeldBy?.Holder == EditLockHolders.User)
-            EndEditingForCloud(project, result.HeldBy.Name);
+        if (result.Acquired || CurrentProject?.Id != project.Id) return;
+        if (_isEditing) EndEditingForCloud(project, result.HeldBy?.Name);
+        if (_desktopEditing) EndDesktopEditForCloud(project, result.HeldBy?.Name);
     }
 
     /// <summary>
@@ -92,7 +93,7 @@ public sealed partial class MainWindow
     /// <summary>每次同步结束后：等待释放的项目已经上传（不在队列里了）就释放占用。</summary>
     private void ReleaseEditLockIfUploaded()
     {
-        if (_editLockReleaseAfterSync is not { } id || _isEditing || CloudSyncService.IsPending(_library, id)) return;
+        if (_editLockReleaseAfterSync is not { } id || _isEditing || _desktopEditing || CloudSyncService.IsPending(_library, id)) return;
         _editLockReleaseAfterSync = null;
         _ = CloudSync.ReleaseEditLockAsync(_settings.CloudSync, id);
     }
@@ -111,6 +112,10 @@ public sealed partial class MainWindow
     private void OnEndEditRequested(Guid projectId, string? requester)
     {
         if (_isEditing && CurrentProject is { } project && project.Id == projectId) { EndEditingForCloud(project, requester); return; }
+        if (_desktopEditing && CurrentProject is { } desktopProject && desktopProject.Id == projectId)
+        { EndDesktopEditForCloud(desktopProject, requester); return; }
+        // 还有修改没上传时等上传完再释放，网页才能载入大屏刚保存的内容。
+        if (_editLockReleaseAfterSync == projectId) { ReleaseEditLockIfUploaded(); return; }
         if (_editLockGranted == projectId) _editLockGranted = null;
         _ = CloudSync.ReleaseEditLockAsync(_settings.CloudSync, projectId);
     }
@@ -120,5 +125,13 @@ public sealed partial class MainWindow
         FinishEditing();
         string who = string.IsNullOrWhiteSpace(requester) ? "网页上的老师" : requester;
         ShowCloudNotice($"{who}请求在网页上编辑“{project.Name}”，已保存本机修改并退出编辑模式。", InfoBarSeverity.Informational);
+    }
+
+    private void EndDesktopEditForCloud(ProjectDocument project, string? requester)
+    {
+        PersistProjects();
+        EndDesktopEdit();
+        string who = string.IsNullOrWhiteSpace(requester) ? "网页上的老师" : requester;
+        ShowCloudNotice($"{who}已开始编辑“{project.Name}”，本机修改已保存并退出桌面磁贴编辑。", InfoBarSeverity.Informational);
     }
 }

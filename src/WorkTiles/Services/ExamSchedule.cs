@@ -28,6 +28,7 @@ public static class ExamSchedule
     /// 当天最后一段结束后回到 null；不同日期的窗口互不影响。非法段（结束不晚于开始、考试段缺科目）
     /// 与重叠段会被忽略，保证时间轴单调。
     /// </summary>
+    // 考试时刻按墙钟解释；有夏令时的时区在秋季回拨小时内的行为未定义。
     public static ExamDisplay? Evaluate(ExamScheduleDto? schedule, DateTime now)
     {
         if (schedule?.Days is not { Count: > 0 } days) return null;

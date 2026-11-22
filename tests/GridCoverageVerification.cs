@@ -64,42 +64,42 @@ public sealed partial class MainWindow
 
         // 固定作业板缩小：视口露出初始屏幕外的四周，网格也要铺到那里。
         SetBoardZoom(.8); await NextLayoutAsync();
-        CheckGridCoversViewport("fixed board zoomed out to 80%", check);
+        CheckGridCoversViewport("fixed board zoomed out to 80%", evidence, check);
 
         // 无限作业板缩小：同一要求。
         _settings.InfiniteBoard = true; ApplyExtendedSettings(); await NextLayoutAsync();
         SetBoardZoom(.35); await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board zoomed out to 35%", check);
+        CheckGridCoversViewport("infinite board zoomed out to 35%", evidence, check);
 
         // 无限作业板平移回 100% 后到初始屏幕外的区域，网格必须跟着走。
         SetBoardZoom(1); await NextLayoutAsync();
         BoardScroller.ChangeView(Math.Max(0, BoardSurface.Width / 2), Math.Max(0, BoardSurface.Height / 2), null, true);
         await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board panned past the startup screen", check);
+        CheckGridCoversViewport("infinite board panned past the startup screen", evidence, check);
 
         // 点阵样式同样铺满可见区域。
         _settings.GridStyle = "Dots"; ApplyExtendedSettings(); await NextLayoutAsync();
-        CheckGridCoversViewport("dot grid on the panned infinite board", check);
+        CheckGridCoversViewport("dot grid on the panned infinite board", evidence, check);
 
         // 缩放≠1 时平移：判别 offset 坐标语义（网格窗口用 offset/ZoomFactor 换算，缩放后拖动正是用户的无限板用法）。
         _settings.GridStyle = "Grid"; ApplyExtendedSettings(); await NextLayoutAsync();
         SetBoardZoom(.5); await NextLayoutAsync();
         BoardScroller.ChangeView(900, 450, null, true); await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board panned at 50% zoom", check);
+        CheckGridCoversViewport("infinite board panned at 50% zoom", evidence, check);
         SetBoardZoom(1.8); await NextLayoutAsync();
         BoardScroller.ChangeView(400, 200, null, true); await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board panned at 180% zoom", check);
+        CheckGridCoversViewport("infinite board panned at 180% zoom", evidence, check);
 
         // 视口变大但板尺寸不变（无 ViewChanged 的路径）：全屏切换与分栏比例变化后网格必须覆盖新视口。
         SetBoardZoom(1); BoardScroller.ChangeView(0, 0, 1, true); await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board back at 100% before viewport growth", check);
+        CheckGridCoversViewport("infinite board back at 100% before viewport growth", evidence, check);
         SetFullScreen(true); await NextLayoutAsync(); await Task.Delay(400); await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board after entering fullscreen", check);
+        CheckGridCoversViewport("infinite board after entering fullscreen", evidence, check);
         SetFullScreen(false); await NextLayoutAsync(); await Task.Delay(400); await NextLayoutAsync();
         double splitRatio = _settings.SplitRatio;
         // 减小时钟区占比，让作业板视口变大（视口变大而画板尺寸不变，正是缓存键缺窗口时漏画的路径）。
         _settings.SplitRatio = Math.Max(.05, splitRatio - .3); ApplyExtendedSettings(); await NextLayoutAsync();
-        CheckGridCoversViewport("infinite board after split ratio growth", check);
+        CheckGridCoversViewport("infinite board after split ratio growth", evidence, check);
         _settings.SplitRatio = splitRatio; ApplyExtendedSettings(); await NextLayoutAsync();
     }
 
@@ -113,7 +113,9 @@ public sealed partial class MainWindow
     }
 
     /// <summary>断言网格标记从四边都覆盖到可见区域边缘（允许一个网格间距的余量），否则大面积空白即用户症状。</summary>
-    private void CheckGridCoversViewport(string label, Action<bool, string> check)
+    private void CheckGridCoversViewport(string label, Action<bool, string> check) => CheckGridCoversViewport(label, null, check);
+
+    private void CheckGridCoversViewport(string label, List<string>? evidence, Action<bool, string> check)
     {
         (double left, double top, double right, double bottom) = VisibleContentRect();
         // 视口没有实际尺寸时可见矩形会退化为一个点，下面的断言会恒真——先卡住这种情况。
@@ -129,7 +131,7 @@ public sealed partial class MainWindow
         double maxX = usesDots && dots.Count > 0 ? dots.Max(dot => dot.X) : verticalLines.Count > 0 ? verticalLines.Max() : double.NaN;
         double minY = usesDots && dots.Count > 0 ? dots.Min(dot => dot.Y) : horizontalLines.Count > 0 ? horizontalLines.Min() : double.NaN;
         double maxY = usesDots && dots.Count > 0 ? dots.Max(dot => dot.Y) : horizontalLines.Count > 0 ? horizontalLines.Max() : double.NaN;
-        check(true, $"{label}: visible=({left:0.#},{top:0.#})-({right:0.#},{bottom:0.#}) gridX=({minX:0.#}..{maxX:0.#}) gridY=({minY:0.#}..{maxY:0.#}) marks={(usesDots ? dots.Count : verticalLines.Count + horizontalLines.Count)}");
+        evidence?.Add($"{label}: visible=({left:0.#},{top:0.#})-({right:0.#},{bottom:0.#}) gridX=({minX:0.#}..{maxX:0.#}) gridY=({minY:0.#}..{maxY:0.#}) marks={(usesDots ? dots.Count : verticalLines.Count + horizontalLines.Count)}");
         check(!double.IsNaN(maxX), label + ": grid marks exist");
         check(maxX >= right - cell, label + ": grid reaches the right visible edge");
         check(maxY >= bottom - cell, label + ": grid reaches the bottom visible edge");

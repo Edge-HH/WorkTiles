@@ -319,7 +319,7 @@ public sealed class CloudSyncService(ProjectStore store)
             }
             asset.Path = target;
         }
-        string payload = CloudPayload.BuildProjectPayload(remote, MapKnown);
+        string payload = await Task.Run(() => CloudPayload.BuildProjectPayload(remote, MapKnown));
         remote.SyncHash = CloudPayload.Hash(payload);
         _projectBases[remote.Id] = payload;
         return remote;
@@ -352,7 +352,8 @@ public sealed class CloudSyncService(ProjectStore store)
             ProjectDocument? project = library.Projects.FirstOrDefault(x => x.Id == operation.ProjectId);
             if (project is null) { library.SyncQueue.Remove(operation); continue; }
 
-            string payload = CloudPayload.BuildProjectPayload(project, MapKnown);
+            ProjectDocument payloadSource = ProjectStore.Clone(project);
+            string payload = await Task.Run(() => CloudPayload.BuildProjectPayload(payloadSource, MapKnown));
             string hash = CloudPayload.Hash(payload);
             if (project.SyncRevision > 0 && hash == project.SyncHash) { library.SyncQueue.Remove(operation); wrote |= _newerWhilePending.Remove(project.Id); continue; }
 
@@ -374,7 +375,9 @@ public sealed class CloudSyncService(ProjectStore store)
             }
             if (mapped.Values.Any(x => x is null))
             {
-                payload = CloudPayload.BuildProjectPayload(project, path => mapped.GetValueOrDefault(path));
+                ProjectDocument mappedSource = ProjectStore.Clone(project);
+                Dictionary<string, string?> mappedCopy = new(mapped);
+                payload = await Task.Run(() => CloudPayload.BuildProjectPayload(mappedSource, path => mappedCopy.GetValueOrDefault(path)));
                 hash = CloudPayload.Hash(payload);
             }
 
@@ -443,15 +446,17 @@ public sealed class CloudSyncService(ProjectStore store)
         ProjectDocument? remote = await MaterializeAsync(cloud, conflict.ServerVersion, cancellationToken);
         if (remote is null) return false;
 
-        // 两边改的是不同科目：合并后以服务器修订为基础重新上传，不另存副本。
+        // 两边改的内容不冲突：合并后以服务器修订为基础重新上传，不另存副本。
+        ProjectDocument localSnapshot = ProjectStore.Clone(project);
+        string localPayload = await Task.Run(() => CloudPayload.BuildProjectPayload(localSnapshot, MapKnown));
         if (basePayload is not null && _projectBases.GetValueOrDefault(remote.Id) is { } remotePayload
-            && ProjectMerge.Merge(basePayload, project, CloudPayload.BuildProjectPayload(project, MapKnown), remote, remotePayload) is { } merged)
+            && ProjectMerge.Merge(basePayload, localSnapshot, localPayload, remote, remotePayload) is { } merged)
         {
             library.SyncQueue.Remove(operation);
             Install(library, project, merged);
             Queue(library, merged);
             hooks.ProjectReplaced(merged.Id);
-            _notices.Add($"“{project.Name}”同时在其他地方被修改，两边改的是不同科目，已自动合并。");
+            _notices.Add($"“{project.Name}”同时在其他地方被修改，两边改的内容不冲突，已自动合并。");
             _again = true;
             return true;
         }
@@ -789,7 +794,8 @@ public sealed class CloudSyncService(ProjectStore store)
     /// <summary>确保文件已在服务器上；返回资源引用，失败返回 null 并记录原因。</summary>
     private async Task<string?> UploadAssetAsync(CloudSyncSettings cloud, string path, CancellationToken cancellationToken)
     {
-        if (_hasher.Sha256Of(path) is not { } sha) return null;
+        string? computed = await Task.Run(() => _hasher.Sha256Of(path));
+        if (computed is not { } sha) return null;
         string reference = AssetReference.Create(sha, Path.GetExtension(path));
         string key = $"{cloud.ClassId}/{sha}";
         if (_uploaded.Contains(key)) return reference;
@@ -810,7 +816,7 @@ public sealed class CloudSyncService(ProjectStore store)
 
     private async Task<bool> DownloadAssetAsync(CloudSyncSettings cloud, string sha, string target, CancellationToken cancellationToken)
     {
-        if (File.Exists(target) && _hasher.Sha256Of(target) == sha) return true;
+        if (File.Exists(target) && await Task.Run(() => _hasher.Sha256Of(target)) == sha) return true;
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         string temporary = target + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -819,7 +825,7 @@ public sealed class CloudSyncService(ProjectStore store)
             if (!response.IsSuccessStatusCode) return false;
             await using (FileStream output = new(temporary, FileMode.CreateNew, FileAccess.Write))
                 await response.Content.CopyToAsync(output, cancellationToken);
-            if (_hasher.Sha256Of(temporary) != sha) return false;
+            if (await Task.Run(() => _hasher.Sha256Of(temporary)) != sha) return false;
             File.Move(temporary, target, true);
             _hasher.Remember(target, sha);
             _uploaded.Add($"{cloud.ClassId}/{sha}");

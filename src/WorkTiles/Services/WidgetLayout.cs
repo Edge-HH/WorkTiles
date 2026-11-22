@@ -28,7 +28,16 @@ public static class WidgetLayout
         placement.Height = placement.Width / safeAspect;
         MoveVerticallyCentered(placement, 0, width, height);
     }
-    public static string CompleteSplit(double ratio) => ratio <= .04 ? "Board" : ratio >= .96 ? "Clock" : "Split";
+    /// <summary>
+    /// 分隔条拖到两端时返回剩余的单区模式。比例始终表示第一块区域的占比；
+    /// clockFirst 为 false 时第一块是作业板，因此两端的单区结果也要对调。
+    /// </summary>
+    public static string CompleteSplit(double ratio, bool clockFirst = true)
+    {
+        string completed = ratio <= .04 ? "Board" : ratio >= .96 ? "Clock" : "Split";
+        if (clockFirst) return completed;
+        return completed switch { "Board" => "Clock", "Clock" => "Board", _ => "Split" };
+    }
     public static Dictionary<string, RegionPlacement> Copy(IReadOnlyDictionary<string, RegionPlacement> placements) => placements.ToDictionary(p => p.Key,
         p => new RegionPlacement { X = p.Value.X, Y = p.Value.Y, Width = p.Value.Width, Height = p.Value.Height });
 }

@@ -173,6 +173,7 @@ public sealed partial class MainWindow
     {
         if (_projectOperation) return;
         _projectOperation = true;
+        bool saveWasPending = _saveTimer.IsEnabled;
         _saveTimer.Stop();
         CaptureCurrentProject();
         ProjectLibrary before = ProjectStore.Clone(_library);
@@ -180,7 +181,8 @@ public sealed partial class MainWindow
         catch (Exception ex)
         {
             // 磁盘写入失败时恢复本轮操作前的内存内容；外部成功保存的文件不会被回滚或删除。
-            _library = before;
+            // 原地恢复设置，保留设置页和媒体编辑器闭包持有的子对象身份；整体替换会让它们写到孤儿对象。
+            SettingsCopy.Into(_library, before);
             _settings = _library.Settings;
             ViewModel.ReplaceSubjects(AppDataStore.RestoreSubjects(CurrentProject?.Subjects ?? []));
             LoadClockInk();
@@ -188,9 +190,19 @@ public sealed partial class MainWindow
             _isEditing = false;
             BuildTiles();
             UpdateRichTextToolbar();
+            RefreshSettingControls();
+            _refreshSubjectAutofill?.Invoke();
+            _refreshHomeworkAutofill?.Invoke();
+            ApplyExtendedSettings();
             ReportStorageError("操作未完成", ex);
         }
-        finally { _projectOperation = false; UpdateProjectCommands(); }
+        finally
+        {
+            _projectOperation = false;
+            // 早退或异常路径不能把进入事务前积压的自动保存丢掉。
+            if (saveWasPending && _isLoaded && _settings.AutoSaveEnabled) _saveTimer.Start();
+            UpdateProjectCommands();
+        }
     }
 
     private void RecentProjects_Opening(object sender, object e)
@@ -204,10 +216,13 @@ public sealed partial class MainWindow
                 content.Children.Add(new FluentIcon { Symbol = "CloudCheckmark", Foreground = (Brush)Application.Current.Resources["BoardSuccessBrush"], FontSize = 14 });
             Button button = new() { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left };
             ToolTipService.SetToolTip(button, $"创建于 {project.CreatedAt:yyyy年M月d日 HH:mm}");
+            Guid projectId = project.Id;
             button.Click += async (_, _) =>
             {
                 ProjectPicker.Flyout.Hide();
-                await RunProjectAction(async () => await SwitchProjectAsync(project));
+                ProjectDocument? current = _library.Projects.FirstOrDefault(p => p.Id == projectId);
+                if (current is null) return;
+                await RunProjectAction(async () => await SwitchProjectAsync(current));
             };
             // 静止底是系统淡白填充。条目在打开下拉时才生成，模板往往晚于第一次排版，过渡要等展开后再拆。
             button.Background = BoardTheme.ButtonClearBrush;
@@ -274,7 +289,7 @@ public sealed partial class MainWindow
         ContentDialog dialog = new()
         {
             XamlRoot = RootShell.XamlRoot, Title = "新建作业项目", Content = "原项目会保留。请选择新项目要保留的内容。",
-            PrimaryButtonText = "重置作业", SecondaryButtonText = "重置作业和科目布局", CloseButtonText = "取消"
+            PrimaryButtonText = "保留布局", SecondaryButtonText = "全部清空", CloseButtonText = "取消"
         };
         ContentDialogResult choice = await dialog.ShowAsync();
         if (choice == ContentDialogResult.None) return;
@@ -307,7 +322,7 @@ public sealed partial class MainWindow
         await ActivateProjectAsync(_library.Projects.OrderByDescending(p => p.LastUsedAt).FirstOrDefault());
         // 清单提交后才回收附件；清理失败仅留下无引用资源，不恢复已经删除的项目。
         try { _projectStore.DeleteAssets(project.Id); }
-        catch (IOException ex) { ReportStorageError("项目已删除，附件目录未能清理", ex); }
+        catch (Exception ex) { ReportStorageError("项目已删除，附件目录未能清理", ex); }
     });
 
     private void InitializePicker(object picker) => WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
@@ -320,10 +335,19 @@ public sealed partial class MainWindow
         ProjectDocument? existing = _library.Projects.FirstOrDefault(p => string.Equals(p.LinkedFile, file.Path, StringComparison.OrdinalIgnoreCase));
         if (existing is not null) { await SwitchProjectAsync(existing); return; }
         ProjectDocument imported = new WthPackageService(_projectStore).Import(file.Path);
-        if (_isEditing) FinishEditing();
-        PersistProjects();
-        _library.Projects.Add(imported);
-        await ActivateProjectAsync(imported);
+        try
+        {
+            if (_isEditing) FinishEditing();
+            PersistProjects();
+            _library.Projects.Add(imported);
+            await ActivateProjectAsync(imported);
+        }
+        catch
+        {
+            // 清单提交失败时回收刚解包的附件，避免留下无引用的孤儿资源。
+            try { _projectStore.DeleteAssets(imported.Id); } catch (Exception) { }
+            throw;
+        }
     });
 
     private async void SaveProject_Click(object sender, RoutedEventArgs e) => await RunProjectAction(async () =>
@@ -351,7 +375,11 @@ public sealed partial class MainWindow
         catch
         {
             // FileSavePicker 可能预先创建空文件；打包失败时不留下看似有效的残缺作业文件。
-            if (removeEmptyPickerFileOnFailure && File.Exists(path) && new FileInfo(path).Length == 0) File.Delete(path);
+            try
+            {
+                if (removeEmptyPickerFileOnFailure && File.Exists(path) && new FileInfo(path).Length == 0) File.Delete(path);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException) { }
             throw;
         }
         project.Theme = copy.Theme; project.Palette = copy.Palette; project.CustomPalette = [..(copy.CustomPalette ?? [])]; project.CustomPalettes = copy.CustomPalettes ?? []; project.LinkedFile = path;

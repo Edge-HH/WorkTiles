@@ -700,6 +700,18 @@ public sealed partial class MainWindow
         List<DesktopTilePlacement> list = Placements();
         List<DesktopTilePlacement> pool = list.ToList();
         List<(double X, double Y, double Width, double Height)> occupied = [];
+        bool OnAnyDisplay(RectInt32 rect)
+        {
+            Windows.Graphics.PointInt32[] corners =
+            [
+                new(rect.X, rect.Y),
+                new(rect.X + rect.Width - 1, rect.Y),
+                new(rect.X, rect.Y + rect.Height - 1),
+                new(rect.X + rect.Width - 1, rect.Y + rect.Height - 1)
+            ];
+            return corners.Any(point => Microsoft.UI.Windowing.DisplayArea.GetFromPoint(
+                point, Microsoft.UI.Windowing.DisplayAreaFallback.None) is not null);
+        }
         foreach (SubjectBoard subject in _desktopSubjects)
         {
             double width = subject.TileWidth * zoom;
@@ -713,12 +725,25 @@ public sealed partial class MainWindow
                 list.Add(saved);
                 ScheduleSave();
             }
-            occupied.Add((saved.X, saved.Y, width, height));
             RectInt32 pixels = new(
                 (int)Math.Round((_desktopWorkX / _desktopScale + saved.X) * _desktopScale),
                 (int)Math.Round((_desktopWorkY / _desktopScale + saved.Y) * _desktopScale),
                 Math.Max(1, (int)Math.Round(width * _desktopScale)),
                 Math.Max(1, (int)Math.Round(height * _desktopScale)));
+            // 分辨率变小或副屏拔掉后，旧坐标可能整块落在所有显示器之外；移到当前工作区的空位。
+            if (!OnAnyDisplay(pixels))
+            {
+                (double x, double y) = NextFreeSpot(work, width, height, occupied, DesktopLayoutGap);
+                saved.X = x;
+                saved.Y = y;
+                pixels = new RectInt32(
+                    (int)Math.Round((_desktopWorkX / _desktopScale + x) * _desktopScale),
+                    (int)Math.Round((_desktopWorkY / _desktopScale + y) * _desktopScale),
+                    Math.Max(1, (int)Math.Round(width * _desktopScale)),
+                    Math.Max(1, (int)Math.Round(height * _desktopScale)));
+                ScheduleSave();
+            }
+            occupied.Add((saved.X, saved.Y, width, height));
             PlaceSubjectWindow(subject, pixels, subject.TileWidth, subject.TileHeight);
         }
     }
@@ -733,10 +758,12 @@ public sealed partial class MainWindow
             top < item.Y + item.Height + gap && top + height + gap > item.Y);
         while (Overlaps(x, y) && y + height <= work.Height + 0.001)
             y += height + gap;
-        if (y + height > work.Height + 0.001 && x > 0)
+        while (y + height > work.Height + 0.001 && x > 0)
         {
             x = Math.Max(0, x - width - gap);
             y = 0;
+            while (Overlaps(x, y) && y + height <= work.Height + 0.001)
+                y += height + gap;
         }
         return (x, y);
     }

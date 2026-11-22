@@ -16,7 +16,7 @@ public sealed partial class MainWindow
     {
         StackPanel page = SettingsStack();
         page.Children.Add(Toggle("启用锁定", _settings.Lock.Enabled, value => _settings.Lock.Enabled = value,
-            () => { SettingChanged(); _refreshLockSettings?.Invoke(); }));
+            () => { SettingChanged(); _refreshLockSettings?.Invoke(); }, read: () => _settings.Lock.Enabled));
         page.Children.Add(Note("锁定只在设置过密码或两步验证后生效；都没有配置时不锁定，避免把自己关在门外。密码只保存哈希，不保存明文。"));
 
         page.Children.Add(Heading("密码"));
@@ -28,8 +28,10 @@ public sealed partial class MainWindow
         page.Children.Add(totpArea);
 
         page.Children.Add(Heading("需要验证的操作"));
-        page.Children.Add(Toggle("打开设置前要求验证", _settings.Lock.RequireAuthForSettings, value => _settings.Lock.RequireAuthForSettings = value));
-        page.Children.Add(Toggle("编辑看板前要求验证", _settings.Lock.RequireAuthForEditing, value => _settings.Lock.RequireAuthForEditing = value));
+        page.Children.Add(Toggle("打开设置前要求验证", _settings.Lock.RequireAuthForSettings, value => _settings.Lock.RequireAuthForSettings = value,
+            read: () => _settings.Lock.RequireAuthForSettings));
+        page.Children.Add(Toggle("编辑看板前要求验证", _settings.Lock.RequireAuthForEditing, value => _settings.Lock.RequireAuthForEditing = value,
+            read: () => _settings.Lock.RequireAuthForEditing));
 
         void Refresh()
         {
@@ -250,11 +252,16 @@ public sealed partial class MainWindow
         !_editAuthGranted && LockService.IsEnforced(_settings.Lock) && _settings.Lock.RequireAuthForEditing;
 
     /// <summary>需要验证时先弹出解锁对话框，通过后再进入编辑；同步调用方只管触发。</summary>
-    private void RequestEditAuthThenEnter()
+    private void RequestEditAuthThenEnter() => RunAfterEditAuth(EnterEditing);
+
+    /// <summary>需要编辑验证时先解锁，通过后执行动作；托盘等同步入口只管触发。</summary>
+    private void RunAfterEditAuth(Action action)
     {
-        if (!NeedsEditAuth()) { EnterEditing(); return; }
+        if (!NeedsEditAuth()) { action(); return; }
         // 弹窗尚未结束时重复点击不叠新对话框。
         if (_editAuthPending) return;
+        // 静默启动时窗口可能还藏着，验证框必须显示在可见窗口上。
+        if (!AppWindow.IsVisible) { AppWindow.Show(); Activate(); }
         _editAuthPending = true;
         DispatcherQueue.TryEnqueue(async () =>
         {
@@ -263,7 +270,7 @@ public sealed partial class MainWindow
                 if (await UnlockAsync())
                 {
                     _editAuthGranted = true;
-                    EnterEditing();
+                    action();
                 }
                 else ReleaseUnusedEditLock();
             }
@@ -292,9 +299,11 @@ public sealed partial class MainWindow
         return ok;
     }
 
-    /// <summary>启动参数直接进设置页的异步入口，验证失败停留在看板。</summary>
-    private async Task TryShowSettingsAsync()
+    /// <summary>启动参数或托盘进设置页的异步入口，验证失败停留在看板；可指定要打开的页。</summary>
+    private async Task TryShowSettingsAsync(string? page = null)
     {
-        if (await AuthorizeAsync()) ShowSettings();
+        if (!await AuthorizeAsync()) return;
+        ShowSettings();
+        if (page is not null) ShowSettingsPage(page);
     }
 }

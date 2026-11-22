@@ -26,9 +26,13 @@ public sealed class XiaomiWeatherService
 
     public static WeatherSnapshot ParseSnapshot(JsonElement root)
     {
-        JsonElement current = root.GetProperty("current");
-        string temperatureText = current.GetProperty("temperature").GetProperty("value").GetString() ?? "";
-        string weatherCode = current.GetProperty("weather").GetString() ?? "";
+        if (!root.TryGetProperty("current", out JsonElement current) ||
+            !current.TryGetProperty("temperature", out JsonElement temperatureNode) ||
+            !temperatureNode.TryGetProperty("value", out JsonElement valueNode) || valueNode.ValueKind != JsonValueKind.String ||
+            !current.TryGetProperty("weather", out JsonElement weatherNode) || weatherNode.ValueKind != JsonValueKind.String)
+            throw new InvalidDataException("小米天气响应缺少当前天气数据。");
+        string temperatureText = valueNode.GetString() ?? "";
+        string weatherCode = weatherNode.GetString() ?? "";
         if (!double.TryParse(temperatureText, NumberStyles.Float, CultureInfo.InvariantCulture, out double temperature))
             throw new InvalidDataException("小米天气响应中的当前温度无效。");
         List<WeatherAlert> alerts = [];

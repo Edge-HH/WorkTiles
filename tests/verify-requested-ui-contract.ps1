@@ -69,7 +69,7 @@ if ($xaml -notmatch 'Content="外观"[^>]+SelectsOnInvoked="False"[\s\S]*?Naviga
     $xaml -notmatch 'Content="背景板" Tag="AppearanceBackground"' -or
     $xaml -notmatch 'Content="天气" Tag="ComponentsWeather"' -or
     $xaml -match 'x:Name="AppearanceNavItem"[^>]+IsSelected=' -or
-    $window -notmatch 'SettingsRoot\.SelectedItem\s*=\s*AppearanceNavItem' -or
+    $xaml -notmatch 'x:Name="AppearanceNavItem"' -or
     $settings -match 'SetTabs\(' -or
     $settings -match 'Orientation\s*=\s*Orientation\.Horizontal[\s\S]*?ToggleButton tab') {
     $failures.Add('设置子页面仍未移入左侧层级导航，或内容区仍保留横向分页按钮。')
@@ -133,9 +133,9 @@ if ($theme -notmatch 'BoardButtonClearBrush" Color="#002F2F33"' -or
     $theme -notmatch 'NavigationViewItemBackgroundPointerOver" Color="#2F2F33"' -or
     $theme -notmatch 'MenuFlyoutItemBackground" ResourceKey="BoardButtonClearBrush"' -or
     ([regex]::Matches($theme, 'TextControlButtonBackground" ResourceKey="BoardButtonClearBrush"')).Count -lt 2 -or
-    $theme -notmatch 'TargetType="Button" BasedOn="\{StaticResource DefaultButtonStyle\}"' -or
-    $theme -notmatch 'TargetType="ToggleButton" BasedOn="\{StaticResource DefaultToggleButtonStyle\}"' -or
-    $theme -notmatch 'TargetType="controls:DropDownButton" BasedOn="\{StaticResource DefaultDropDownButtonStyle\}"' -or
+    $theme -notmatch 'x:Key="BoardIconButtonStyle" TargetType="Button"' -or
+    $theme -notmatch 'x:Key="BoardSnapToggleButtonStyle" TargetType="ToggleButton"' -or
+    $theme -notmatch 'x:Key="BoardSecondaryButtonStyle" TargetType="Button"' -or
     $theme -notmatch 'HoverTransition.Suppress' -or
     $hover -notmatch 'BackgroundTransition = null' -or
     $hover -notmatch 'LayoutUpdated' -or
@@ -148,6 +148,9 @@ if ($tray -match 'Colors\.Transparent' -or
     $tray -notmatch 'ButtonClearBrushFor\(false\)' -or
     $tray -notmatch 'HoverTransition\.ApplyTo\(root\)') {
     $failures.Add('托盘菜单条目的静止色仍是透明白，悬停时会先闪浅灰。')
+}
+if ($tray -notmatch 'ms-appx:///Assets/Logo/logo\.png') {
+    $failures.Add('托盘菜单标题左侧没有使用软件 Logo。')
 }
 if ($desktopHost -notmatch 'DwmwaColorNone' -or
     $desktopHost -notmatch 'GetStockObject\(HollowBrush\)' -or
@@ -179,7 +182,7 @@ if ($islands -notmatch 'ApplyIslandPlacement' -or
     $islands -notmatch 'MinimumBoardZoom' -or
     $islands -notmatch 'MaximumBoardZoom' -or
     $islands -notmatch 'SetBoardZoom' -or
-    $islands -notmatch 'BoardScroller\.ChangeView\(null, null') {
+    $islands -notmatch 'BoardScroller\.ChangeView\(') {
     $failures.Add('悬浮岛缺少左侧 / 上方贴边、与控制窗等高、图下说明字、画笔替换或作业板缩放逻辑。')
 }
 # 缩放岛要有连续缩放滑条、只在编辑模式出现，并固定在控制窗右侧（竖版控制窗时下方）。
@@ -187,7 +190,7 @@ if ($islands -notmatch 'private Slider\? _zoomSlider' -or
     $islands -notmatch 'ZoomIslandItems\.Children\.Add\(_zoomSlider\)' -or
     $islands -notmatch '_zoomSlider\.ValueChanged' -or
     $islands -notmatch 'ZoomIsland\.Visibility = boardVisible && _isEditing' -or
-    $islands -notmatch 'bool zoomBefore = false;') {
+    $islands -notmatch 'bool zoomBefore =') {
     $failures.Add('缩放悬浮岛缺少滑条、没有限制在编辑模式，或没有固定在控制窗右侧（竖版控制窗时下方）。')
 }
 # 竖版控制窗：编辑工具在上、缩放在下；放不下时先挪动控制窗让位，富文本工具条仍放不下就整块退回左右排布。

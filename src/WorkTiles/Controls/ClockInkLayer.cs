@@ -53,6 +53,7 @@ public sealed class ClockInkLayer : Canvas
         _settings = settings;
         IsHitTestVisible = drawing;
         if (drawing) return;
+        EndStroke();
         _pointerId = null;
         _activeStroke = null;
         _activeShape = null;

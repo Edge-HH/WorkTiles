@@ -24,6 +24,7 @@ public sealed class ExportImageView : Grid
     private ImageSource? _blurredBackground, _tileImage;
     private string _backgroundPath = "", _backgroundMode = "Zoom";
     private int _appearanceRevision;
+    private int _tileAppearanceRevision;
     private Task _appearanceTask = Task.CompletedTask;
     private bool _appearanceReady;
     private readonly NumberBox _titleSize = new() { Header = "标题字号", Minimum = 12, Maximum = 200, Value = 48 };
@@ -37,8 +38,8 @@ public sealed class ExportImageView : Grid
     private readonly Canvas _renderHost = new();
     private readonly TextBlock _title = new();
     private readonly TextBlock _status = new() { TextWrapping = TextWrapping.Wrap };
-    private readonly NumberBox _width = new() { Header = "宽度（像素）", Minimum = 256, Maximum = 8192, Value = 1920, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
-    private readonly NumberBox _height = new() { Header = "高度（像素）", Minimum = 256, Maximum = 8192, Value = 1080, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+    private readonly NumberBox _width = new() { Header = "宽度（像素）", Minimum = 256, Maximum = 4096, Value = 1920, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
+    private readonly NumberBox _height = new() { Header = "高度（像素）", Minimum = 256, Maximum = 4096, Value = 1080, SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact };
     private readonly ComboBox _ratio = new() { Header = "画布比例", ItemsSource = new[] { "16:9", "9:16", "4:3", "3:4", "1:1", "自定义" }, SelectedIndex = 0, HorizontalAlignment = HorizontalAlignment.Stretch };
     private readonly TextBox _titleInput = new() { Header = "标题", MaxLength = 200 };
     private readonly CheckBox _showTitle = new() { Content = "显示标题", IsChecked = true };
@@ -188,21 +189,21 @@ public sealed class ExportImageView : Grid
         try
         {
             if (!double.IsFinite(_width.Value) || !double.IsFinite(_height.Value)) return;
-            _width.Value = Math.Clamp(Math.Round(_width.Value), 256, 8192);
-            _height.Value = Math.Clamp(Math.Round(_height.Value), 256, 8192);
+            _width.Value = Math.Clamp(Math.Round(_width.Value), 256, 4096);
+            _height.Value = Math.Clamp(Math.Round(_height.Value), 256, 4096);
             if (_ratio.SelectedIndex < 5)
             {
                 double ratio = new[] { 16d / 9, 9d / 16, 4d / 3, 3d / 4, 1d }[_ratio.SelectedIndex];
                 if (widthChanged || presetChanged)
                 {
                     double targetHeight = Math.Round(_width.Value / ratio);
-                    _height.Value = Math.Clamp(targetHeight, 256, 8192);
+                    _height.Value = Math.Clamp(targetHeight, 256, 4096);
                     if (targetHeight != _height.Value) _width.Value = Math.Round(_height.Value * ratio);
                 }
                 else
                 {
                     double targetWidth = Math.Round(_height.Value * ratio);
-                    _width.Value = Math.Clamp(targetWidth, 256, 8192);
+                    _width.Value = Math.Clamp(targetWidth, 256, 4096);
                     if (targetWidth != _width.Value) _height.Value = Math.Round(_width.Value / ratio);
                 }
             }
@@ -243,8 +244,17 @@ public sealed class ExportImageView : Grid
         bool light = .2126 * _background.R + .7152 * _background.G + .0722 * _background.B > 145;
         _title.Foreground = new SolidColorBrush(light ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White);
         if (!_ready) return;
-        foreach (ExportTileVisual tile in _tiles) tile.SetAppearance(_background, _palette.SelectedIndex switch { 1 => "Macaron", 2 => "Custom", _ => "Vivid" });
+        string palette = _palette.SelectedIndex switch { 1 => "Macaron", 2 => "Custom", _ => "Vivid" };
+        _ = RefreshTileAppearanceAsync(++_tileAppearanceRevision, _background, palette);
         _appearanceTask = RefreshBackdropAsync(++_appearanceRevision);
+    }
+
+    private async Task RefreshTileAppearanceAsync(int revision, Windows.UI.Color background, string palette)
+    {
+        // 色卡/模糊拖动期间合并为最后一次，避免每个事件都重载所有磁贴的 RTF 与笔迹。
+        await Task.Delay(100);
+        if (revision != _tileAppearanceRevision) return;
+        foreach (ExportTileVisual tile in _tiles) tile.SetAppearance(background, palette);
     }
 
     private async Task SelectBackgroundAsync(string path)
@@ -343,9 +353,14 @@ public sealed class ExportImageView : Grid
     private void ResizeSelected()
     {
         if (_updating || _selected < 0 || !_ready || !double.IsFinite(_scale.Value)) return;
+        if (_titleHeight >= _height.Value)
+        {
+            _status.Text = "标题过高，画布没有足够的磁贴空间。";
+            return;
+        }
         ExportTileVisual source = _tiles[_selected];
         ExportTilePlacement tile = _placements[_selected];
-        double maximum = Math.Min(_width.Value / source.Width, (_height.Value - _titleHeight) / source.Height);
+        double maximum = Math.Max(.001, Math.Min(_width.Value / source.Width, (_height.Value - _titleHeight) / source.Height));
         tile.Scale = Math.Min(Math.Max(.001, _scale.Value / 100), maximum);
         tile.Width = source.Width * tile.Scale; tile.Height = source.Height * tile.Scale;
         tile.X = Math.Clamp(tile.X, 0, Math.Max(0, _width.Value - tile.Width));
@@ -380,6 +395,8 @@ public sealed class ExportImageView : Grid
     {
         if (!_save.IsEnabled || _saving) return;
         _saving = true; _save.IsEnabled = false; _handles.IsHitTestVisible = false;
+        _width.IsEnabled = _height.IsEnabled = false;
+        _titleInput.IsEnabled = _showTitle.IsEnabled = _alignment.IsEnabled = _palette.IsEnabled = false;
         try
         {
             FileSavePicker picker = new() { SuggestedFileName = string.Concat(_project.Name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) };
@@ -395,6 +412,8 @@ public sealed class ExportImageView : Grid
         finally
         {
             _saving = false; _handles.IsHitTestVisible = true;
+            _width.IsEnabled = _height.IsEnabled = true;
+            _titleInput.IsEnabled = _showTitle.IsEnabled = _alignment.IsEnabled = _palette.IsEnabled = true;
             string status = _status.Text;
             UpdatePlacements();
             _status.Text = status;
@@ -412,7 +431,8 @@ public sealed class ExportImageView : Grid
         try
         {
             TaskCompletionSource laidOut = new();
-            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { _canvas.UpdateLayout(); laidOut.TrySetResult(); });
+            if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () => { _canvas.UpdateLayout(); laidOut.TrySetResult(); }))
+                throw new InvalidOperationException("导出窗口已关闭。");
             await laidOut.Task;
             RenderTargetBitmap bitmap = new();
             int width = (int)_width.Value, height = (int)_height.Value;

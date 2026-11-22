@@ -62,7 +62,9 @@ public sealed partial class MainWindow
                     var player = FindVisuals<MediaPlayerElement>(_appearancePreviews["Background"]).FirstOrDefault()?.MediaPlayer;
                     if (player is not null) players.Add(player);
                 }
-                evidence.Add($"MEASURE: 16 appearance updates: players={players.Count}, maxUiWork={durations.Max():F1}ms");
+                double maximumUiWork = durations.Max();
+                evidence.Add($"MEASURE: 16 appearance updates: players={players.Count}, maxUiWork={maximumUiWork:F1}ms");
+                if (maximumUiWork > 1500) throw new Exception("单次外观调整占用界面线程超过 1500ms。");
                 if (players.Count != 1) throw new Exception("外观调整导致动态壁纸预览反复重启，出现可重复的间歇停顿。");
                 evidence.Add("PASS: appearance adjustments preserve continuous preview playback");
 

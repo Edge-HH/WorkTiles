@@ -8,23 +8,7 @@ namespace WorkTiles.Services;
 /// <summary>把可迁移数据固定存放在可执行文件旁的 data 目录。</summary>
 public sealed class AppDataStore
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     public string DataDirectory { get; } = Path.Combine(AppContext.BaseDirectory, "data");
-    public string StatePath => Path.Combine(DataDirectory, "worktiles.json");
-
-    public AppState? Load()
-    {
-        if (!File.Exists(StatePath)) return null;
-        return JsonSerializer.Deserialize<AppState>(File.ReadAllText(StatePath), JsonOptions);
-    }
-
-    public void Save(AppState state)
-    {
-        Directory.CreateDirectory(DataDirectory);
-        string temporaryPath = StatePath + ".tmp";
-        File.WriteAllText(temporaryPath, JsonSerializer.Serialize(state, JsonOptions));
-        File.Move(temporaryPath, StatePath, true);
-    }
 
     public static List<SubjectBoard> RestoreSubjects(IEnumerable<SubjectState> source)
     {

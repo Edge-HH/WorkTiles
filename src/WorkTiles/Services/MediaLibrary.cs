@@ -63,29 +63,83 @@ public sealed class MediaLibrary(string dataDirectory)
         return File.Exists(beside) ? beside : null;
     }
 
-    public IReadOnlyList<string> RecentImages()
+    public IReadOnlyList<string> RecentImages() => RecentImages(false);
+
+    private IReadOnlyList<string> RecentImages(bool strict)
     {
-        try { return (JsonSerializer.Deserialize<List<string>>(File.ReadAllText(HistoryPath(MediaScope.Images))) ?? [])
+        string history = HistoryPath(MediaScope.Images);
+        if (!File.Exists(history)) return [];
+        try { return (JsonSerializer.Deserialize<List<string>>(File.ReadAllText(history)) ?? [])
             .Where(path => IsImage(path) && File.Exists(path)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return []; }
+        catch (Exception ex) when (!strict && (ex is IOException or UnauthorizedAccessException or JsonException)) { return []; }
     }
 
     /// <summary>按使用面读取最近媒体；磁贴与背景板各用各的，视频和网页不会串到另一侧。</summary>
-    public IReadOnlyList<string> RecentMedia(MediaScope scope)
+    public IReadOnlyList<string> RecentMedia(MediaScope scope) => RecentMedia(scope, false);
+
+    private IReadOnlyList<string> RecentMedia(MediaScope scope, bool strict)
     {
-        if (scope == MediaScope.Images) return RecentImages();
+        if (scope == MediaScope.Images) return RecentImages(strict);
         string history = HistoryPath(scope);
         // 本使用面首次记录前从合并历史或图片历史起步，升级后既有条目仍可见。
         if (!File.Exists(history)) history = File.Exists(LegacyMediaHistoryPath) ? LegacyMediaHistoryPath : HistoryPath(MediaScope.Images);
+        if (!File.Exists(history)) return [];
         try { return (JsonSerializer.Deserialize<List<string>>(File.ReadAllText(history)) ?? [])
             .Where(path => IsSupported(path) && File.Exists(path)).Distinct(StringComparer.OrdinalIgnoreCase).Take(8).ToArray(); }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException) { return []; }
+        catch (Exception ex) when (!strict && (ex is IOException or UnauthorizedAccessException or JsonException)) { return []; }
     }
 
     /// <summary>全部使用面的最近媒体合并去重；备份用它收齐要带走的资源文件。</summary>
     public IReadOnlyList<string> RecentMedia() => RecentMedia(MediaScope.Images)
         .Concat(RecentMedia(MediaScope.Tile)).Concat(RecentMedia(MediaScope.Background))
         .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    /// <summary>清理专用：任一历史无法读取时抛出，调用方应放弃本轮清理而不是把空历史当成无引用。</summary>
+    public IReadOnlyList<string> RecentMediaStrict() => RecentMedia(MediaScope.Images, true)
+        .Concat(RecentMedia(MediaScope.Tile, true)).Concat(RecentMedia(MediaScope.Background, true))
+        .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+
+    /// <summary>
+    /// 保守清理自有媒体副本：只删 backgrounds 下超过期限、未被项目/设置/最近历史引用的图片或视频；
+    /// 预览图跟随其视频一起判断；正在被占用的文件删除失败时保留。
+    /// </summary>
+    public int CleanupUnreferenced(DateTime cutoffUtc, IReadOnlySet<string> referenced)
+    {
+        if (!Directory.Exists(_directory)) return 0;
+        // 导入副本名是 hash16_原名，基本唯一；便携目录被移动后旧绝对路径失效，用文件名兜底避免整库误删。
+        HashSet<string> referencedNames = new(referenced.Select(Path.GetFileName).OfType<string>(), StringComparer.OrdinalIgnoreCase);
+        bool IsReferenced(string full)
+        {
+            if (referenced.Contains(full) || referencedNames.Contains(Path.GetFileName(full))) return true;
+            const string previewSuffix = ".preview.png";
+            return full.EndsWith(previewSuffix, StringComparison.OrdinalIgnoreCase) &&
+                referenced.Contains(full[..^previewSuffix.Length]);
+        }
+        EnumerationOptions options = new() { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint };
+        int removed = 0;
+        foreach (string file in Directory.EnumerateFiles(_directory, "*", options))
+        {
+            if ((!IsImage(file) && !IsVideo(file)) || IsReferenced(Path.GetFullPath(file))) continue;
+            if (File.GetLastWriteTimeUtc(file) >= cutoffUtc) continue;
+            try
+            {
+                File.Delete(file);
+                removed++;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        // 只移除清理后变空的子目录，不碰 backgrounds 根目录和仍装着历史/媒体的目录。
+        foreach (string directory in Directory.EnumerateDirectories(_directory, "*", options)
+            .OrderByDescending(path => path.Length))
+        {
+            try
+            {
+                if (!Directory.EnumerateFileSystemEntries(directory).Any()) Directory.Delete(directory);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        }
+        return removed;
+    }
 
     private async Task RecordRecentAsync(string owned, MediaScope scope)
     {
@@ -182,6 +236,11 @@ public sealed class MediaLibrary(string dataDirectory)
                         File.Move(temporary, destination, true);
                     }
                     finally { if (File.Exists(temporary)) File.Delete(temporary); }
+                }
+                else
+                {
+                    // 复用旧副本时刷新时间，避免它被“超过 90 天且未被快照引用”的清理误删。
+                    File.SetLastWriteTimeUtc(destination, DateTime.UtcNow);
                 }
                 return destination;
             });

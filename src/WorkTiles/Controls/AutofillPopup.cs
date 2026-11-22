@@ -121,6 +121,8 @@ public sealed class AutofillPopup
         if (IsOpen && ReferenceEquals(_owner, owner) && SameEntries(entries))
         {
             _chosen = chosen;
+            _anchor = anchor;
+            _caret = caret;
             ApplyHighlight();
             Place(anchor, caret);
             return;

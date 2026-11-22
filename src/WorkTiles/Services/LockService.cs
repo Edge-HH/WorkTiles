@@ -64,6 +64,14 @@ public static class LockService
     public static string TotpProvisioningUri(string secret, string account = "WorkTiles") =>
         $"otpauth://totp/{Uri.EscapeDataString(account)}?secret={secret}&issuer={Uri.EscapeDataString(account)}&digits={TotpDigits}&period={TotpStepSeconds}";
 
+    private static readonly Dictionary<string, long> AcceptedTotpSteps = new(StringComparer.Ordinal);
+
+    /// <summary>测试用：清除某个密钥已接受的时间步，避免用例之间互相影响。</summary>
+    public static void ResetTotpReplay(string secret)
+    {
+        lock (AcceptedTotpSteps) AcceptedTotpSteps.Remove(secret);
+    }
+
     /// <summary>校验 2FA 验证码；window 为允许的前后时间步数，默认容忍一步（30 秒）时钟偏差。</summary>
     public static bool VerifyTotp(string secret, string code, DateTimeOffset now, int window = 1)
     {
@@ -75,8 +83,24 @@ public static class LockService
         catch (FormatException) { return false; }
         long step = now.ToUnixTimeSeconds() / TotpStepSeconds;
         for (long offset = -window; offset <= window; offset++)
-            if (ComputeTotp(key, Math.Max(0, step + offset)) == digits) return true;
+        {
+            long candidate = Math.Max(0, step + offset);
+            if (!FixedEquals(ComputeTotp(key, candidate), digits)) continue;
+            lock (AcceptedTotpSteps)
+            {
+                // 同一时间步只接受一次，防止验证码在窗口期内被重复使用。
+                if (AcceptedTotpSteps.TryGetValue(secret, out long accepted) && candidate <= accepted) return false;
+                AcceptedTotpSteps[secret] = candidate;
+                return true;
+            }
+        }
         return false;
+    }
+
+    private static bool FixedEquals(string left, string right)
+    {
+        byte[] a = Encoding.ASCII.GetBytes(left), b = Encoding.ASCII.GetBytes(right);
+        return a.Length == b.Length && CryptographicOperations.FixedTimeEquals(a, b);
     }
 
     /// <summary>RFC 6238 的 TOTP：HMAC-SHA1、6 位数字、30 秒一个时间步。</summary>

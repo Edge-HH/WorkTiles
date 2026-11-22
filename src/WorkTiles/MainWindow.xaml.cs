@@ -30,6 +30,8 @@ public sealed partial class MainWindow : Window
         private readonly NoiseMonitorService _noiseMonitor = new();
         private long _pendingNoiseBits;
         private int _noiseAlertQueued;
+        private long _pendingLevelBits;
+        private int _levelQueued;
     private readonly XiaomiWeatherService _weatherService = new();
     private readonly WeatherCityCatalog _weatherCityCatalog = new();
     private readonly ReleaseUpdateService _updateService = new();
@@ -72,7 +74,16 @@ public sealed partial class MainWindow : Window
 
     private bool _allowClose;
     private bool _silentStart;
+    private bool _updateCheckStarted;
+    private bool _layoutProbe;
     private TrayIcon? _tray;
+
+    /// <summary>布局持久化测试：允许正常关闭，并跳过会触碰真实系统状态的启动副作用。</summary>
+    public void EnableLayoutProbe()
+    {
+        _layoutProbe = true;
+        _allowClose = true;
+    }
 
     public MainWindow(bool startFullScreen = true, string initialView = "display", string? projectArgument = null, bool silentStart = false)
     {
@@ -138,12 +149,15 @@ public sealed partial class MainWindow : Window
             ApplyExtendedSettings();
             if (_launchProject is null) ShowInitialView();
             else _ = ApplyLaunchStateAsync();
-            if (_initialView != "verification")
+            if (_initialView != "verification" && !_layoutProbe)
             {
                 StartNoiseMonitoring();
                 ScheduleSave();
                 _ = RefreshWeatherAsync();
-                if (_settings.AutoUpdateEnabled) _ = CheckForUpdatesAsync(false);
+                CleanupStaleUpdateDirectories();
+                CleanupStaleMediaCopies();
+                ShowRecentUpdateFailure();
+                StartAutomaticUpdateCheck();
                 // 自动备份按到期检查推进；定时器只负责触发，是否执行由上次备份时间决定。
                 _autoBackupTimer.Start();
                 RunAutoBackupIfDue();
@@ -159,6 +173,8 @@ public sealed partial class MainWindow : Window
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
                 () => HoverTransition.ApplyTo(RootShell));
         };
+        // 静默启动时窗口先隐藏，等用户真正打开主界面后再补一次自动更新检查。
+        Activated += (_, _) => DispatcherQueue.TryEnqueue(StartAutomaticUpdateCheck);
         Closed += (_, _) =>
         {
             _isLoaded = false;
@@ -202,7 +218,16 @@ public sealed partial class MainWindow : Window
             if (!DispatcherQueue.TryEnqueue(PublishNoiseAlert))
                 Interlocked.Exchange(ref _noiseAlertQueued, 0);
         };
-        _noiseMonitor.LevelAvailable += (_, level) => DispatcherQueue.TryEnqueue(() => UpdateNoiseDisplay(level));
+        _noiseMonitor.LevelAvailable += (_, level) =>
+        {
+            Interlocked.Exchange(ref _pendingLevelBits, BitConverter.DoubleToInt64Bits(level));
+            if (Interlocked.Exchange(ref _levelQueued, 1) == 1) return;
+            if (!DispatcherQueue.TryEnqueue(() =>
+            {
+                Interlocked.Exchange(ref _levelQueued, 0);
+                UpdateNoiseDisplay(BitConverter.Int64BitsToDouble(Interlocked.Read(ref _pendingLevelBits)));
+            })) Interlocked.Exchange(ref _levelQueued, 0);
+        };
         _noiseMonitor.CaptureFailed += (_, message) => DispatcherQueue.TryEnqueue(() =>
         {
             if (!_isLoaded || _noiseSuspended || ShouldSuspendNoise) return;
@@ -220,7 +245,14 @@ public sealed partial class MainWindow : Window
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(windowHandle);
         _appWindow = AppWindow.GetFromWindowId(windowId);
         AppIcon.Apply(_appWindow);
-        _appWindow?.Resize(new SizeInt32(1440, 900));
+        if (_appWindow is { } appWindow)
+        {
+            Microsoft.UI.Windowing.DisplayArea area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
+                appWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
+            int width = Math.Min(1440, Math.Max(1024, area.WorkArea.Width));
+            int height = Math.Min(900, Math.Max(640, area.WorkArea.Height));
+            appWindow.Resize(new SizeInt32(width, height));
+        }
         if (_appWindow is not null)
             _appWindow.Closing += (_, args) =>
             {
@@ -235,7 +267,11 @@ public sealed partial class MainWindow : Window
     public void AttachSingleInstanceGate(SingleInstanceService gate)
     {
         _instanceGate = gate;
-        gate.SecondLaunchRequested += request => DispatcherQueue.TryEnqueue(() => _ = HandleSecondLaunchAsync(request));
+        gate.SecondLaunchRequested += request => DispatcherQueue.TryEnqueue(async () =>
+        {
+            try { await HandleSecondLaunchAsync(request); }
+            catch (Exception ex) { App.WriteCrashLog(ex); }
+        });
         gate.QuitRequested += () => DispatcherQueue.TryEnqueue(() => { _allowClose = true; Close(); });
         Closed += (_, _) => gate.Dispose();
     }
@@ -463,6 +499,7 @@ public sealed partial class MainWindow : Window
         _activeTileInteractions = 0;
         BuildTiles();
         EditBoardIcon.Glyph = FluentGlyphs.Edit;
+        AutomationProperties.SetName(EditBoardButton, "编辑看板");
         ApplyExtendedSettings();
         UpdateEditingToolbarVisibility();
         ScheduleSave();
@@ -1013,6 +1050,7 @@ public sealed partial class MainWindow : Window
         SystemAccent.Apply(BoardTheme.IsLight);
         // 强调色画笔刚涂完，吸附按钮要引用同一支，主题和系统强调色变化后才会跟着变。
         ApplyGridSnapAccent();
+        RefreshSplitLayoutCommands();
         if (!_isLoaded) return;
         ApplyExtendedSettings();
         // 设置页里代码生成的学科/作业列表用的是当前主题画笔，切浅色后必须重建，否则会留下深色模式下的白字。
@@ -1206,23 +1244,18 @@ public sealed partial class MainWindow : Window
                 SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
                 break;
             case TrayIcon.CommandShowTiles:
-                _settings.DesktopTilesEnabled = true;
-                SyncDesktopTiles();
-                ScheduleSave();
+                RunAfterEditAuth(() => { _settings.DesktopTilesEnabled = true; SyncDesktopTiles(); ScheduleSave(); });
                 break;
             case TrayIcon.CommandHideTiles:
-                _settings.DesktopTilesEnabled = false;
-                SyncDesktopTiles();
-                ScheduleSave();
+                RunAfterEditAuth(() => { _settings.DesktopTilesEnabled = false; SyncDesktopTiles(); ScheduleSave(); });
                 break;
             case TrayIcon.CommandSettings:
                 AppWindow.Show();
                 Activate();
-                ShowSettings();
-                ShowSettingsPage("General");
+                _ = TryShowSettingsAsync("General");
                 break;
             case TrayIcon.CommandRestart:
-                RestartAfterRestore();
+                RestartFromTray();
                 break;
             case TrayIcon.CommandExit:
                 _allowClose = true;
@@ -1517,11 +1550,29 @@ public sealed partial class MainWindow : Window
             // 默认按钮保持“稍后”：启动时自动检查也会弹出，误按回车不应直接重启更新。
             DefaultButton = ContentDialogButton.Close
         };
+        // 窗口不可见时弹框没人能关，还会一直占住 _dialogOpen；直接按“稍后”处理。
+        if (!AppWindow.IsVisible) return ContentDialogResult.None;
         // WinUI 同一时间只能显示一个 ContentDialog；重复触发按“取消”处理，避免异步点击直接崩溃。
         if (_dialogOpen) return ContentDialogResult.None;
         _dialogOpen = true;
         try { return await dialog.ShowAsync(); }
         finally { _dialogOpen = false; }
+    }
+
+    /// <summary>自动检查更新只在窗口可见时启动一次；静默启动不能弹出不可见的确认框。</summary>
+    private void StartAutomaticUpdateCheck()
+    {
+        if (!_isLoaded || _updateCheckStarted || _silentStart || _layoutProbe || !_settings.AutoUpdateEnabled || _initialView == "verification") return;
+        try
+        {
+            if (!AppWindow.IsVisible) return;
+        }
+        catch (Exception)
+        {
+            return;
+        }
+        _updateCheckStarted = true;
+        _ = CheckForUpdatesAsync(false);
     }
 
     private async Task CheckForUpdatesAsync(bool interactive)
@@ -1540,26 +1591,39 @@ public sealed partial class MainWindow : Window
                 return;
             }
             UpdateStatusText.Text = $"发现 {update.Tag}，正在下载 {update.AssetName}…";
-            string package = await _updateService.DownloadAsync(update, _dataStore.DataDirectory);
+            // GitHub Release 必须带 sha256 digest；Gitee 不提供摘要，只能靠 HTTPS，界面上要提示。
+            bool requireDigest = !string.Equals(_settings.UpdateSource, "Gitee", StringComparison.OrdinalIgnoreCase);
+            string package = await _updateService.DownloadAsync(update, _dataStore.DataDirectory, default, requireDigest);
             bool portable = System.IO.Path.GetExtension(package).Equals(".zip", StringComparison.OrdinalIgnoreCase) || System.IO.Path.GetExtension(package).Equals(".7z", StringComparison.OrdinalIgnoreCase);
             if (portable) package = await SplitUpdatePackage.NormalizeAsync(package);
             UpdateStatusText.Text = portable ? $"{update.Tag} 便携版已下载，可以自动更新。" : $"{update.Tag} 已下载，等待安装。";
             string prompt = portable
                 ? $"已下载 {update.Tag} 便携版。现在保存项目并重启更新吗？程序将自动解压、覆盖旧版本并重新启动，项目和设置会保留。"
                 : $"已将 {update.Tag} 下载到软件目录。现在启动安装程序吗？";
-            if (await ShowUpdateConfirmAsync(update.Tag, prompt, update.Notes) == ContentDialogResult.Primary)
+            if (!requireDigest) prompt += "\n\n注意：Gitee 源不提供校验摘要，无法验证下载内容是否被篡改。";
+            if (await ShowUpdateConfirmAsync(update.Tag, prompt, update.Notes) != ContentDialogResult.Primary)
             {
-                if (portable)
-                {
-                    UpdateStatusText.Text = "正在校验并解压更新…";
-                    string configuration = await Task.Run(() => PortableUpdateService.Prepare(package, AppContext.BaseDirectory,
-                        System.IO.Path.Combine(_dataStore.DataDirectory, "updates"), Environment.ProcessId));
-                    PersistProjects();
-                    PortableUpdateService.Launch(configuration);
-                    Close();
-                }
-                else GitHubUpdateService.LaunchInstaller(package);
+                // 用户选择稍后：删掉本次下载，避免 updates 目录随每次启动无限累积。
+                CleanupDownloadedPackage(package);
+                return;
             }
+            if (portable)
+            {
+                UpdateStatusText.Text = "正在校验并解压更新…";
+                string configuration = await Task.Run(() => PortableUpdateService.Prepare(package, AppContext.BaseDirectory,
+                    System.IO.Path.Combine(_dataStore.DataDirectory, "updates"), Environment.ProcessId));
+                PersistProjects();
+                if (!await PortableUpdateService.LaunchAsync(configuration))
+                {
+                    UpdateStatusText.Text = "更新程序未能启动，可能被系统策略拦截。";
+                    if (interactive) await ShowMessageAsync("无法启动更新程序", "系统可能阻止了 PowerShell 脚本。请检查安全策略后重试。", "知道了");
+                    return;
+                }
+                // 关闭即隐藏的处理器会拦下这次 Close；更新必须真正退出，脚本才能替换文件并重启。
+                _allowClose = true;
+                Close();
+            }
+            else GitHubUpdateService.LaunchInstaller(package);
         }
         catch (Exception exception)
         {
@@ -1675,7 +1739,12 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void FullScreenButton_Click(object sender, RoutedEventArgs e) => SetFullScreen(!_isFullScreen);
+    private void FullScreenButton_Click(object sender, RoutedEventArgs e)
+    {
+        // 考试期间用户主动切换全屏后，考试结束不再把用户的选择强行改回去。
+        if (_examActive) _examForcedFullScreen = false;
+        SetFullScreen(!_isFullScreen);
+    }
 
     private void RootShell_GlobalPointerPressed(object sender, PointerRoutedEventArgs e)
     {

@@ -37,6 +37,8 @@ internal sealed class TrayIcon : IDisposable
     private readonly nint _hwnd;
     private readonly Func<bool> _tilesVisible;
     private bool _added;
+    private nint _icon;
+    private bool _ownsIcon;
 
     public event Action<int>? Command;
 
@@ -56,19 +58,25 @@ internal sealed class TrayIcon : IDisposable
     public void Dispose()
     {
         if (_current == this) _current = null;
-        if (!_added) return;
-        NotifyIconData data = new() { cbSize = Marshal.SizeOf<NotifyIconData>(), hWnd = _hwnd, uID = 1 };
-        ShellNotifyIcon(NimDelete, ref data);
-        _added = false;
+        if (_added)
+        {
+            NotifyIconData data = new() { cbSize = Marshal.SizeOf<NotifyIconData>(), hWnd = _hwnd, uID = 1 };
+            ShellNotifyIcon(NimDelete, ref data);
+            _added = false;
+        }
+        // 只释放 ExtractAssociatedIcon 得到的图标；LoadIcon 的系统共享图标不能销毁。
+        if (_ownsIcon && _icon != 0) { DestroyIcon(_icon); _icon = 0; _ownsIcon = false; }
     }
 
     private void AddIcon()
     {
         ushort index = 0;
-        StringBuilder path = new(260);
+        StringBuilder path = new(1024);
         path.Append(Environment.ProcessPath ?? "");
         nint icon = ExtractAssociatedIcon(0, path, ref index);
+        _ownsIcon = icon != 0;
         if (icon == 0) icon = LoadIcon(0, (nint)32512);
+        _icon = icon;
         NotifyIconData data = new()
         {
             cbSize = Marshal.SizeOf<NotifyIconData>(),
@@ -80,27 +88,6 @@ internal sealed class TrayIcon : IDisposable
             szTip = "WorkTiles"
         };
         _added = ShellNotifyIcon(NimAdd, ref data);
-    }
-
-    private void ShowMenu()
-    {
-        nint menu = CreatePopupMenu();
-        if (menu == 0) return;
-        try
-        {
-            AppendMenu(menu, MfString, CommandOpen, "打开主界面");
-            AppendMenu(menu, MfString, _tilesVisible() ? CommandHideTiles : CommandShowTiles,
-                _tilesVisible() ? "隐藏桌面磁贴" : "显示桌面磁贴");
-            AppendMenu(menu, MfSeparator, 0, "");
-            AppendMenu(menu, MfString, CommandSettings, "应用设置");
-            AppendMenu(menu, MfString, CommandRestart, "重启");
-            AppendMenu(menu, MfString, CommandExit, "退出");
-            GetCursorPos(out Point point);
-            SetForegroundWindow(_hwnd);
-            int command = TrackPopupMenu(menu, TpmReturnCmd | TpmRightButton, point.X, point.Y, 0, _hwnd, 0);
-            if (command != 0) Command?.Invoke(command);
-        }
-        finally { DestroyMenu(menu); }
     }
 
     private static nint Hook(nint hwnd, uint msg, nint wParam, nint lParam)
@@ -142,6 +129,9 @@ internal sealed class TrayIcon : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern nint LoadIcon(nint hInst, nint name);
+
+    [DllImport("user32.dll")]
+    private static extern bool DestroyIcon(nint icon);
 
     [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")]
     private static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);

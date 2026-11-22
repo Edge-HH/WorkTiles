@@ -22,10 +22,18 @@ internal sealed class CrashReportWindow : Window
     {
         if (_open) return;
         _open = true;
-        string text = exception.ToString();
-        CrashReportWindow window = new(text);
-        window.Closed += (_, _) => _open = false;
-        window.Activate();
+        try
+        {
+            string text = exception.ToString();
+            CrashReportWindow window = new(text);
+            window.Closed += (_, _) => _open = false;
+            window.Activate();
+        }
+        catch (Exception failure)
+        {
+            _open = false;
+            App.WriteCrashLog(failure);
+        }
     }
 
     private CrashReportWindow(string text)

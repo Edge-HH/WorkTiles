@@ -213,7 +213,12 @@ public sealed partial class MainWindow
             await sync();
             // 同步可能更新了设置（应用班级布局）或项目清单，统一落盘后再回收附件目录。
             _settings = _library.Settings;
-            if (_settings.CloudSync.Enabled) { _projectStore.Save(_library); CloudSync.CleanupRemovedAssets(); }
+            if (_storageReady && !_skipSaveOnClose && _settings.CloudSync.Enabled)
+            {
+                try { _projectStore.Save(_library); }
+                catch (Exception ex) { ReportStorageError("同步结果未能保存", ex); }
+                CloudSync.CleanupRemovedAssets();
+            }
             UpdateProjectCommands();
             foreach (string notice in CloudSync.TakeNotices()) ShowCloudNotice(notice, InfoBarSeverity.Warning);
         }
@@ -227,7 +232,7 @@ public sealed partial class MainWindow
     private CloudSyncHooks CloudHooks() => new()
     {
         // 正在编辑的当前项目不被替换：编辑结束保存时若有冲突，会按冲突流程保留本机副本。
-        IsProjectBusy = id => id == _library.ActiveProjectId && (_isEditing || _projectOperation),
+        IsProjectBusy = id => id == _library.ActiveProjectId && (_isEditing || _projectOperation || _desktopEditing),
         ProjectReplaced = id => { if (id == _library.ActiveProjectId) ReloadActiveProject(); },
         ProjectRemoved = id =>
         {

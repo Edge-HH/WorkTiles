@@ -197,18 +197,23 @@ public sealed partial class MainWindow
     [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "SendInput")]
     private static extern uint SendMouseInput(uint count, MOUSE_INPUT[] inputs, int size);
 
-    private static void SendMouse(uint flags) => SendMouseInput(1, [new MOUSE_INPUT { Flags = flags }], 40);
+    private static void SendMouse(uint flags)
+    {
+        if (SendMouseInput(1, [new MOUSE_INPUT { Flags = flags }], 40) != 1)
+            throw new InvalidOperationException("鼠标事件注入失败，可能被系统权限拦截。");
+    }
 
     // 以虚拟桌面归一化坐标做绝对移动，WinUI 才会收到真实的指针更新。
     private static void MoveMouse(Point screen)
     {
         int left = GetSystemMetrics(76), top = GetSystemMetrics(77);
         int width = GetSystemMetrics(78), height = GetSystemMetrics(79);
-        SendMouseInput(1, [new MOUSE_INPUT
+        uint sent = SendMouseInput(1, [new MOUSE_INPUT
         {
             X = (int)Math.Round((screen.X - left) * 65535 / Math.Max(1, width - 1)),
             Y = (int)Math.Round((screen.Y - top) * 65535 / Math.Max(1, height - 1)),
             Flags = 0x0001 | 0x4000 | 0x8000
         }], 40);
+        if (sent != 1) throw new InvalidOperationException("鼠标移动事件注入失败，可能被系统权限拦截。");
     }
 }

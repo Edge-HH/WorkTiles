@@ -1,6 +1,8 @@
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using WorkTiles.Services;
+using WorkTiles.Shared;
 
 // 旧配置补全可见颜色层；显式清除和独立透明度必须跨保存保持，不得关闭模糊。
 var legacySurface = JsonSerializer.Deserialize<BoardSettingsState>("{\"ToolbarGlass\":true,\"TileBackground\":{\"Glass\":true}}")!;
@@ -98,7 +100,7 @@ Check(GitHubUpdateService.IsInstallable("WorkTiles-win-x64-2.0.1.zip"), "便携�
 Console.WriteLine("PASS: light theme content, immediate noise rearming, and three-beep PCM.");
 
 var defaults = JsonSerializer.Deserialize<BoardSettingsState>("{}")!;
-Check(defaults.LayoutMode == "Split" && defaults.ToolbarIconOnly && defaults.UpdateSource == "GitHub" && defaults.GridSize == 48, "旧配置应使用兼容的布局、无字模式与更新源默认值");
+Check(defaults.LayoutMode == "Split" && defaults.ToolbarIconOnly && defaults.UpdateSource == "GitHub" && defaults.GridSize == 48 && defaults.SplitOrientation == "Horizontal" && !defaults.SplitSwapped, "旧配置应使用兼容的布局、左右分屏、无字模式与更新源默认值");
 var placement = new RegionPlacement { X = 100, Y = 80, Width = 200, Height = 100 };
 WidgetLayout.Move(placement, 50, 20, 1000, 800);
 Check(placement.X == 150 && placement.Y == 100, "组件拖动应准确累计位移");
@@ -114,11 +116,13 @@ Check(centered.X == 340 && centered.Y == 135, "受约束组件只能沿中轴线
 WidgetLayout.ResizeCentered(centered, 80, 0, 2, 200, 1000, 800);
 Check(centered.Width == 400 && centered.Height == 200 && centered.X == 300, "受约束组件应等比缩放并保持中轴居中");
 Check(WidgetLayout.CompleteSplit(0) == "Board" && WidgetLayout.CompleteSplit(1) == "Clock" && WidgetLayout.CompleteSplit(.5) == "Split", "分隔条两端应切换单区，中间保留分屏");
+Check(WidgetLayout.CompleteSplit(0, clockFirst: false) == "Clock" && WidgetLayout.CompleteSplit(1, clockFirst: false) == "Board" && WidgetLayout.CompleteSplit(.5, clockFirst: false) == "Split", "对调区域后分隔条两端的单区结果也应相反");
 defaults.Widgets["FutureComponent"] = placement;
 defaults.TileBackground = new() { Color = "#123456", ImageMode = "Fit", Glass = true, Blur = 43.2 };
 defaults.InfiniteBoard = true; defaults.ToolbarScale = 1.37; defaults.UpdateSource = "Gitee";
+defaults.SplitOrientation = "Vertical"; defaults.SplitSwapped = true;
 var restored = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(defaults))!;
-Check(restored.Widgets.ContainsKey("FutureComponent") && restored.TileBackground.Blur == 43.2 && restored.InfiniteBoard && restored.ToolbarScale == 1.37 && restored.UpdateSource == "Gitee", "组件扩展、外观、无限画板与更新源应完整持久化");
+Check(restored.Widgets.ContainsKey("FutureComponent") && restored.TileBackground.Blur == 43.2 && restored.InfiniteBoard && restored.ToolbarScale == 1.37 && restored.UpdateSource == "Gitee" && restored.SplitOrientation == "Vertical" && restored.SplitSwapped, "组件扩展、外观、无限画板、分屏方向与更新源应完整持久化");
 var widgetSnapshot = WidgetLayout.Copy(defaults.Widgets);
 placement.X = 500;
 Check(widgetSnapshot["FutureComponent"].X == 0, "放弃组件编辑所用的快照必须独立于当前模型");
@@ -217,15 +221,8 @@ try
     Check(WallpaperEngineLibrary.ReadProject(mediaRoot) is null, "拒绝项目目录逃逸");
     File.WriteAllText(projectFile, "{broken");
     Check(WallpaperEngineLibrary.ReadProject(mediaRoot) is null, "损坏项目不阻断扫描");
-    int missingExceptions = 0;
-    void CountMissing(object? sender, System.Runtime.ExceptionServices.FirstChanceExceptionEventArgs args)
-    {
-        if (args.Exception is FileNotFoundException) missingExceptions++;
-    }
-    AppDomain.CurrentDomain.FirstChanceException += CountMissing;
-    try { Check(WallpaperEngineLibrary.ReadProject(Path.Combine(mediaRoot, "absent")) is null, "扫描忽略缺少清单的项目"); }
-    finally { AppDomain.CurrentDomain.FirstChanceException -= CountMissing; }
-    Check(missingExceptions == 0, "缺少项目清单不引发调试器首次机会异常");
+    // ReadProject 先判断 File.Exists，不打开缺失文件；直接断言返回值即可，避免全局首次机会异常计数混入无关探测。
+    Check(WallpaperEngineLibrary.ReadProject(Path.Combine(mediaRoot, "absent")) is null, "扫描忽略缺少清单的项目");
     string webRoot = Path.Combine(mediaRoot, "web-source");
     Directory.CreateDirectory(webRoot);
     string webEntry = Path.Combine(webRoot, "index.html");
@@ -406,6 +403,11 @@ Check(legacyAutofill.Autofill.Subject.Enabled && !legacyAutofill.Autofill.Homewo
     "旧配置缺少自动填充字段时学科补全默认打开，作业补全保持关闭");
 Check(new BoardSettingsState().ShowTileSubjectLabel, "磁贴右下角学科字样默认显示");
 Check(!new BoardSettingsState().PauseNoiseWhenUnfocused, "窗口失焦停止监测默认关闭");
+// 拼音词库缺失时降级但给出可诊断原因，设置页据此提示。
+string missingPinyin = Path.Combine(Path.GetTempPath(), "missing-pinyin-" + Guid.NewGuid().ToString("N") + ".txt");
+PinyinIndex missingIndex = new(missingPinyin);
+Check(missingIndex.LoadFailed && missingIndex.LoadError is { Length: > 0 } && missingIndex.Count == 0,
+    "拼音词库缺失时标记加载失败并保留原因");
 Console.WriteLine("PASS: autofill subject library, pinyin matching levels, homework tokenizing, thresholds, isolation, expiry and blocking.");
 
 // 锁定：密码哈希校验、两步验证生效条件、Base32 与 TOTP 时间窗。
@@ -483,11 +485,41 @@ long totpStep = moment.ToUnixTimeSeconds() / LockService.TotpStepSeconds;
 string totpCode = LockService.ComputeTotp(LockService.Base32Decode(secret), totpStep);
 Check(totpCode.Length == 6 && totpCode.All(char.IsDigit), "验证码为 6 位数字");
 Check(LockService.VerifyTotp(secret, totpCode, moment), "当前时间步的验证码通过");
-Check(LockService.VerifyTotp(secret, totpCode, moment.AddSeconds(LockService.TotpStepSeconds)), "容忍一步时钟偏差");
-Check(!LockService.VerifyTotp(secret, totpCode, moment.AddSeconds(LockService.TotpStepSeconds * 3)), "偏差过大不通过");
+Check(!LockService.VerifyTotp(secret, totpCode, moment.AddSeconds(LockService.TotpStepSeconds)), "同一验证码在窗口期内不能重放");
+string nextTotpCode = LockService.ComputeTotp(LockService.Base32Decode(secret), totpStep + 1);
+Check(LockService.VerifyTotp(secret, nextTotpCode, moment.AddSeconds(LockService.TotpStepSeconds)), "下一时间步的新验证码通过");
+Check(!LockService.VerifyTotp(secret, nextTotpCode, moment.AddSeconds(LockService.TotpStepSeconds * 3)), "偏差过大不通过");
 Check(!LockService.VerifyTotp(secret, "12345", moment) && !LockService.VerifyTotp(secret, "123456x", moment), "位数不对的验证码不通过");
-Check(LockService.VerifyTotp(secret, totpCode.Insert(3, " "), moment), "验证码里的空格被忽略");
+string spacedSecret = LockService.CreateTotpSecret();
+string spacedCode = LockService.ComputeTotp(LockService.Base32Decode(spacedSecret), totpStep);
+Check(LockService.VerifyTotp(spacedSecret, spacedCode.Insert(3, " "), moment), "验证码里的空格被忽略");
 Check(!LockService.VerifyTotp("0", totpCode, moment), "非法 Base32 密钥不通过而不是抛出");
+// 背景路径清洗：UNC 与 file 协议不允许进入同步设置，避免 File.Exists 触发 SMB 外联。
+Check(!SettingsSchema.IsSafeLocalPath(@"\\evil.test\share\wall.png") && !SettingsSchema.IsSafeLocalPath("file:///C:/wall.png"),
+    "UNC 与 file 协议背景路径被拒绝");
+Check(SettingsSchema.IsSafeLocalPath(@"C:\wall.png") &&
+    SettingsSchema.IsSafeLocalPath("asset:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef.png") &&
+    SettingsSchema.IsSafeLocalPath("wall.png"), "盘符路径、asset 引用与相对路径允许");
+// 桌面端设置清单：每个键都能从默认设置取到，默认值一致且能通过校验；每个设置都登记为同步或本机设置。
+JsonObject schemaDefaults = JsonSerializer.SerializeToNode(new BoardSettingsState(), ProjectStore.JsonOptions)!.AsObject();
+foreach (SettingDescriptor descriptor in SettingsSchema.All)
+{
+    Check(SettingsSchema.Get(schemaDefaults, descriptor.Key) is not null, $"设置 {descriptor.Key} 不存在");
+    Check(SettingsSchema.Same(SettingsSchema.Get(schemaDefaults, descriptor.Key), descriptor.Default), $"设置 {descriptor.Key} 的默认值与桌面端不一致");
+    Check(SettingsSchema.SanitizeValue(descriptor, SettingsSchema.Get(schemaDefaults, descriptor.Key)) is not null, $"设置 {descriptor.Key} 的默认值无法通过校验");
+}
+void CoverDesktopSettings(JsonObject node, string prefix)
+{
+    foreach (var (key, value) in node)
+    {
+        string path = prefix + key;
+        if (SettingsSchema.Find(path) is not null || SettingsSchema.DeviceLocalKeys.ContainsKey(path)) continue;
+        if (value is JsonObject child) CoverDesktopSettings(child, path + ".");
+        else Check(false, $"设置 {path} 既不同步也没有登记为本机设置");
+    }
+}
+CoverDesktopSettings(schemaDefaults, "");
+Console.WriteLine("PASS: desktop settings schema defaults and registration.");
 Console.WriteLine("PASS: lock password hashing, enforcement conditions, Base32 round trips and TOTP time windows.");
 
 // 数据备份：范围打包、清单读取、跨目录还原与自动备份清理。
@@ -624,6 +656,50 @@ try
     Check(!BackupService.IsDue(moment2.AddHours(-23), 24, moment2) && BackupService.IsDue(moment2.AddHours(-24), 24, moment2),
         "到期按上次备份时间与间隔判断");
     Check(BackupService.IsDue(moment2.AddDays(-400), double.NaN, moment2), "非法间隔按 24 小时判断到期");
+    string uniqueAutoDirectory = Path.Combine(backupRoot, "auto-unique");
+    Directory.CreateDirectory(uniqueAutoDirectory);
+    DateTime collision = new(2026, 1, 2, 3, 4, 5);
+    string firstAuto = BackupService.UniqueAutoBackupPath(uniqueAutoDirectory, collision);
+    File.WriteAllText(firstAuto, "first");
+    string secondAuto = BackupService.UniqueAutoBackupPath(uniqueAutoDirectory, collision);
+    Check(Path.GetFileName(firstAuto) == "auto-20260102030405.wtb" && Path.GetFileName(secondAuto) == "auto-20260102030405_002.wtb",
+        "同一秒的自动备份使用可排序的冲突后缀");
+    File.WriteAllText(secondAuto, "second");
+    string thirdAuto = BackupService.UniqueAutoBackupPath(uniqueAutoDirectory, collision);
+    Check(Path.GetFileName(thirdAuto) == "auto-20260102030405_003.wtb", "冲突后缀连续递增");
+    Check(BackupService.PruneAutoBackups(uniqueAutoDirectory, 1) == 1 && File.Exists(secondAuto) && !File.Exists(firstAuto),
+        "同秒备份裁剪保留最新的一份");
+    // C-L14：只清理超期且无引用的自有媒体副本。
+    string mediaCleanupRoot = Path.Combine(backupRoot, "media-cleanup");
+    string mediaCleanupDirectory = Path.Combine(mediaCleanupRoot, "backgrounds");
+    Directory.CreateDirectory(mediaCleanupDirectory);
+    string keptMedia = Path.Combine(mediaCleanupDirectory, "kept.png");
+    string staleMedia = Path.Combine(mediaCleanupDirectory, "stale.png");
+    File.WriteAllText(keptMedia, "kept");
+    File.WriteAllText(staleMedia, "stale");
+    DateTime oldMediaTime = DateTime.UtcNow.AddDays(-120);
+    File.SetLastWriteTimeUtc(keptMedia, oldMediaTime);
+    File.SetLastWriteTimeUtc(staleMedia, oldMediaTime);
+    HashSet<string> referencedMedia = new(StringComparer.OrdinalIgnoreCase) { keptMedia };
+    int cleanedMedia = new MediaLibrary(mediaCleanupRoot).CleanupUnreferenced(DateTime.UtcNow.AddDays(-90), referencedMedia);
+    Check(cleanedMedia == 1 && File.Exists(keptMedia) && !File.Exists(staleMedia), "只清理超期且无引用的自有媒体副本");
+    // 便携目录搬移后旧绝对路径失效，但导入副本名唯一；按文件名仍应保护它。
+    string movedRoot = Path.Combine(backupRoot, "media-moved");
+    string movedDirectory = Path.Combine(movedRoot, "backgrounds");
+    Directory.CreateDirectory(movedDirectory);
+    string movedMedia = Path.Combine(movedDirectory, "abc123_name.png");
+    File.WriteAllText(movedMedia, "moved");
+    File.SetLastWriteTimeUtc(movedMedia, oldMediaTime);
+    HashSet<string> movedReferences = new(StringComparer.OrdinalIgnoreCase)
+        { Path.Combine(Path.GetTempPath(), "old-install", "backgrounds", "abc123_name.png") };
+    Check(new MediaLibrary(movedRoot).CleanupUnreferenced(DateTime.UtcNow.AddDays(-90), movedReferences) == 0 && File.Exists(movedMedia),
+        "搬目录后同名引用仍能保护媒体副本");
+    // 历史损坏时必须放弃清理，不能把空历史当成“无引用”。
+    File.WriteAllText(Path.Combine(movedDirectory, "recent-images.json"), "{broken");
+    bool strictHistoryFailed = false;
+    try { new MediaLibrary(movedRoot).RecentMediaStrict(); }
+    catch (System.Text.Json.JsonException) { strictHistoryFailed = true; }
+    Check(strictHistoryFailed, "最近历史损坏时清理必须失败关闭");
 }
 finally { Directory.Delete(backupRoot, true); }
 

@@ -49,7 +49,9 @@ public sealed class ReleaseUpdateService
             if (!item.TryGetProperty("name", out var nameElement) || !item.TryGetProperty("browser_download_url", out var urlElement)) continue;
             string name = nameElement.GetString() ?? "", url = urlElement.GetString() ?? "";
             // Gitee 将源码包也放入 assets，必须排除。
-            if (!name.Contains("WorkTiles", StringComparison.OrdinalIgnoreCase) || name.Contains("arm64", StringComparison.OrdinalIgnoreCase) || url.Contains("/archive/", StringComparison.OrdinalIgnoreCase)) continue;
+            // 历史 Release 仍以 Pancake 命名；两种名字都要接受，否则客户端发现不了已发布的更新。
+            bool productName = name.Contains("WorkTiles", StringComparison.OrdinalIgnoreCase) || name.Contains("Pancake", StringComparison.OrdinalIgnoreCase);
+            if (!productName || name.Contains("arm64", StringComparison.OrdinalIgnoreCase) || url.Contains("/archive/", StringComparison.OrdinalIgnoreCase)) continue;
             if (Path.GetFileName(name) != name || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || !Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https") continue;
             assets.Add(new(name, url, item.TryGetProperty("digest", out var digest) ? digest.GetString() : null));
         }
@@ -81,15 +83,19 @@ public sealed class ReleaseUpdateService
         return new(version, tag, notes, new(version, tag, first.Name, first.Url, first.Digest) { Parts = volumes, Notes = notes });
     }
 
-    public async Task<string> DownloadAsync(GitHubReleaseUpdate update, string dataDirectory, CancellationToken token = default)
+    public async Task<string> DownloadAsync(GitHubReleaseUpdate update, string dataDirectory, CancellationToken token = default, bool requireDigest = false)
     {
         string directory = Path.Combine(dataDirectory, "updates", update.Version + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(directory);
+        try
+        {
         var parts = update.Parts.Count == 0 ? new[] { new ReleaseAsset(update.AssetName, update.DownloadUrl, update.Digest) } : update.Parts;
         long total = 0;
         foreach (var part in parts)
         {
             if (Path.GetFileName(part.Name) != part.Name) throw new InvalidDataException("无效更新附件名称。");
+            if (requireDigest && part.Digest?.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) != true)
+                throw new InvalidDataException("更新源没有提供 SHA-256 校验摘要，已拒绝下载。");
             await using Stream input = await _http.GetStreamAsync(part.Url, token);
             await using FileStream output = new(Path.Combine(directory, part.Name), FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None);
             byte[] buffer = new byte[81920]; int read;
@@ -117,6 +123,12 @@ public sealed class ReleaseUpdateService
                 await input.CopyToAsync(combined, token);
             }
         }
-        return package;
+            return package;
+        }
+        catch
+        {
+            try { Directory.Delete(directory, true); } catch (Exception) { }
+            throw;
+        }
     }
 }

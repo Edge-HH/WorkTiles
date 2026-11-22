@@ -25,8 +25,11 @@ if ($clearHighlightBlock -notmatch 'CreateColorSwatch\("#FFFFFF"' -or
     $failures.Add('取消高光色卡缺少默认底色和左上到右下的红色斜线。')
 }
 
-$richEditorBlock = [regex]::Match($tileCode, 'private RichEditBox CreateRichEditor[\s\S]*?private StackPanel BuildFormattingToolbar').Value
-if ($richEditorBlock -match 'Foreground\s*=') {
+$richEditorBlock = [regex]::Match($tileCode, 'private RichEditBox CreateRichEditor[\s\S]*?private StackPanel BuildFormattingToolbar')
+if (-not $richEditorBlock.Success) {
+    $failures.Add('无法找到富文本编辑器与格式工具条之间的代码块，契约锚点已漂移。')
+}
+elseif ($richEditorBlock.Value -match 'Foreground\s*=') {
     $failures.Add('RichEditBox 设置了控件级白色 Foreground，会覆盖字符级颜色。')
 }
 

@@ -222,6 +222,8 @@ internal sealed class DesktopWidgetHost : IDisposable
     private int _y;
     private int _width = 1;
     private int _height = 1;
+    private int _bridgeWidth = -1;
+    private int _bridgeHeight = -1;
     private bool _visible;
     private bool _interactive;
     private bool _clickThrough;
@@ -273,12 +275,25 @@ internal sealed class DesktopWidgetHost : IDisposable
         Trace("ApplyDwmAttributes done");
 
         _xamlSource = new DesktopWindowXamlSource();
-        Trace("new DesktopWindowXamlSource done");
-        _xamlSource.Initialize(Win32Interop.GetWindowIdFromWindow(_hwnd));
-        Trace("Initialize done");
-        _xamlSource.ShouldConstrainPopupsToWorkArea = true;
-        _xamlSource.Content = content;
-        Trace("Content set");
+        try
+        {
+            Trace("new DesktopWindowXamlSource done");
+            _xamlSource.Initialize(Win32Interop.GetWindowIdFromWindow(_hwnd));
+            Trace("Initialize done");
+            _xamlSource.ShouldConstrainPopupsToWorkArea = true;
+            _xamlSource.Content = content;
+            Trace("Content set");
+        }
+        catch
+        {
+            _instances.Remove(_hwnd);
+            _activeHosts.Remove(this);
+            _xamlSource?.Dispose();
+            _xamlSource = null;
+            DestroyWindow(_hwnd);
+            _hwnd = 0;
+            throw;
+        }
         // 岛建好后再写一次。Initialize 会把显示前设过的无边框属性清掉，不透明白板也会露出来。
         ApplyBackdrop();
         ApplyDwmAttributes();
@@ -289,6 +304,8 @@ internal sealed class DesktopWidgetHost : IDisposable
 
     internal static void Trace(string msg)
     {
+        // 探针只在调试器下写文件；发布版不能每块磁贴都同步创建并追加 data/probe-trace.txt。
+        if (!System.Diagnostics.Debugger.IsAttached) return;
         try
         {
             string dir = Path.Combine(AppContext.BaseDirectory, "data");
@@ -303,7 +320,7 @@ internal sealed class DesktopWidgetHost : IDisposable
         if (_disposed || _hwnd == 0) return;
         _visible = true;
         ShowWindow(_hwnd, SwShowNoActivate);
-        _xamlSource?.SiteBridge?.MoveAndResize(new RectInt32(0, 0, _width, _height));
+        if (_xamlSource?.SiteBridge is { } bridge) { bridge.MoveAndResize(new RectInt32(0, 0, _width, _height)); _bridgeWidth = _width; _bridgeHeight = _height; }
         // 显示时系统会补上默认白边，当前这次调用可能仍早于 DWM 收尾，下一帧再写一次。
         ApplyDwmAttributes();
         if (_xamlSource?.Content is UIElement element)
@@ -348,7 +365,12 @@ internal sealed class DesktopWidgetHost : IDisposable
 
         if (sizeChanged)
         {
-            _xamlSource?.SiteBridge?.MoveAndResize(new RectInt32(0, 0, width, height));
+            if (_xamlSource?.SiteBridge is { } bridge)
+            {
+                bridge.MoveAndResize(new RectInt32(0, 0, width, height));
+                _bridgeWidth = width;
+                _bridgeHeight = height;
+            }
             ApplyRoundedRegion();
         }
         else if (posChanged)
@@ -507,9 +529,18 @@ internal sealed class DesktopWidgetHost : IDisposable
             SetWindowLongPtr(_hwnd, GwlpHwndParent, owner);
     }
 
+    private int _appliedRegionRadius = int.MinValue;
+    private int _appliedRegionWidth = int.MinValue;
+    private int _appliedRegionHeight = int.MinValue;
+
     private void ApplyRoundedRegion()
     {
         if (_hwnd == 0) return;
+        // 缩放/动画每拍都会请求同一个半径；区域和尺寸没变时不要再强制重绘并重写 DWM 属性。
+        if (_regionRadius == _appliedRegionRadius && _width == _appliedRegionWidth && _height == _appliedRegionHeight) return;
+        _appliedRegionRadius = _regionRadius;
+        _appliedRegionWidth = _width;
+        _appliedRegionHeight = _height;
         if (_regionRadius <= 0 || _width < 2 || _height < 2)
         {
             SetWindowRgn(_hwnd, 0, true);
@@ -695,7 +726,8 @@ internal sealed class DesktopWidgetHost : IDisposable
     {
         if (_disposed || !_visible || _hwnd == 0) return;
         if (IsIconic(_hwnd)) ShowWindow(_hwnd, SwShowNoActivate);
-        SetWindowPos(_hwnd, HwndTop, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
+        // 交互态才抬到普通窗口之上；非交互态保持桌面语义，普通窗口仍可盖住磁贴。
+        SetWindowPos(_hwnd, _interactive || !AnchorToDesktop ? HwndTop : HwndBottom, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
         ApplyDwmAttributes();
     }
 
@@ -761,7 +793,12 @@ internal sealed class DesktopWidgetHost : IDisposable
                     {
                         host._width = w;
                         host._height = h;
-                        host._xamlSource?.SiteBridge?.MoveAndResize(new RectInt32(0, 0, w, h));
+                        if (host._xamlSource?.SiteBridge is { } bridge && (w != host._bridgeWidth || h != host._bridgeHeight))
+                        {
+                            bridge.MoveAndResize(new RectInt32(0, 0, w, h));
+                            host._bridgeWidth = w;
+                            host._bridgeHeight = h;
+                        }
                     }
                     host.ApplyDwmAttributes();
                     return 0;

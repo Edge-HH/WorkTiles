@@ -16,6 +16,10 @@ public sealed class PinyinIndex
 
     private readonly Dictionary<char, string> _readings = [];
 
+    /// <summary>拼音词库缺失或损坏时为 true；补全会退化为汉字匹配。</summary>
+    public bool LoadFailed { get; private set; }
+    public string? LoadError { get; private set; }
+
     public PinyinIndex(string path)
     {
         Load(path);
@@ -49,10 +53,16 @@ public sealed class PinyinIndex
 
     private void Load(string path)
     {
-        // 资源缺失只降级，不影响看板启动；拼音匹配会退化为汉字匹配。
+        // 资源缺失只降级，不影响看板启动；拼音匹配会退化为汉字匹配，并把原因带到设置页。
         try
         {
-            if (!File.Exists(path)) return;
+            if (!File.Exists(path))
+            {
+                LoadFailed = true;
+                LoadError = "拼音词库文件缺失。";
+                System.Diagnostics.Debug.WriteLine($"拼音索引加载失败：{path} 不存在");
+                return;
+            }
             foreach (string raw in File.ReadLines(path))
             {
                 string line = raw.TrimStart('\uFEFF');
@@ -62,12 +72,18 @@ public sealed class PinyinIndex
                 if (pinyin.Length == 0) continue;
                 _readings[line[0]] = pinyin;
             }
+            if (_readings.Count == 0)
+            {
+                LoadFailed = true;
+                LoadError = "拼音词库为空或格式无效。";
+                System.Diagnostics.Debug.WriteLine($"拼音索引加载失败：{path} 没有可用的读音");
+            }
         }
-        catch (IOException)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-        }
-        catch (UnauthorizedAccessException)
-        {
+            LoadFailed = true;
+            LoadError = ex.Message;
+            System.Diagnostics.Debug.WriteLine($"拼音索引加载失败：{ex.Message}");
         }
     }
 }

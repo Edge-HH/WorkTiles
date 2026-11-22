@@ -130,6 +130,8 @@ internal static class TransparentInputMarkers
 
         public void HandleLoaded()
         {
+            // 重新加载后允许再尝试裁切光标；一次偶发 COM 异常不应永久禁用该编辑器。
+            _caretClipBroken = false;
             if (_rewrapping) return;
             EnsureSlot();
             Update();

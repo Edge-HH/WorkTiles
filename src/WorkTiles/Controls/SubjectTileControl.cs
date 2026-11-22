@@ -297,7 +297,7 @@ public sealed class SubjectTileControl : Grid
         double contentWidth = _nameEditor.DesiredSize.Width + 110;
         foreach (var child in _entriesPanel.Children)
         {
-            if (child is Grid row && row.Children.OfType<RichEditBox>().FirstOrDefault() is { } editor)
+            if (child is Grid row && FindHomeworkEditor(row) is { } editor)
                 contentWidth = Math.Max(contentWidth, RichTextContentMetrics.Width(editor) + 134);
             else if (child is FrameworkElement attachment)
                 contentWidth = Math.Max(contentWidth, attachment.DesiredSize.Width + 34);
@@ -338,7 +338,7 @@ public sealed class SubjectTileControl : Grid
     {
         foreach (Grid row in _entriesPanel.Children.OfType<Grid>())
         {
-            if (row.Children.OfType<RichEditBox>().FirstOrDefault() is { Tag: HomeworkEntry entry } editor &&
+            if (FindHomeworkEditor(row) is { Tag: HomeworkEntry entry } editor &&
                 editor.IsLoaded &&
                 (overrideFormatted || string.IsNullOrWhiteSpace(entry.RtfContent)))
             {
@@ -620,10 +620,32 @@ public sealed class SubjectTileControl : Grid
         _layoutChanged(_subject);
     }
 
-    private void Entries_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e) => RebuildEntries();
+    private bool _entriesRebuildPending;
+    private bool _lostFocusHooked;
+
+    private void Entries_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // 另一视图增删作业时，本视图若正在输入/组合，等焦点离开后再重建，避免销毁编辑器和未上屏的组合文本。
+        if (ContainsFocus())
+        {
+            _entriesRebuildPending = true;
+            if (!_lostFocusHooked)
+            {
+                _lostFocusHooked = true;
+                LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (!_entriesRebuildPending || ContainsFocus()) return;
+                    RebuildEntries();
+                });
+            }
+            return;
+        }
+        RebuildEntries();
+    }
 
     private void RebuildEntries()
     {
+        _entriesRebuildPending = false;
         // 停手后的富文本还在计时器里。先写回作业，再建新的编辑器，否则新编辑器会读到旧的 RTF，刚打的字和格式会消失。
         FlushPendingText();
         _formattingEditor = null;
@@ -969,6 +991,16 @@ public sealed class SubjectTileControl : Grid
         }
     }
 
+    /// <summary>透明输入罩层会把编辑器移进 _slot，不能再按直接子级查找；按 Tag 递归找当前行的作业编辑器。</summary>
+    private static RichEditBox? FindHomeworkEditor(DependencyObject row)
+    {
+        foreach (RichEditBox editor in FindVisualEditors(row))
+        {
+            if (editor.Tag is HomeworkEntry) return editor;
+        }
+        return null;
+    }
+
     private static IEnumerable<RichEditBox> FindVisualEditors(DependencyObject root)
     {
         int count = VisualTreeHelper.GetChildrenCount(root);
@@ -1254,22 +1286,6 @@ public sealed class SubjectTileControl : Grid
         return button;
     }
 
-    private static ToggleButton CreateIconToggle(string glyph, string tooltip)
-    {
-        ToggleButton button = new()
-        {
-            Width = 38, Height = 38, Padding = new Thickness(8),
-            Background = BoardTheme.ButtonClearBrush, BorderThickness = new Thickness(0),
-            Content = new FontIcon
-            {
-                Glyph = glyph, FontSize = 16,
-                Foreground = BoardTheme.TextBrush
-            }
-        };
-        ToolTipService.SetToolTip(button, tooltip);
-        return button;
-    }
-
     private void AddHomework()
     {
         // 新增的作业是空内容，编辑框里只显示灰色的“在这里输入作业内容”提示。
@@ -1356,8 +1372,25 @@ public sealed class SubjectTileControl : Grid
         }
         else if (_activeStrokeData is not null && _activeStrokeShape is not null)
         {
+            // 高频指针相隔不到 0.75 DIP 的点不进入模型，减少 Polyline 重绘、JSON 体积与橡皮擦扫描量。
+            Point last = _activeStrokeData.Points[^1];
+            double dx = point.X - last.X, dy = point.Y - last.Y;
+            if (dx * dx + dy * dy < 0.5625) { e.Handled = true; return; }
             _activeStrokeData.Points.Add(point);
             _activeStrokeShape.Points.Add(point);
+        }
+        else
+        {
+            // 越界后重新进入：另起一段，既不丢墨也不画出跨越空隙的连线。
+            _activeStrokeData = new InkStrokeData { Color = _inkSettings.Color, Thickness = _inkSettings.Thickness };
+            _activeStrokeData.Points.Add(point);
+            _activeStrokeData.Points.Add(new Point(point.X + 0.01, point.Y));
+            _subject.InkStrokes.Add(_activeStrokeData);
+            _activeStrokeShape = InkStrokeVisual.Create(_activeStrokeData);
+            _activeStrokeShape.Points.Add(point);
+            _activeStrokeShape.Points.Add(new Point(point.X + 0.01, point.Y));
+            _inkCanvas.Children.Add(_activeStrokeShape);
+            _renderedStrokes[_activeStrokeShape] = _activeStrokeData;
         }
         e.Handled = true;
     }
@@ -1378,12 +1411,14 @@ public sealed class SubjectTileControl : Grid
     {
         Polyline? shape = null;
         InkStrokeData? stroke = null;
-        foreach (var pair in _renderedStrokes)
+        // 后加入的笔迹在上；命中即停，避免每次移动都扫描全部笔迹。
+        foreach (var pair in _renderedStrokes.Reverse())
         {
             double radius = Math.Max(8, pair.Value.Thickness * Math.Max(pair.Value.TipScaleX, pair.Value.TipScaleY));
             if (!InkHit.Contains(pair.Value.Points, point.X, point.Y, radius)) continue;
             shape = pair.Key;
             stroke = pair.Value;
+            break;
         }
         if (shape is null || stroke is null) return;
         _renderedStrokes.Remove(shape);
@@ -1401,19 +1436,11 @@ public sealed class SubjectTileControl : Grid
             Polyline shape = InkStrokeVisual.Create(stroke);
             foreach (Point point in stroke.Points)
             {
-                shape.Points.Add(new Point(point.X / stroke.TipScaleX, point.Y / stroke.TipScaleY));
+                shape.Points.Add(new Point(point.X / Math.Max(0.0001, stroke.TipScaleX), point.Y / Math.Max(0.0001, stroke.TipScaleY)));
             }
             _inkCanvas.Children.Add(shape);
             _renderedStrokes[shape] = stroke;
         }
-    }
-
-    private void UndoLastStroke()
-    {
-        if (_subject.InkStrokes.Count == 0) return;
-        _subject.InkStrokes.RemoveAt(_subject.InkStrokes.Count - 1);
-        RenderStoredStrokes();
-        _contentChanged();
     }
 
     public void ClearStrokes()

@@ -162,6 +162,7 @@ public partial class App : Application
     private void StartMainWindow(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
     {
         _window = new MainWindow(startFullScreen && !launchArgs.Silent, launchArgs.View, launchArgs.Project, launchArgs.Silent);
+        if (launchArgs.LayoutProbe) _window.EnableLayoutProbe();
         _window.AttachSingleInstanceGate(instanceGate);
         _window.Activate();
         if (launchArgs.Silent) _window.AppWindow.Hide();

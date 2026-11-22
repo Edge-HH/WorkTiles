@@ -17,6 +17,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid x:Name="BrandRegion" Background="Transparent">
@@ -29,7 +30,7 @@
                 </StackPanel>
             </Grid>
             <StackPanel x:Name="ProjectCommands" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Visibility="Collapsed">
-                <DropDownButton x:Name="ProjectPicker" MaxWidth="260">
+                <DropDownButton x:Name="ProjectPicker" MaxWidth="260" Height="36" CornerRadius="4">
                     <DropDownButton.Content>
                         <StackPanel Orientation="Horizontal" Spacing="7">
                             <icons:FluentIcon Symbol="Folder" />
@@ -40,7 +41,7 @@
                     </DropDownButton.Content>
                     <DropDownButton.Flyout><Flyout Opening="RecentProjects_Opening"><ScrollViewer MaxHeight="420" Width="240"><StackPanel x:Name="RecentProjectsPanel" Spacing="8" /></ScrollViewer></Flyout></DropDownButton.Flyout>
                 </DropDownButton>
-                <DropDownButton>
+                <DropDownButton Height="36" CornerRadius="4">
                     <DropDownButton.Content>
                         <StackPanel Orientation="Horizontal" Spacing="7"><icons:FluentIcon Symbol="Document" /><TextBlock Text="文件" /></StackPanel>
                     </DropDownButton.Content>
@@ -54,8 +55,23 @@
                         <MenuFlyoutItem x:Name="ExportProjectMenu" Text="导出" Click="ExportImage_Click" />
                     </MenuFlyout></DropDownButton.Flyout>
                 </DropDownButton>
+                <StackPanel x:Name="SplitLayoutCommands" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="Collapsed">
+                    <Border Width="1" Height="24" Margin="4,0" Background="{ThemeResource BoardLineBrush}" />
+                    <Button x:Name="ToggleSplitOrientationButton" Style="{StaticResource BoardIconButtonStyle}"
+                            Height="36" MinHeight="36" Width="36" MinWidth="36" Padding="0" CornerRadius="4"
+                            Background="{ThemeResource BoardButtonClearBrush}" BorderThickness="0"
+                            Click="ToggleSplitOrientationButton_Click" AutomationProperties.Name="切换分屏方向">
+                        <icons:FluentIcon x:Name="SplitOrientationIcon" Symbol="SplitHorizontal" FontSize="18" />
+                    </Button>
+                    <Button x:Name="SwapSplitAreasButton" Style="{StaticResource BoardIconButtonStyle}"
+                            Height="36" MinHeight="36" Width="36" MinWidth="36" Padding="0" CornerRadius="4"
+                            Background="{ThemeResource BoardButtonClearBrush}" BorderThickness="0"
+                            Click="SwapSplitAreasButton_Click" AutomationProperties.Name="对调时钟与作业区域">
+                        <icons:FluentIcon x:Name="SwapSplitAreasIcon" Symbol="Swap" FontSize="18" />
+                    </Button>
+                </StackPanel>
             </StackPanel>
-            <Grid Grid.Column="2" Margin="0,0,140,0">
+            <Grid Grid.Column="3" Margin="0,0,140,0">
                 <Grid x:Name="DragRegion" Background="Transparent" />
             </Grid>
         </Grid>

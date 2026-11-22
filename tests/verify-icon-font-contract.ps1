@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 $fonts = Join-Path $projectRoot 'src/WorkTiles/Assets/Fonts'

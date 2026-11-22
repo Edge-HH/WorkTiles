@@ -66,7 +66,7 @@ public sealed partial class MainWindow
         {
             CloudClassesPanel.Children.Add(Muted("尚未连接集控。连接后可以在这里查看公告和全部项目的同步情况。", 13));
             Button openSettings = new() { Content = "去设置连接班级", HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 0) };
-            openSettings.Click += (_, _) => { ShowSettings(); ShowSettingsPage("CloudSync"); };
+            openSettings.Click += async (_, _) => await TryShowSettingsAsync("CloudSync");
             CloudClassesPanel.Children.Add(openSettings);
             CloudProjectsPanel.Children.Clear();
             CloudHomeworkPanel.Children.Clear();
@@ -154,7 +154,13 @@ public sealed partial class MainWindow
             content.Children.Add(icon);
             Button item = new() { Content = content, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch, Padding = new Thickness(12, 8, 10, 8), Tag = project };
             if (ReferenceEquals(project, _cloudSelectedProject)) item.Background = ResourceBrush("BoardBrandSoftBrush");
-            item.Click += (_, _) => { _cloudSelectedProject = project; RenderCloudProjects(); };
+            Guid projectId = project.Id;
+            item.Click += (_, _) =>
+            {
+                // 同步替换后清单里已经是新实例，不能继续用渲染时捕获的旧项目。
+                _cloudSelectedProject = _library.Projects.FirstOrDefault(p => p.Id == projectId);
+                RenderCloudProjects();
+            };
             CloudProjectsPanel.Children.Add(item);
         }
         CloudSyncProgressText.Text = projects.Count == 0 ? "没有本地项目" : $"已同步 {synced}/{projects.Count} 个项目" + (_library.SyncQueue.Count > 0 ? $" · 待上传 {_library.SyncQueue.Count} 项" : "");
@@ -177,7 +183,13 @@ public sealed partial class MainWindow
         if (project.Id != _library.ActiveProjectId)
         {
             Button open = new() { Content = "在看板上打开", HorizontalAlignment = HorizontalAlignment.Left };
-            open.Click += async (_, _) => await RunProjectAction(async () => await SwitchProjectAsync(project));
+            Guid projectId = project.Id;
+            open.Click += async (_, _) =>
+            {
+                ProjectDocument? current = _library.Projects.FirstOrDefault(p => p.Id == projectId);
+                if (current is null) { ShowCloudNotice("该项目已被移除。", InfoBarSeverity.Warning); return; }
+                await RunProjectAction(async () => await SwitchProjectAsync(current));
+            };
             CloudHomeworkPanel.Children.Add(open);
         }
         foreach (SubjectState subject in project.Subjects)

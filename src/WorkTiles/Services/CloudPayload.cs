@@ -13,9 +13,13 @@ namespace WorkTiles.Services;
 public sealed class CloudAssetHasher
 {
     private readonly Dictionary<string, (long Length, DateTime Modified, string Sha)> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _gate = new();
 
     public string? Sha256Of(string path)
     {
+        // 后台同步与界面线程都会查询同一份缓存；用一把锁同时保护缓存和文件读取。
+        lock (_gate)
+        {
         try
         {
             FileInfo info = new(path);
@@ -27,13 +31,17 @@ public sealed class CloudAssetHasher
             return sha;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { return null; }
+        }
     }
 
     /// <summary>刚下载并校验过的文件直接登记，避免立刻再算一遍。</summary>
     public void Remember(string path, string sha)
     {
-        FileInfo info = new(path);
-        if (info.Exists) _cache[info.FullName] = (info.Length, info.LastWriteTimeUtc, sha);
+        lock (_gate)
+        {
+            FileInfo info = new(path);
+            if (info.Exists) _cache[info.FullName] = (info.Length, info.LastWriteTimeUtc, sha);
+        }
     }
 }
 
@@ -147,10 +155,16 @@ public static class LayoutSync
                 {
                     List<string> items = playlist.Select(x => x?.GetValue<string>()).OfType<string>().ToList();
                     List<string> resolvedItems = items.Select(x => Resolve(x, resolveAsset)).OfType<string>().ToList();
-                    if (resolvedItems.Count < items.Count) unresolved?.Add(key);
                     JsonArray list = new();
-                    if (resolvedItems.Count == 0 && items.Count > 0 && local["Playlist"] is JsonArray keep)
-                        foreach (var item in keep) list.Add(item?.DeepClone());
+                    if (resolvedItems.Count < items.Count)
+                    {
+                        // 任一项解析失败就整组沿用本机列表，避免一次瞬时失败把播放列表永久截断。
+                        unresolved?.Add(key);
+                        if (local["Playlist"] is JsonArray keep)
+                            foreach (var item in keep) list.Add(item?.DeepClone());
+                        else
+                            foreach (string item in resolvedItems) list.Add(item);
+                    }
                     else
                         foreach (string item in resolvedItems) list.Add(item);
                     background["Playlist"] = list;
@@ -187,6 +201,10 @@ public static class LayoutSync
     private static string? Resolve(string value, Func<string, string?> resolveAsset)
     {
         if (AssetReference.TryParse(value, out _, out _)) return resolveAsset(value);
+        // 已保存的旧数据也可能带 UNC 路径，探测前先拒绝，避免向攻击者主机发起 SMB 认证。
+        if (value.StartsWith(@"\\", StringComparison.Ordinal) || value.StartsWith("//", StringComparison.Ordinal)) return null;
+        int colon = value.IndexOf(':');
+        if (colon >= 0 && !(colon == 1 && char.IsAsciiLetter(value[0]))) return null;
         return File.Exists(value) || Directory.Exists(value) ? value : null;
     }
 

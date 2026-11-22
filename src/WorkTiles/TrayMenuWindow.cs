@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics;
 using WorkTiles.Controls;
 using WorkTiles.Services;
@@ -110,10 +111,12 @@ internal static class TrayMenuWindow
                 Background = new SolidColorBrush(Windows.UI.Color.FromArgb(70, 255, 255, 255))
             });
             StackPanel header = new() { Orientation = Orientation.Horizontal, Spacing = 10, Padding = new Thickness(10, 8, 10, 8) };
-            header.Children.Add(new FluentIcon
+            header.Children.Add(new Image
             {
-                Symbol = "Board", FontSize = 18,
-                Foreground = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 236, 236, 236)),
+                Source = new BitmapImage(new Uri("ms-appx:///Assets/Logo/logo.png")),
+                Width = 20,
+                Height = 20,
+                Stretch = Stretch.Uniform,
                 VerticalAlignment = VerticalAlignment.Center
             });
             header.Children.Add(new TextBlock

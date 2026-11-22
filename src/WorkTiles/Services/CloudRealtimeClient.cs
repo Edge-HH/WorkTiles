@@ -12,6 +12,7 @@ namespace WorkTiles.Services;
 public sealed class CloudRealtimeClient : IDisposable
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
+    private const int MaximumMessageBytes = 1024 * 1024;
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
@@ -30,8 +31,8 @@ public sealed class CloudRealtimeClient : IDisposable
 
     public void Stop()
     {
+        // 只取消。监听循环可能仍持有 token，立即 Dispose 会让它抛 ObjectDisposedException。
         _cts?.Cancel();
-        _cts?.Dispose();
         _cts = null;
         _loop = null;
         SetConnected(false);
@@ -61,6 +62,8 @@ public sealed class CloudRealtimeClient : IDisposable
                     WebSocketReceiveResult result = await socket.ReceiveAsync(buffer, token);
                     if (result.MessageType == WebSocketMessageType.Close) break;
                     message.Write(buffer, 0, result.Count);
+                    // 异常服务器或明文中间人可以用超大帧耗尽内存；超限断开并按退避重连。
+                    if (message.Length > MaximumMessageBytes) { message.SetLength(0); break; }
                     if (!result.EndOfMessage) continue;
                     string text = Encoding.UTF8.GetString(message.GetBuffer(), 0, (int)message.Length);
                     message.SetLength(0);
@@ -71,6 +74,7 @@ public sealed class CloudRealtimeClient : IDisposable
             }
             catch (OperationCanceledException) when (token.IsCancellationRequested) { break; }
             catch (Exception ex) when (ex is WebSocketException or HttpRequestException or OperationCanceledException or IOException) { }
+            catch (Exception ex) { System.Diagnostics.Debug.WriteLine($"实时通道异常：{ex.Message}"); }
             SetConnected(false);
             if (token.IsCancellationRequested) break;
             try { await Task.Delay(delay, token); } catch (OperationCanceledException) { break; }

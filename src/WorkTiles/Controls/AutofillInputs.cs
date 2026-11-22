@@ -495,9 +495,13 @@ internal sealed class HomeworkAutofillInput
         (int caret, string typed) = CurrentInput();
         if (typed.Length == 0) return;
         string previous = DocumentText();
+        int start = caret - typed.Length;
+        if (start < 0) return;
+        // 期望值按替换区间纯计算，不回读输入框：输入法可能在写入同时把剩余的字接上去。
+        string expected = previous[..start] + suggestion.Text + previous[caret..];
         WriteText(suggestion, caret, typed, focus: true);
         _service.NotifyHomeworkCompleted(suggestion);
-        string expected = DocumentText();
+        if (DocumentText() != expected) RestoreApplied(expected);
         // 输入法会在采纳后把这次组合的内容按原始拼音再上屏一次（也可能拖到失焦时），
         // 组合结束或失焦后核对并把被覆盖的那一段补写回候选。
         _guard.Start(

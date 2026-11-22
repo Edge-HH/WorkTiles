@@ -74,7 +74,10 @@ public sealed partial class MainWindow
             {
                 // 导出前把当前内存状态落盘并打进备份，导出内容与界面一致。
                 SaveStateNow();
-                new BackupService(_dataStore.DataDirectory).Create(file.Path, scope, _library);
+                // 先在本机线程克隆库，压缩在后台执行，避免大资源库冻结界面。
+                ProjectLibrary snapshot = ProjectStore.Clone(_library);
+                string dataDirectory = _dataStore.DataDirectory;
+                await Task.Run(() => new BackupService(dataDirectory).Create(file.Path, scope, snapshot));
                 StorageInfoBar.Title = "已导出数据备份";
                 StorageInfoBar.Message = file.Path;
                 StorageInfoBar.Severity = InfoBarSeverity.Success;
@@ -95,10 +98,15 @@ public sealed partial class MainWindow
             try
             {
                 BackupService service = new(_dataStore.DataDirectory);
-                BackupInfo info = service.Read(file.Path);
+                BackupInfo info = await Task.Run(() => service.Read(file.Path));
                 if (await ShowConfirmAsync("从备份还原",
                     $"备份时间：{info.Manifest.CreatedAt:yyyy年M月d日 HH:mm}\n包含范围：{BackupScopeLabels(info.Manifest.Scopes)}\n媒体文件：{info.MediaEntries.Count} 个\n\n还原会覆盖当前的项目与设置，且无法撤销。继续吗？") != ContentDialogResult.Primary) return;
-                service.Restore(file.Path);
+                // 等到启动时的媒体清理结束，再开始还原，避免清理快照与还原写盘互相踩踏。
+                if (_mediaCleanup is { } cleanup) await cleanup;
+                // 先暂停落盘，再在后台写盘；期间任何定时器都不能用旧内存覆盖还原结果。
+                SuspendPersistenceForRestore();
+                try { await Task.Run(() => service.Restore(file.Path)); }
+                catch { ResumePersistenceAfterFailedRestore(); throw; }
                 await ShowMessageAsync("还原完成", "备份已还原，软件将重新启动以加载还原后的数据。", "重新启动");
                 RestartAfterRestore();
             }
@@ -170,7 +178,7 @@ public sealed partial class MainWindow
         StackPanel page = SettingsStack();
         page.Children.Add(Heading("连接班级"));
         page.Children.Add(Note("未连接时继续使用本地模式。连接后项目先保存在本机 data 目录，再自动上传到班级；断网期间的修改保留在待上传队列中，联网后自动补传。班级布局、图片附件和背景也会一起同步。"));
-        TextBox serverUrl = new() { Header = "服务器地址", Text = _settings.CloudSync.ServerUrl, PlaceholderText = "http://192.168.1.10:5080" };
+        TextBox serverUrl = new() { Header = "服务器地址", Text = _settings.CloudSync.ServerUrl, PlaceholderText = "https://192.168.1.10:5080" };
         TextBox pairingCode = new() { Header = "配对码", PlaceholderText = "输入网页控制台生成的 8 位配对码", CharacterCasing = CharacterCasing.Upper };
         page.Children.Add(serverUrl);
         page.Children.Add(pairingCode);
@@ -212,6 +220,9 @@ public sealed partial class MainWindow
         {
             if (!Uri.TryCreate(serverUrl.Text.Trim(), UriKind.Absolute, out Uri? uri) || uri.Scheme is not ("http" or "https") || string.IsNullOrWhiteSpace(pairingCode.Text))
             { syncStatus.Text = "请检查服务器地址和配对码"; return; }
+            if (uri.Scheme == "http" &&
+                await ShowConfirmAsync("连接将使用明文传输", "当前服务器地址是 http，设备令牌和作业内容会在局域网内明文传输。确定继续吗？") != ContentDialogResult.Primary)
+                return;
             connect.IsEnabled = false;
             syncStatus.Text = "正在连接…";
             try
@@ -314,22 +325,35 @@ public sealed partial class MainWindow
             : "尚未执行过自动备份，将在软件运行后立即执行第一次。";
     }
 
+    private bool _autoBackupRunning;
+    private Task? _mediaCleanup;
+
     /// <summary>到期检查：由 30 分钟定时器和启动时触发；是否执行由上次备份时间与间隔决定。</summary>
-    private void RunAutoBackupIfDue()
+    private async void RunAutoBackupIfDue()
     {
+        if (_autoBackupRunning) return;
         BackupSettings auto = _settings.Data.AutoBackup;
         if (!auto.Enabled || !BackupService.IsDue(auto.LastRunAt, auto.IntervalHours, DateTime.Now)) return;
         DateTime now = DateTime.Now;
+        _autoBackupRunning = true;
         try
         {
-            // 备份内容取当前内存状态，与界面显示一致。
+            // 备份内容取当前内存状态，与界面显示一致；克隆后把压缩和清理放到后台。
             CaptureCurrentProject();
             _library.Settings = _settings;
             string directory = AutoBackupDirectory();
-            Directory.CreateDirectory(directory);
-            new BackupService(_dataStore.DataDirectory).Create(Path.Combine(directory, BackupService.AutoBackupFileName(now)), auto.Scopes.Sanitize(), _library);
+            string path = BackupService.UniqueAutoBackupPath(directory, now);
+            ProjectLibrary snapshot = ProjectStore.Clone(_library);
+            BackupScopes scope = auto.Scopes.Sanitize();
+            int keep = Math.Clamp(auto.KeepCount, 1, 100);
+            string dataDirectory = _dataStore.DataDirectory;
+            await Task.Run(() =>
+            {
+                Directory.CreateDirectory(directory);
+                new BackupService(dataDirectory).Create(path, scope, snapshot);
+                BackupService.PruneAutoBackups(directory, keep);
+            });
             auto.LastRunAt = now;
-            BackupService.PruneAutoBackups(directory, Math.Clamp(auto.KeepCount, 1, 100));
             // LastRunAt 属于设置，写盘后重启才不会重复备份。
             SaveStateNow();
         }
@@ -338,13 +362,94 @@ public sealed partial class MainWindow
             // 自动备份失败不打断使用，也不覆盖上次成功时间，下次检查继续重试。
             ReportStorageError("自动备份失败", ex);
         }
+        finally { _autoBackupRunning = false; }
         RefreshAutoBackupStatus();
     }
 
-    /// <summary>还原备份后重启软件加载新数据；先释放启动闸门，重启进程才不会被当成重复启动拦下。</summary>
-    private void RestartAfterRestore()
+    /// <summary>还原后、重启前暂停所有会落盘的定时任务，避免旧内存覆盖刚还原的数据。</summary>
+    private void SuspendPersistenceForRestore()
     {
         _skipSaveOnClose = true;
+        _saveTimer.Stop();
+        _autoBackupTimer.Stop();
+        _cloudSyncDebounce.Stop();
+        _cloudEventDebounce.Stop();
+        _cloudProjectDebounce.Stop();
+        _cloudLayoutDebounce.Stop();
+        _cloudSyncPeriodic.Stop();
+        _screenReportDebounce.Stop();
+        _editLockHeartbeat.Stop();
+    }
+
+    /// <summary>保守清理 90 天前且不再被任何项目、背景设置或最近历史引用的自有媒体副本。</summary>
+    private void CleanupStaleMediaCopies()
+    {
+        if (!_storageReady) return;
+        try
+        {
+            HashSet<string> referenced = new(StringComparer.OrdinalIgnoreCase);
+            string dataDirectory = _dataStore.DataDirectory;
+            // 旧设置可能保存相对路径；按数据目录解析，不能依赖进程当前目录。
+            string Normalize(string path) => Path.GetFullPath(Path.IsPathRooted(path) ? path : Path.Combine(dataDirectory, path));
+            foreach (ProjectDocument project in _library.Projects)
+                foreach (AttachmentState asset in ProjectStore.Attachments(project))
+                    if (!string.IsNullOrWhiteSpace(asset.Path)) referenced.Add(Normalize(asset.Path));
+            foreach (BackgroundSettings style in new[]
+                { _settings.TileBackground, _settings.SharedBackground, _settings.ClockBackground, _settings.BoardBackground })
+            {
+                if (!string.IsNullOrWhiteSpace(style.ImagePath)) referenced.Add(Normalize(style.ImagePath));
+                foreach (string item in style.Playlist)
+                    if (!string.IsNullOrWhiteSpace(item)) referenced.Add(Normalize(item));
+            }
+            MediaLibrary library = new(dataDirectory);
+            // 历史损坏/被占用时放弃本轮清理，不能把空历史当成“无引用”。
+            foreach (string path in library.RecentMediaStrict()) referenced.Add(Normalize(path));
+            DateTime cutoff = DateTime.UtcNow.AddDays(-90);
+            _mediaCleanup = Task.Run(() =>
+            {
+                try
+                {
+                    int removed = library.CleanupUnreferenced(cutoff, referenced);
+                    if (removed > 0) System.Diagnostics.Debug.WriteLine($"已清理 {removed} 个过期媒体副本。");
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine($"清理过期媒体失败：{ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"清理过期媒体失败：{ex.Message}");
+        }
+    }
+
+    /// <summary>还原失败时恢复落盘与集控；此时磁盘仍是还原前的状态，旧内存不会覆盖新数据。</summary>
+    private void ResumePersistenceAfterFailedRestore()
+    {
+        _skipSaveOnClose = false;
+        if (!_isLoaded) return;
+        _saveTimer.Start();
+        _autoBackupTimer.Start();
+        RestartCloudConnection();
+        if (_isEditing || _desktopEditing) _editLockHeartbeat.Start();
+        ScheduleScreenReport();
+    }
+
+    /// <summary>还原备份后重启软件加载新数据；磁盘已由还原写入，退出时不能再把内存里的旧状态写回去。</summary>
+    private void RestartAfterRestore() => RestartCore(skipSaveOnClose: true);
+
+    /// <summary>托盘「重启」：先保存当前编辑，再按正常退出保存路径重启。</summary>
+    private void RestartFromTray()
+    {
+        SaveStateNow();
+        RestartCore(skipSaveOnClose: false);
+    }
+
+    /// <summary>重启软件；先释放启动闸门，重启进程才不会被当成重复启动拦下。</summary>
+    private void RestartCore(bool skipSaveOnClose)
+    {
+        _skipSaveOnClose = skipSaveOnClose;
         _saveTimer.Stop();
         _autoBackupTimer.Stop();
         _instanceGate?.Dispose();
@@ -362,9 +467,9 @@ public sealed partial class MainWindow
         }
         catch (Exception ex)
         {
-            // 重启失败时保留还原后的数据并报告错误，用户可自行重新打开软件。
-            _skipSaveOnClose = false;
-            ReportStorageError("还原已完成，但自动重启失败", ex);
+            _allowClose = false;
+            // 还原后的内存是旧状态，继续运行会在下次保存时覆盖刚还原的数据，因此保持跳过保存。
+            ReportStorageError(skipSaveOnClose ? "还原已完成，但自动重启失败，请手动关闭并重新打开软件" : "自动重启失败", ex);
             return;
         }
         Close();

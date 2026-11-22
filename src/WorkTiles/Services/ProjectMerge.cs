@@ -30,7 +30,12 @@ public static class ProjectMerge
         }
 
         ProjectDocument merged = ProjectStore.Clone(remote);
-        foreach (string field in new[] { nameof(ProjectDocument.ClockInkStrokes), nameof(ProjectDocument.Theme), nameof(ProjectDocument.Palette) })
+        foreach (string field in new[]
+        {
+            nameof(ProjectDocument.ClockInkStrokes), nameof(ProjectDocument.Theme), nameof(ProjectDocument.Palette),
+            nameof(ProjectDocument.Name), nameof(ProjectDocument.AssignmentDate),
+            nameof(ProjectDocument.CustomPalette), nameof(ProjectDocument.CustomPalettes)
+        })
         {
             if (TakeLocal(b[field], l[field], r[field]) is not { } takeLocal) return null;
             if (!takeLocal) continue;
@@ -39,6 +44,10 @@ public static class ProjectMerge
                 case nameof(ProjectDocument.ClockInkStrokes): merged.ClockInkStrokes = local.ClockInkStrokes; break;
                 case nameof(ProjectDocument.Theme): merged.Theme = local.Theme; break;
                 case nameof(ProjectDocument.Palette): merged.Palette = local.Palette; break;
+                case nameof(ProjectDocument.Name): merged.Name = local.Name; break;
+                case nameof(ProjectDocument.AssignmentDate): merged.AssignmentDate = local.AssignmentDate; break;
+                case nameof(ProjectDocument.CustomPalette): merged.CustomPalette = local.CustomPalette; break;
+                case nameof(ProjectDocument.CustomPalettes): merged.CustomPalettes = local.CustomPalettes; break;
             }
         }
 

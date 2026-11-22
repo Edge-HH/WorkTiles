@@ -119,6 +119,10 @@ public sealed partial class MainWindow
             check(Math.Abs(bandLeft - expectedLeft) < 1.5, "the selection starts at the first glyph");
             check(Math.Abs(bandLeft + band.Width - expectedRight) < 1.5, "the selection ends at the last glyph");
         }
+        else
+        {
+            check(false, "the selection band is visible");
+        }
 
         editor.Document.GetRange(6, 7).GetRect(PointOptions.ClientCoordinates, out Rect outside, out _);
         (int _, int _, int outsideOpaque) = await SampleRegionAsync(host, outside);
@@ -237,6 +241,10 @@ public sealed partial class MainWindow
             check(Math.Abs(editorAt.X - hostAt.X) < 1.5 && Math.Abs(editorAt.Y - hostAt.Y) < 1.5, "the overlay stays on the editor when the board is zoomed");
             check(Math.Abs(editor.ActualWidth - host.ActualWidth) < 1.5 && Math.Abs(editor.ActualHeight - host.ActualHeight) < 1.5,
                 "the overlay matches the editor size when the board is zoomed");
+        }
+        else
+        {
+            check(false, "the overlay host stays available after zooming");
         }
 
         SetBoardZoom(1);

@@ -37,6 +37,10 @@ public sealed class AutofillService
 
     private readonly Func<AutofillSettings> _accessor;
     private readonly PinyinIndex _pinyin;
+
+    /// <summary>拼音词库不可用时给设置页的提示；为空表示正常。</summary>
+    public string? PinyinWarning => _pinyin.LoadFailed ? _pinyin.LoadError ?? "拼音词库缺失，补全已退化为汉字匹配。" : null;
+    private readonly Dictionary<string, (string Full, string Initials)> _pinyinCache = new(StringComparer.Ordinal);
     // 随机配色时记住每个学科上一次抽到的颜色，避免连续两次补全看起来像没生效。
     private readonly Dictionary<string, string> _lastRandomColors = new(StringComparer.OrdinalIgnoreCase);
 
@@ -346,7 +350,7 @@ public sealed class AutofillService
         if (token.Length is < 2 or > MaxTokenLength) return false;
         // 占位提示不再写进正文，这里只是拦住旧版本遗留或手工粘贴的提示文案。
         if (token.Contains(HomeworkState.PlaceholderText, StringComparison.Ordinal)) return false;
-        if (token.Any(IsHan)) return true;
+        if (ContainsHan(token)) return true;
         int run = 0;
         foreach (char character in token)
         {
@@ -416,15 +420,7 @@ public sealed class AutofillService
         }
 
         // 汉字名称旁单独粘连的一个字母多半是页码标记（如“双练一测P”），不参与名称。
-        bool hasHan = false;
-        for (int index = from; index < to; index++)
-        {
-            if (IsHan(token[index]))
-            {
-                hasHan = true;
-                break;
-            }
-        }
+        bool hasHan = ContainsHan(token[from..to]);
 
         if (hasHan)
         {
@@ -446,8 +442,17 @@ public sealed class AutofillService
         (char.IsWhiteSpace(character) || char.IsDigit(character) ||
          char.IsPunctuation(character) || char.IsSymbol(character) || char.IsControl(character));
 
-    private static bool IsHan(char character) =>
-        character is >= '\u3400' and <= '\u9FFF' or >= '\uF900' and <= '\uFAFF';
+    private static bool ContainsHan(string value)
+    {
+        foreach (Rune rune in value.EnumerateRunes())
+        {
+            int code = rune.Value;
+            if (code == 0x3007 || (code >= 0x3400 && code <= 0x9FFF) || (code >= 0xF900 && code <= 0xFAFF) ||
+                (code >= 0x20000 && code <= 0x2FA1F) || (code >= 0x30000 && code <= 0x323AF))
+                return true;
+        }
+        return false;
+    }
 
     private static bool IsAsciiLetters(string value)
     {
@@ -496,7 +501,12 @@ public sealed class AutofillService
         if (name.Contains(query, StringComparison.OrdinalIgnoreCase)) return 300;
         string lowered = NormalizePinyinQuery(query);
         if (!IsAsciiLetters(lowered)) return 0;
-        (string full, string initials) = _pinyin.Expand(name);
+        if (!_pinyinCache.TryGetValue(name, out var expanded))
+        {
+            expanded = _pinyin.Expand(name);
+            if (_pinyinCache.Count < 1024) _pinyinCache[name] = expanded;
+        }
+        (string full, string initials) = expanded;
         if (full.StartsWith(lowered, StringComparison.Ordinal)) return 260;
         if (initials.StartsWith(lowered, StringComparison.Ordinal)) return 240;
         if (NormalizeLevel(level) == "Loose" && IsSubsequence(initials, lowered)) return 200;
@@ -508,7 +518,7 @@ public sealed class AutofillService
     {
         "Loose" => 1,
         "Strict" => 2,
-        _ => query.Any(IsHan) ? 1 : 2
+        _ => ContainsHan(query) ? 1 : 2
     };
 
     private static string? NormalizeSubject(string? subjectName)

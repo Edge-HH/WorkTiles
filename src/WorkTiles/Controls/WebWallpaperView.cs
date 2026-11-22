@@ -40,6 +40,7 @@ public sealed class WebWallpaperView : Grid, IDisposable
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.AreHostObjectsAllowed = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
+                core.Settings.AreDefaultScriptDialogsEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
                 core.NewWindowRequested += (_, args) => args.Handled = true;
@@ -47,10 +48,12 @@ public sealed class WebWallpaperView : Grid, IDisposable
                 core.ProcessFailed += (_, _) => { if (!_disposed) Failed?.Invoke(); };
                 string host = "w-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(package.Directory)))[..16].ToLowerInvariant() + ".worktiles.invalid";
                 core.SetVirtualHostNameToFolderMapping(host, package.Directory, CoreWebView2HostResourceAccessKind.DenyCors);
-                core.NavigationStarting += (_, args) =>
-                {
-                    if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var uri) || uri.Scheme != "https" || uri.Host != host) args.Cancel = true;
-                };
+                bool AllowedNavigation(string uriText) =>
+                    uriText == "about:blank" ||
+                    (Uri.TryCreate(uriText, UriKind.Absolute, out Uri? uri) && uri.Scheme == "https" && uri.Host == host);
+                core.NavigationStarting += (_, args) => { if (!AllowedNavigation(args.Uri)) args.Cancel = true; };
+                // iframe 不受主框架白名单约束；同样拒绝远程源，避免网页壁纸用 iframe 拉任意内容。
+                core.FrameNavigationStarting += (_, args) => { if (!AllowedNavigation(args.Uri)) args.Cancel = true; };
                 await core.AddScriptToExecuteOnDocumentCreatedAsync(CompatibilityScript);
                 if (_disposed) return;
                 core.NavigationCompleted += async (_, args) =>

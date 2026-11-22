@@ -75,7 +75,19 @@ internal class DesktopSurfaceWindow
             _contentReady = true;
             ContentReady?.Invoke();
         });
-        _host.Create(_root, _title);
+        try { _host.Create(_root, _title); }
+        catch (Exception ex)
+        {
+            _shown = false;
+            System.Diagnostics.Debug.WriteLine("桌面磁贴宿主创建失败：" + ex.Message);
+            throw;
+        }
+        if (Handle == 0)
+        {
+            _shown = false;
+            System.Diagnostics.Debug.WriteLine("桌面磁贴宿主未返回窗口句柄。");
+            return;
+        }
         if (_hasBounds)
             _host.MoveAndResize(_bounds.X, _bounds.Y, _bounds.Width, _bounds.Height);
         _host.Show();

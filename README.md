@@ -175,7 +175,18 @@ WorkTiles/
 powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-interaction-contract.ps1
 ```
 
-该脚本检查触控交互、网格吸附、全局手写工具栏和全屏退出提示等关键实现是否存在。项目与 `.wth` 往返测试可运行 `dotnet run --project tests/ProjectLogic/ProjectLogic.csproj -c Release`，也覆盖紧密网格排版、区域中轴和相邻磁贴吸附。更新测试运行 `dotnet run --project tests/UpdateLogic/UpdateLogic.csproj -c Release`，在临时目录检查解压、覆盖、数据保留、锁定文件回滚和危险路径拒绝。仓库还包含按条件编译的隔离 WinUI 渲染测试，用于验证内置字体、长富文本、图片、笔迹、多比例 PNG、图标、底栏顺序和实际点击后的色卡选中状态；它不会随正式构建进入应用。
+该脚本检查触控交互、网格吸附、全局手写工具栏和全屏退出提示等关键实现是否存在。仓库还包含按条件编译的隔离 WinUI 渲染测试，用于验证内置字体、长富文本、图片、笔迹、多比例 PNG、图标、底栏顺序和实际点击后的色卡选中状态；它不会随正式构建进入应用。
+
+| 入口 | 覆盖内容 | 需要交互桌面 |
+|---|---|---|
+| `dotnet run --project tests/ProjectLogic` | 项目与 `.wth` 往返、紧密网格排版、区域中轴、相邻磁贴吸附 | 否 |
+| `dotnet run --project tests/SettingsLogic` | 设置迁移、锁屏与 TOTP、自动填充、备份、桌面磁贴排版、设置清单 | 否 |
+| `dotnet run --project tests/UpdateLogic` | 解压、覆盖、数据保留、锁定文件回滚、危险路径拒绝、摘要缺失拒绝 | 否 |
+| `dotnet run --project tests/SyncLogic` | 集控同步端到端；需要 `-p:WorkTilesServerDir` 指向 `release.yml` 固定的服务端快照 | 否 |
+| `tests/verify-layout-persistence.ps1 -PublishDirectory <dir>` | 启动、正常关闭、主题与布局保持；使用 `--layout-probe`，不碰真实自启/麦克风 | 否 |
+| `tests/verify-ui.ps1 -PublishDirectory <dir> -EvidenceDirectory <dir>` | 隔离 WinUI 验证；可用 `-SelectionOnly`、`-GridCoverageOnly`、`-AutoLayoutOnly`、`-AutofillImeOnly`、`-ImageDragOnly` 等开关缩窄 | 是 |
+| `tests/verify-requested-ui-contract.ps1` 等契约脚本 | 静态 XAML/C# 契约；需要 PowerShell 7 | 否 |
+
 
 ## 🚧 当前限制
 

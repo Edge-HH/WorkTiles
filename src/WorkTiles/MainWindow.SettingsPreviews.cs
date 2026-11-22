@@ -261,7 +261,7 @@ public sealed partial class MainWindow
                 // 磁贴示例的主题色与高光色都取自当前色系，主题或色系变化必须重建示例才和真实磁贴一致。
                 "Tile" => $"{BoardTheme.IsLight}|{ColorPalette.IsMacaron}",
                 // SplitRatio 由增量刷新器直接改列宽，放进缓存键会让拖分隔条重建整棵预览、丢掉视频播放进度。
-                "Background" => $"{BoardTheme.IsLight}|{_settings.LayoutMode}|{_settings.SharedBackgroundEnabled}",
+                "Background" => $"{BoardTheme.IsLight}|{_settings.LayoutMode}|{_settings.SharedBackgroundEnabled}|{_settings.SplitOrientation}|{_settings.SplitSwapped}",
                 _ => $"{BoardTheme.IsLight}|{_settings.LayoutMode}"
             };
             // 只有网格页每次重建；布局页缓存真实磁贴控件，拖动时只走刷新器，不重建控件与背景。
@@ -367,20 +367,39 @@ public sealed partial class MainWindow
                 AddRegion(content, false);
                 break;
             default:
-                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(split, GridUnitType.Star) });
-                content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - split, GridUnitType.Star) });
                 Grid clock = new(), board = new();
                 AddRegion(clock, true);
                 AddRegion(board, false);
                 content.Children.Add(clock);
-                Grid.SetColumn(board, 1);
                 content.Children.Add(board);
-                _buildingPreviewRefreshers?.Add(() =>
+                bool vertical = string.Equals(_settings.SplitOrientation, "Vertical", StringComparison.Ordinal);
+                bool swapped = _settings.SplitSwapped;
+                if (vertical)
                 {
-                    double current = Math.Clamp(_settings.SplitRatio, .1, .9);
-                    content.ColumnDefinitions[0].Width = new GridLength(current, GridUnitType.Star);
-                    content.ColumnDefinitions[1].Width = new GridLength(1 - current, GridUnitType.Star);
-                });
+                    content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(split, GridUnitType.Star) });
+                    content.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1 - split, GridUnitType.Star) });
+                    Grid.SetRow(clock, swapped ? 1 : 0);
+                    Grid.SetRow(board, swapped ? 0 : 1);
+                    _buildingPreviewRefreshers?.Add(() =>
+                    {
+                        double current = Math.Clamp(_settings.SplitRatio, .1, .9);
+                        content.RowDefinitions[0].Height = new GridLength(current, GridUnitType.Star);
+                        content.RowDefinitions[1].Height = new GridLength(1 - current, GridUnitType.Star);
+                    });
+                }
+                else
+                {
+                    content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(split, GridUnitType.Star) });
+                    content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1 - split, GridUnitType.Star) });
+                    Grid.SetColumn(clock, swapped ? 1 : 0);
+                    Grid.SetColumn(board, swapped ? 0 : 1);
+                    _buildingPreviewRefreshers?.Add(() =>
+                    {
+                        double current = Math.Clamp(_settings.SplitRatio, .1, .9);
+                        content.ColumnDefinitions[0].Width = new GridLength(current, GridUnitType.Star);
+                        content.ColumnDefinitions[1].Width = new GridLength(1 - current, GridUnitType.Star);
+                    });
+                }
                 break;
         }
     }

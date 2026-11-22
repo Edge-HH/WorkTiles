@@ -17,6 +17,8 @@ public static class ColorPalette
         IsMacaron = string.Equals(palette, "Macaron", StringComparison.OrdinalIgnoreCase);
         if (custom is { Count: 9 } && custom.All(color => color.Length is 7 or 9 && color[0] == '#'))
             _custom = custom.ToArray();
+        else
+            _custom = [];
         IsCustom = string.Equals(palette, "Custom", StringComparison.OrdinalIgnoreCase) && _custom.Length == Vivid.Length;
     }
 

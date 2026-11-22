@@ -1,3 +1,5 @@
+using WorkTiles.Shared;
+
 namespace WorkTiles.Services;
 
 /// <summary>独立于播放器的选曲逻辑；坏文件在本次配置中跳过，避免全部失败时无限重试。</summary>
@@ -11,7 +13,7 @@ public sealed class BackgroundPlaylist
     public bool Configure(BackgroundSettings settings)
     {
         string[] paths = (settings.PlaylistEnabled ? settings.Playlist ?? [] : new List<string> { settings.ImagePath })
-            .Where(path => MediaLibrary.IsSupported(path) && File.Exists(path)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            .Where(path => SettingsSchema.IsSafeLocalPath(path) && MediaLibrary.IsSupported(path) && File.Exists(path)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         if (_paths.SequenceEqual(paths, StringComparer.OrdinalIgnoreCase)) return false;
         string previous = Current;
         _paths = paths;

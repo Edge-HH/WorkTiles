@@ -49,7 +49,15 @@ public sealed class BackupService(string dataDirectory)
             full = Path.GetFullPath(full);
             if (byPath.ContainsKey(full) || !File.Exists(full)) return;
             string entry = "backgrounds/" + Path.GetFileName(full);
-            if (byPath.ContainsValue(entry)) return;
+            if (byPath.ContainsValue(entry))
+            {
+                // 同名不同源的文件不能静默丢掉，加序号区分并让设置保留各自的引用。
+                string baseName = Path.GetFileNameWithoutExtension(full);
+                string extension = Path.GetExtension(full);
+                int suffix = 2;
+                do { entry = $"backgrounds/{baseName}-{suffix}{extension}"; suffix++; }
+                while (byPath.ContainsValue(entry));
+            }
             byPath.Add(full, entry);
             files.Add((full, entry));
         }
@@ -94,9 +102,21 @@ public sealed class BackupService(string dataDirectory)
             {
                 if (string.IsNullOrWhiteSpace(asset.Path)) continue;
                 string full = Path.GetFullPath(asset.Path);
-                string entry = "projects/" + project.Id.ToString("N") + "/" + Path.GetFileName(full);
+                int existing = files.FindIndex(item => string.Equals(item.Source, full, StringComparison.OrdinalIgnoreCase));
+                if (existing >= 0) { asset.Path = files[existing].Entry; continue; }
+                string directoryEntry = "projects/" + project.Id.ToString("N") + "/";
+                string entry = directoryEntry + Path.GetFileName(full);
+                if (files.Any(item => string.Equals(item.Entry, entry, StringComparison.OrdinalIgnoreCase)))
+                {
+                    // 同一项目内两个不同源文件同名：加序号，不能只打包第一个。
+                    string baseName = Path.GetFileNameWithoutExtension(full);
+                    string extension = Path.GetExtension(full);
+                    int suffix = 2;
+                    do { entry = $"{directoryEntry}{baseName}-{suffix}{extension}"; suffix++; }
+                    while (files.Any(item => string.Equals(item.Entry, entry, StringComparison.OrdinalIgnoreCase)));
+                }
                 asset.Path = entry;
-                if (!files.Any(item => item.Entry == entry)) files.Add((full, entry));
+                files.Add((full, entry));
             }
         }
 
@@ -119,7 +139,14 @@ public sealed class BackupService(string dataDirectory)
             }
             WriteJson(ManifestEntry, new BackupManifest(ManifestVersion, scope, DateTime.Now));
             if (scope.Has(BackupScopes.Jobs)) WriteJson(JobsEntry, jobs);
-            if (scope.Has(BackupScopes.Settings)) WriteJson(SettingsEntry, settingsSource.Settings);
+            if (scope.Has(BackupScopes.Settings))
+            {
+                // TOTP 用 DPAPI 保护；设备令牌与设备身份不随备份迁移，还原到新机器后需要重新配对。
+                SecretProtector.ProtectSettings(settingsSource.Settings);
+                settingsSource.Settings.CloudSync.DeviceToken = "";
+                settingsSource.Settings.CloudSync.DeviceId = null;
+                WriteJson(SettingsEntry, settingsSource.Settings);
+            }
             if (scope.Has(BackupScopes.RecentBackgrounds))
             {
                 // 历史索引存条目路径，还原时映射回本地资源；不在包内的旧引用出包时就丢掉。
@@ -144,6 +171,12 @@ public sealed class BackupService(string dataDirectory)
             .Where(name => (name.StartsWith("backgrounds/") || name.StartsWith("web/")) && !name.EndsWith('/') && !name.EndsWith(".json"))
             .Order(StringComparer.OrdinalIgnoreCase).ToList();
         return new BackupInfo(manifest, media);
+    }
+
+    private static BoardSettingsState LoadOrDefaultSettings(ProjectStore store)
+    {
+        try { return store.Load().Settings; }
+        catch (Exception ex) when (ex is JsonException or InvalidDataException) { return new BoardSettingsState(); }
     }
 
     /// <summary>还原备份。范围以存档为准：收了什么还原什么，缺的类别保留现状。</summary>
@@ -181,7 +214,7 @@ public sealed class BackupService(string dataDirectory)
             library.Version = 1;
             // 备份里的待上传操作是历史快照，还原后重放可能用旧内容覆盖云端较新修订。
             library.SyncQueue.Clear();
-            library.Settings = settings ?? store.Load().Settings;
+            library.Settings = settings ?? LoadOrDefaultSettings(store);
             foreach (ProjectDocument project in library.Projects)
             {
                 string assets = store.AssetDirectory(project.Id);
@@ -213,6 +246,17 @@ public sealed class BackupService(string dataDirectory)
 
     /// <summary>自动备份的文件名按时间命名，字典序即时间序，便于按保留份数清理最旧备份。</summary>
     public static string AutoBackupFileName(DateTime now) => $"auto-{now:yyyyMMddHHmmss}.wtb";
+
+    /// <summary>同一秒内重复触发（DST 回拨或时钟回退）时加序号，避免覆盖上一份备份。</summary>
+    public static string UniqueAutoBackupPath(string directory, DateTime now)
+    {
+        string name = AutoBackupFileName(now);
+        string path = Path.Combine(directory, name);
+        // '_' (0x5F) 排在基础文件名的 '.' (0x2E) 之后，保持“字典序即时间序”的裁剪约定。
+        for (int suffix = 2; File.Exists(path); suffix++)
+            path = Path.Combine(directory, Path.GetFileNameWithoutExtension(name) + "_" + suffix.ToString("D3") + Path.GetExtension(name));
+        return path;
+    }
 
     /// <summary>自动备份间隔小时数归一化：非法值回到 24 小时，范围 1 小时到 1 年。</summary>
     public static double NormalizeIntervalHours(double hours) =>

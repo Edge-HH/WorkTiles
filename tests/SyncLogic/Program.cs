@@ -17,8 +17,9 @@ void Check(bool value, string message) { if (!value) throw new Exception("FAIL: 
 JsonObject defaults = JsonSerializer.SerializeToNode(new BoardSettingsState(), ProjectStore.JsonOptions)!.AsObject();
 foreach (SettingDescriptor descriptor in SettingsSchema.All)
 {
-    Check(SettingsSchema.Get(defaults, descriptor.Key) is not null, $"设置 {descriptor.Key} 不存在");
-    Check(SettingsSchema.Same(SettingsSchema.Get(defaults, descriptor.Key), descriptor.Default), $"设置 {descriptor.Key} 的默认值与桌面端不一致");
+    if (SettingsSchema.Get(defaults, descriptor.Key) is not { } desktopValue)
+        throw new Exception($"服务端设置 {descriptor.Key} 在桌面端默认设置中不存在。请确认 WorkTilesServerDir 指向 release.yml 固定的服务端快照（而不是服务端 main）。");
+    Check(SettingsSchema.Same(desktopValue, descriptor.Default), $"设置 {descriptor.Key} 的默认值与桌面端不一致");
     Check(SettingsSchema.SanitizeValue(descriptor, descriptor.Default) is { } clean && SettingsSchema.Same(clean, descriptor.Default), $"设置 {descriptor.Key} 的默认值能通过校验");
 }
 void Cover(JsonObject node, string prefix)
@@ -45,9 +46,9 @@ var app = WorkTilesServer.Build([
     "--WorkTiles:MaxAssetMegabytes=1",
     "--Logging:LogLevel:Default=Warning"
 ]);
-await app.StartAsync();
 try
 {
+    await app.StartAsync();
     string baseUrl = app.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.First();
     var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
     var admin = new HttpClient { BaseAddress = new Uri(baseUrl) };
@@ -562,8 +563,9 @@ try
 }
 finally
 {
-    await app.StopAsync();
-    await app.DisposeAsync();
+    try { await app.StopAsync(); } catch (Exception) { }
+    try { await app.DisposeAsync(); } catch (Exception) { }
     Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
-    try { Directory.Delete(root, true); } catch (IOException) { }
+    try { Directory.Delete(root, true); }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
 }

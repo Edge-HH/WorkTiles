@@ -12,12 +12,14 @@ public static class StartupRegistration
     {
         using RegistryKey? key = Registry.CurrentUser.OpenSubKey(RunKey, writable: true);
         if (key is null) return;
+        string executable = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "WorkTiles.exe");
         if (!enabled)
         {
-            key.DeleteValue(ValueName, throwOnMissingValue: false);
+            // 只删除指向本安装目录的值；另一份安装的同名自启不能被我方关闭。
+            if (key.GetValue(ValueName) is string current && current.Contains(executable, StringComparison.OrdinalIgnoreCase))
+                key.DeleteValue(ValueName, throwOnMissingValue: false);
             return;
         }
-        string executable = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "WorkTiles.exe");
         string command = $"\"{executable}\"";
         if (silent) command += " --silent";
         key.SetValue(ValueName, command);

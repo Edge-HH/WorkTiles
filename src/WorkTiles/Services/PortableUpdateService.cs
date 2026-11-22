@@ -37,24 +37,41 @@ public static class PortableUpdateService
                 }
             }
         }
-        foreach (string required in new[] { "WorkTiles.exe", "WorkTiles.dll", "WorkTiles.pri", "WorkTiles.runtimeconfig.json" })
+        foreach (string required in new[] { "WorkTiles.exe", "WorkTiles.dll", "WorkTiles.pri", "WorkTiles.runtimeconfig.json", "coreclr.dll" })
             if (!File.Exists(Path.Combine(payload, required))) throw new InvalidDataException("更新包缺少必要文件：" + required);
         // 在关闭应用前发现权限问题，用户仍可继续使用当前版本。
         string probe = Path.Combine(target, ".worktiles-update-" + Guid.NewGuid().ToString("N"));
         using (new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose)) { }
         File.Copy(Path.Combine(AppContext.BaseDirectory, "ApplyUpdate.ps1"), Path.Combine(stage, "ApplyUpdate.ps1"));
         string configuration = Path.Combine(stage, "update.json");
-        File.WriteAllText(configuration, JsonSerializer.Serialize(new { Target = target, Payload = payload, ParentProcessId = processId }));
+        DateTime startedAt = DateTime.UtcNow;
+        try { startedAt = Process.GetCurrentProcess().StartTime.ToUniversalTime(); } catch (Exception) { }
+        File.WriteAllText(configuration, JsonSerializer.Serialize(new
+        {
+            Target = target, Payload = payload, ParentProcessId = processId,
+            ParentStartTimeUtc = startedAt.ToString("O"),
+            Arguments = Environment.GetCommandLineArgs().Skip(1).ToArray()
+        }));
         return configuration;
     }
 
-    public static void Launch(string configuration)
+    /// <summary>启动更新脚本并等它写出 update.started；脚本被策略拦截时返回 false，调用方不要关闭程序。</summary>
+    public static async Task<bool> LaunchAsync(string configuration, TimeSpan? timeout = null)
     {
         ProcessStartInfo start = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "WindowsPowerShell", "v1.0", "powershell.exe"))
         { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
         foreach (string argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", Path.Combine(Path.GetDirectoryName(configuration)!, "ApplyUpdate.ps1"), "-Configuration", configuration })
             start.ArgumentList.Add(argument);
+        string marker = Path.Combine(Path.GetDirectoryName(configuration)!, "update.started");
+        try { if (File.Exists(marker)) File.Delete(marker); } catch (Exception) { }
         _ = Process.Start(start) ?? throw new IOException("无法启动更新程序。");
+        DateTime deadline = DateTime.UtcNow + (timeout ?? TimeSpan.FromSeconds(5));
+        while (DateTime.UtcNow < deadline)
+        {
+            if (File.Exists(marker)) return true;
+            await Task.Delay(100);
+        }
+        return false;
     }
 
     internal static void ValidateRelativePath(string path)

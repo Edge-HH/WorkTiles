@@ -1,11 +1,12 @@
 param(
+    [string]$PublishDirectory = (Join-Path $PSScriptRoot '..\src\WorkTiles\bin\Release\net8.0-windows10.0.19041.0\win-x64'),
     [ValidateSet('Dark', 'Light')] [string]$Theme = 'Dark',
     [ValidateSet('display', 'settings')] [string]$View = 'display'
 )
 $ErrorActionPreference = 'Stop'
 
-$projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
-$outputDirectory = Join-Path $projectRoot 'src\WorkTiles\bin\Release\net8.0-windows10.0.19041.0\win-x64'
+$outputDirectory = [System.IO.Path]::GetFullPath($PublishDirectory)
+Write-Output "Using publish directory: $outputDirectory"
 $executablePath = Join-Path $outputDirectory 'WorkTiles.exe'
 
 if (-not (Test-Path -LiteralPath $executablePath)) {
@@ -14,9 +15,13 @@ if (-not (Test-Path -LiteralPath $executablePath)) {
 
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) ('WorkTiles-layout-persistence-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $testRoot | Out-Null
+$process = $null
 
 try {
-    Copy-Item -Path (Join-Path $outputDirectory '*') -Destination $testRoot -Recurse -Force
+    # 不复制真实 data：夹具必须自己决定加载什么，测试也不能带着真实集控凭据启动。
+    Get-ChildItem -LiteralPath $outputDirectory |
+        Where-Object { $_.Name -notin @('data', 'verification', 'startup-ok.txt') } |
+        Copy-Item -Destination $testRoot -Recurse -Force
     $dataDirectory = Join-Path $testRoot 'data'
     New-Item -ItemType Directory -Path $dataDirectory -Force | Out-Null
     $statePath = Join-Path $dataDirectory 'pancake.json'
@@ -25,6 +30,8 @@ try {
   "SchemaVersion": 1,
   "Settings": {
     "Theme": "Dark",
+    "LaunchAtStartup": false,
+    "SilentStartup": false,
     "MicrophoneSampleRate": 16000,
     "MicrophoneCalibrationDb": 0,
     "WeatherCityName": "Beijing",
@@ -44,9 +51,10 @@ try {
     [System.IO.File]::WriteAllText($statePath, $fixture)
     $before = [System.IO.File]::ReadAllText($statePath) | ConvertFrom-Json
 
+    # --layout-probe：允许正常关闭，并跳过麦克风、天气、自动备份、开机自启与托盘。
     $process = Start-Process `
         -FilePath (Join-Path $testRoot 'WorkTiles.exe') `
-        -ArgumentList '--windowed', "--view=$View" `
+        -ArgumentList '--windowed', "--view=$View", '--layout-probe' `
         -WorkingDirectory $testRoot `
         -WindowStyle Hidden `
         -PassThru
@@ -74,12 +82,16 @@ try {
 finally {
     if ($process -and -not $process.HasExited) {
         $null = $process.CloseMainWindow()
+        if (-not $process.WaitForExit(3000)) {
+            try { Stop-Process -Id $process.Id -Force -ErrorAction Stop } catch { }
+        }
     }
 
     $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
     $resolvedTempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath())
     if ($resolvedTestRoot.StartsWith($resolvedTempRoot, [System.StringComparison]::OrdinalIgnoreCase) -and
         (Split-Path -Leaf $resolvedTestRoot).StartsWith('WorkTiles-layout-persistence-')) {
-        Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force -ErrorAction SilentlyContinue
+        try { Remove-Item -LiteralPath $resolvedTestRoot -Recurse -Force -ErrorAction Stop }
+        catch { Write-Warning "临时测试目录未能删除：$resolvedTestRoot（$($_.Exception.Message)）" }
     }
 }

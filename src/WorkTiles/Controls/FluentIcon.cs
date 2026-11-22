@@ -60,6 +60,10 @@ public static class FluentGlyphs
     public const string ArrowDownRight = "\uE0D1"; // ic_fluent_arrow_down_right_20_regular
     // 外观 → 时钟设置页的导航图标。
     public const string Clock = "\uE4C4"; // ic_fluent_clock_20_regular
+    // 顶栏分屏方向与区域对调：三枚图标分别表示左右分屏、上下分屏和对调。
+    public const string SplitHorizontal = "\uEA54"; // ic_fluent_layout_column_two_split_left_20_regular
+    public const string SplitVertical = "\uEA75"; // ic_fluent_layout_row_two_split_top_20_regular
+    public const string Swap = "\uE15F"; // ic_fluent_arrow_swap_20_regular
     public static string Resolve(string symbol) => symbol switch
     {
         nameof(Board) => Board,
@@ -104,6 +108,9 @@ public static class FluentGlyphs
         nameof(ZoomOut) => ZoomOut,
         nameof(ArrowDownRight) => ArrowDownRight,
         nameof(Clock) => Clock,
+        nameof(SplitHorizontal) => SplitHorizontal,
+        nameof(SplitVertical) => SplitVertical,
+        nameof(Swap) => Swap,
         nameof(Save) => Save,
         nameof(ArrowDownload) => ArrowDownload,
         nameof(ArrowSync) => ArrowSync,

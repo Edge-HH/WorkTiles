@@ -10,13 +10,23 @@ public sealed record WeatherCity(string Name, string Code)
 
 public sealed class WeatherCityCatalog
 {
-    private IReadOnlyList<WeatherCity>? _cities;
+    private readonly object _gate = new();
+    private Lazy<Task<IReadOnlyList<WeatherCity>>>? _load;
 
     public async Task<IReadOnlyList<WeatherCity>> SearchAsync(string query, int limit = 100)
     {
-        _cities ??= await LoadAsync();
+        Lazy<Task<IReadOnlyList<WeatherCity>>> load;
+        lock (_gate) load = _load ??= new Lazy<Task<IReadOnlyList<WeatherCity>>>(LoadAsync);
+        IReadOnlyList<WeatherCity> cities;
+        try { cities = await load.Value; }
+        catch
+        {
+            // 读取失败不要缓存成永久失败；下一次搜索重新尝试。
+            lock (_gate) { if (ReferenceEquals(_load, load)) _load = null; }
+            throw;
+        }
         string keyword = query.Trim();
-        return _cities.Where(city => keyword.Length == 0 || city.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
+        return cities.Where(city => keyword.Length == 0 || city.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase))
             .Take(limit).ToList();
     }
 

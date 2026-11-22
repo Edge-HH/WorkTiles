@@ -37,6 +37,7 @@ static Dictionary<string, byte[]> CreateStandardSplitZip(byte[] zip)
     return parts;
 }
 Directory.CreateDirectory(root);
+string? linkedPath = null;
 try
 {
     string target = Path.Combine(root, "程序 ' & 空格");
@@ -48,7 +49,7 @@ try
     {
         string path = Path.Combine(root, name + ".zip");
         using var zip = ZipFile.Open(path, ZipArchiveMode.Create);
-        foreach (var file in new[] { ("WorkTiles.exe", "exe"), ("WorkTiles.dll", "new-version"), ("WorkTiles.pri", "resources"), ("WorkTiles.runtimeconfig.json", "{}") }.Concat(extra))
+        foreach (var file in new[] { ("WorkTiles.exe", "exe"), ("WorkTiles.dll", "new-version"), ("WorkTiles.pri", "resources"), ("WorkTiles.runtimeconfig.json", "{}"), ("coreclr.dll", "runtime") }.Concat(extra))
         {
             using StreamWriter writer = new(zip.CreateEntry(file.Item1).Open()); writer.Write(file.Item2);
         }
@@ -94,6 +95,12 @@ try
     var splitUpdate = Parse("WorkTiles-win-x64.zip.003", "WorkTiles-win-x64.zip.001", "WorkTiles-win-x64.zip.002", "v2.0.4.zip");
     Check(splitUpdate.Parts.Count == 3 && splitUpdate.Parts[0].Name.EndsWith("001"), "分卷应按数字排序且排除源码包");
     Check(splitUpdate.Notes is null, "Release 没有 body 字段时更新日志为空");
+    // 已发布的旧 Release 仍以 Pancake 命名，必须能发现；无产品名的源码包仍要排除。
+    var pancakeUpdate = Parse("Pancake-win-x64-2.1.2.zip");
+    Check(pancakeUpdate.AssetName == "Pancake-win-x64-2.1.2.zip", "历史 Pancake 命名资产应被识别为可安装更新");
+    using var sourceOnlyJson = System.Text.Json.JsonDocument.Parse(
+        "{\"tag_name\":\"v2.0.4\",\"assets\":[{\"name\":\"v2.0.4.zip\",\"browser_download_url\":\"https://example.test/v2.0.4.zip\"}]}");
+    Check(ReleaseUpdateService.ParseRelease(sourceOnlyJson.RootElement)!.Update is null, "无产品名的源码包不应被当成安装包");
     Reject(() => Parse("WorkTiles-win-x64.zip.001", "WorkTiles-win-x64.zip.003"));
     Check(Parse("WorkTiles-win-x64.z02", "WorkTiles-win-x64.zip", "WorkTiles-win-x64.z01").Parts.Count == 3, "标准 ZIP 分卷未识别");
     byte[] zipBytes = File.ReadAllBytes(valid);
@@ -101,6 +108,10 @@ try
     for (int i = 0; i < 3; i++) chunks[splitUpdate.Parts[i].Name] = zipBytes[(zipBytes.Length * i / 3)..(zipBytes.Length * (i + 1) / 3)];
     var downloader = new ReleaseUpdateService(new AssetHandler(chunks));
     string joined = await downloader.DownloadAsync(splitUpdate, root);
+    bool rejectedMissingDigest = false;
+    try { await downloader.DownloadAsync(splitUpdate, root, default, requireDigest: true); }
+    catch (InvalidDataException) { rejectedMissingDigest = true; }
+    Check(rejectedMissingDigest, "要求校验摘要时，缺少 sha256 的更新必须被拒绝");
     Check(File.ReadAllBytes(joined).SequenceEqual(zipBytes), "下载合并的 ZIP 与原包不一致");
     string splitConfig = PortableUpdateService.Prepare(joined, target, root, int.MaxValue);
     Check(Apply(splitConfig) == 0 && File.ReadAllText(Path.Combine(target, "data", "projects.json")) == "user-projects", "分卷覆盖应保留配置");
@@ -138,7 +149,17 @@ try
     Reject(() => PortableUpdateService.Prepare(truncated, target, root, int.MaxValue));
     string config = PortableUpdateService.Prepare(valid, target, root, int.MaxValue);
     Check(File.ReadAllText(Path.Combine(target, "WorkTiles.dll")) == "old-version", "准备更新时不应覆盖正在运行的程序");
+    string staging = Path.GetDirectoryName(config)!;
+    HashSet<string> outsideBefore = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        .Where(file => !file.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !file.StartsWith(staging + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
     Check(Apply(config) == 0, "更新执行失败");
+    HashSet<string> outsideAfter = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        .Where(file => !file.StartsWith(target + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) &&
+            !file.StartsWith(staging + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    Check(outsideBefore.SetEquals(outsideAfter), "更新在安装目录和 staging 之外产生了新文件");
     Check(File.ReadAllText(Path.Combine(target, "WorkTiles.dll")) == "new-version", "旧文件未被覆盖");
     Check(File.ReadAllText(Path.Combine(target, "data", "projects.json")) == "user-projects", "更新改变了项目数据");
     Check(File.ReadAllText(Path.Combine(Path.GetDirectoryName(config)!, "backup", "WorkTiles.dll")) == "old-version", "更新没有保留旧文件备份");
@@ -147,6 +168,37 @@ try
     using (var locked = new FileStream(Path.Combine(target, "z-locked.dll"), FileMode.Open, FileAccess.Read, FileShare.Read))
         Check(Apply(failure) != 0, "锁定文件应导致更新失败");
     Check(File.ReadAllText(Path.Combine(target, "WorkTiles.dll")) == "before-failure", "更新失败没有回滚之前覆盖的文件");
+    // 回滚必须清掉本次新建的空目录，不能留下半套安装结构。
+    File.WriteAllText(Path.Combine(target, "zz-locked.dll"), "old-locked");
+    string newDirectoryFailure = PortableUpdateService.Prepare(Package("locked-newdir", ("newdir/sub/file.txt", "new"), ("zz-locked.dll", "new-locked")), target, root, int.MaxValue);
+    using (var locked = new FileStream(Path.Combine(target, "zz-locked.dll"), FileMode.Open, FileAccess.Read, FileShare.Read))
+        Check(Apply(newDirectoryFailure) != 0, "锁定文件应导致更新失败");
+    Check(!Directory.Exists(Path.Combine(target, "newdir", "sub")) && !Directory.Exists(Path.Combine(target, "newdir")),
+        "回滚未按深度清理本次新建的空目录");
+    // 目录联接必须被拒绝，更新不能穿过链接写到安装目录之外。
+    string linkedReal = Path.Combine(root, "linked-real");
+    Directory.CreateDirectory(linkedReal);
+    string linked = Path.Combine(target, "linked");
+    linkedPath = linked;
+    ProcessStartInfo linkStart = new("cmd.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    linkStart.ArgumentList.Add("/c");
+    linkStart.ArgumentList.Add("mklink");
+    linkStart.ArgumentList.Add("/J");
+    linkStart.ArgumentList.Add(linked);
+    linkStart.ArgumentList.Add(linkedReal);
+    using (var linkProcess = Process.Start(linkStart)!)
+    {
+        linkProcess.WaitForExit();
+        Check(linkProcess.ExitCode == 0 && Directory.Exists(linked), "测试环境无法创建目录联接，链接拒绝测试未执行");
+    }
+    Reject(() => PortableUpdateService.Prepare(Package("via-link", ("linked/file.txt", "new")), target, root, int.MaxValue));
+    Check(!File.Exists(Path.Combine(linkedReal, "file.txt")), "更新不能穿过目录联接写文件");
+    ProcessStartInfo removeStart = new("cmd.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+    removeStart.ArgumentList.Add("/c");
+    removeStart.ArgumentList.Add("rmdir");
+    removeStart.ArgumentList.Add(linked);
+    using (var removeLink = Process.Start(removeStart)!) removeLink.WaitForExit();
+    linkedPath = null;
     foreach (string bad in new[] { "../escape", "data/projects.json", "C:/escape", "Assets/../../escape", "Assets/test:stream", "Assets/CON", "Assets/a. ", "WorkTiles.DLL" })
         Reject(() => PortableUpdateService.Prepare(Package(Guid.NewGuid().ToString("N"), (bad, "bad")), target, root, int.MaxValue));
     string missing = Path.Combine(root, "missing.zip");
@@ -158,6 +210,20 @@ try
 
 finally
 {
+    // 目录联接必须先移除链接本身，递归删除不会跟随它进入目标目录。
+    if (linkedPath is not null && Directory.Exists(linkedPath))
+    {
+        try
+        {
+            ProcessStartInfo removeStart = new("cmd.exe") { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
+            removeStart.ArgumentList.Add("/c");
+            removeStart.ArgumentList.Add("rmdir");
+            removeStart.ArgumentList.Add(linkedPath);
+            using var removeLink = Process.Start(removeStart);
+            removeLink?.WaitForExit();
+        }
+        catch (Exception) { }
+    }
     if (Path.GetFullPath(root).StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase)) Directory.Delete(root, true);
 }
 

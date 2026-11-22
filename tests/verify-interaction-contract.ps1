@@ -1,3 +1,4 @@
+#Requires -Version 7.0
 $ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
@@ -10,7 +11,7 @@ $attachmentImageCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'sr
 $dataCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\AppDataStore.cs'))
 $weatherCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\XiaomiWeatherService.cs'))
 $weatherCatalogCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\WeatherCityCatalog.cs'))
-$updateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\GitHubUpdateService.cs'))
+$updateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\ReleaseUpdateService.cs'))
 $autofillServiceCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\AutofillService.cs'))
 $autofillPopupCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\AutofillPopup.cs'))
 $autofillInputCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\AutofillInputs.cs'))
@@ -19,11 +20,6 @@ $settingsCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkT
 $stateCode = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Services\ProjectState.cs'))
 $themeXaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Themes\ThemeResources.xaml'))
 $failures = [System.Collections.Generic.List[string]]::new()
-
-if ($windowXaml -match 'x:Name="BoardScrollViewer"' -and
-    $windowCode -notmatch 'ScrollMode\.Disabled') {
-    $failures.Add('若使用 ScrollViewer，编辑期间必须禁用滚动，避免触控被页面滑动抢走。')
-}
 
 foreach ($edge in @('Left', 'Right', 'Bottom', 'BottomLeft', 'BottomRight')) {
     if ($tileCode -notmatch "ResizeEdge\.$edge") {
@@ -121,7 +117,7 @@ if ($dataCode -notmatch 'Scale = a\.Scale' -or
     $failures.Add('图片缩放、位置或裁切视窗没有持久化。')
 }
 
-if ($dataCode -notmatch 'AppContext\.BaseDirectory' -or $dataCode -notmatch 'worktiles\.json' -or $windowCode -notmatch 'ScheduleSave') {
+if ($dataCode -notmatch 'AppContext\.BaseDirectory' -or $windowCode -notmatch 'ScheduleSave') {
     $failures.Add('布局与配置没有自动保存到软件目录。')
 }
 

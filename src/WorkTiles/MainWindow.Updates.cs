@@ -1,3 +1,4 @@
+using Microsoft.UI.Xaml.Controls;
 using WorkTiles.Services;
 
 namespace WorkTiles;
@@ -5,6 +6,66 @@ namespace WorkTiles;
 public sealed partial class MainWindow
 {
     private int _updateSourceRequest;
+
+    /// <summary>用户放弃更新时删掉本次下载的 GUID 目录；只清理 updates 根下的目录，不碰其他数据。</summary>
+    private static void CleanupDownloadedPackage(string package)
+    {
+        try
+        {
+            string? directory = Path.GetDirectoryName(package);
+            string? root = directory is null ? null : Path.GetDirectoryName(directory);
+            if (directory is not null && root is not null && Path.GetFileName(root).Equals("updates", StringComparison.OrdinalIgnoreCase))
+                Directory.Delete(directory, true);
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>启动时清理一周前的更新 staging；正在进行的更新目录时间很新，不会被误删。</summary>
+    private void CleanupStaleUpdateDirectories()
+    {
+        try
+        {
+            string root = Path.Combine(_dataStore.DataDirectory, "updates");
+            if (!Directory.Exists(root)) return;
+            DateTime cutoff = DateTime.UtcNow.AddDays(-7);
+            foreach (string directory in Directory.GetDirectories(root))
+            {
+                try
+                {
+                    if (Directory.GetLastWriteTimeUtc(directory) < cutoff) Directory.Delete(directory, true);
+                }
+                catch (Exception) { }
+            }
+        }
+        catch (Exception) { }
+    }
+
+    /// <summary>启动时把最近一次 UPDATE_FAILED 的日志显示出来，避免更新失败只在 data/updates 里躺着。</summary>
+    private void ShowRecentUpdateFailure()
+    {
+        try
+        {
+            string root = Path.Combine(_dataStore.DataDirectory, "updates");
+            if (!Directory.Exists(root)) return;
+            string? log = Directory.GetDirectories(root)
+                .Select(directory => Path.Combine(directory, "update.log"))
+                .Where(File.Exists)
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+            if (log is null) return;
+            string text = File.ReadAllText(log);
+            int index = text.IndexOf("UPDATE_FAILED", StringComparison.Ordinal);
+            if (index < 0) return;
+            string message = text[(index + "UPDATE_FAILED".Length)..].Trim();
+            if (message.Length > 300) message = message[..300] + "…";
+            UpdateStatusText.Text = "上次更新未完成。";
+            StorageInfoBar.Title = "上次更新未完成";
+            StorageInfoBar.Message = message.Length == 0 ? "请重试更新；详细日志在 data/updates 下。" : message;
+            StorageInfoBar.Severity = InfoBarSeverity.Error;
+            StorageInfoBar.IsOpen = true;
+        }
+        catch (Exception) { }
+    }
     private async Task RefreshUpdateSourceHintAsync()
     {
         int request = ++_updateSourceRequest;

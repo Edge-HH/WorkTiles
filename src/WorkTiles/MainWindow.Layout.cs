@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
@@ -60,6 +61,11 @@ public sealed partial class MainWindow
     private HashSet<string>? _dockedCustomizationEditSnapshot;
     private bool _boardLayoutPending;
 
+    /// <summary>分屏方向只由顶栏按钮决定，窗口尺寸不再参与判断；无法识别的旧值按左右分屏处理。</summary>
+    private bool SplitIsVertical => string.Equals(_settings.SplitOrientation, "Vertical", StringComparison.Ordinal);
+    /// <summary>默认时钟在前（左/上），对调后作业在前。</summary>
+    private bool ClockIsFirstSplitRegion => !_settings.SplitSwapped;
+
     /// <summary>
     /// 网格大小变化时把已有磁贴重新吸附到新网格：位置和尺寸始终落在网格线上，不会停在旧网格。
     /// 设置页打开时看板是折叠的，这里只改数据；回到看板时再统一应用，拖动滑块因此不会卡顿。
@@ -108,6 +114,8 @@ public sealed partial class MainWindow
         {
             bool free = _settings.LayoutMode == "Free", split = _settings.LayoutMode == "Split";
             bool compact = RootShell.ActualWidth < 900;
+            bool vertical = split && SplitIsVertical;
+            bool clockFirst = ClockIsFirstSplitRegion;
             DisplayGrid.ColumnDefinitions[0].MinWidth = 0;
             DisplayGrid.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
             DisplayGrid.ColumnDefinitions[1].Width = new GridLength(0);
@@ -119,20 +127,25 @@ public sealed partial class MainWindow
             BoardWorkspace.Visibility = _settings.LayoutMode == "Clock" || CurrentProject is null ? Visibility.Collapsed : Visibility.Visible;
             ClockPanel.BorderThickness = new Thickness(0);
             MainTimeText.FontSize = compact ? 72 : 112;
+            // 分屏方向与前后顺序由顶部菜单栏控制，不再随窗口宽窄自动切换。
+            if (SplitLayoutCommands is not null)
+                SplitLayoutCommands.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
             if (split)
             {
                 double ratio = Math.Clamp(_settings.SplitRatio, .05, .95);
-                if (compact)
+                FrameworkElement first = clockFirst ? ClockPanel : BoardWorkspace;
+                FrameworkElement second = clockFirst ? BoardWorkspace : ClockPanel;
+                if (vertical)
                 {
                     DisplayGrid.RowDefinitions[0].Height = new GridLength(ratio, GridUnitType.Star);
                     DisplayGrid.RowDefinitions[1].Height = new GridLength(1 - ratio, GridUnitType.Star);
-                    Grid.SetRow(BoardWorkspace, 1);
+                    Grid.SetRow(first, 0); Grid.SetRow(second, 1);
                 }
                 else
                 {
                     DisplayGrid.ColumnDefinitions[0].Width = new GridLength(ratio, GridUnitType.Star);
                     DisplayGrid.ColumnDefinitions[1].Width = new GridLength(1 - ratio, GridUnitType.Star);
-                    Grid.SetColumn(BoardWorkspace, 1);
+                    Grid.SetColumn(first, 0); Grid.SetColumn(second, 1);
                 }
             }
             ApplyFreeWidgets(free);
@@ -143,6 +156,35 @@ public sealed partial class MainWindow
         }
         finally { _layingOut = false; }
         ScheduleScreenReport();
+    }
+
+    /// <summary>单按钮在左右分屏和上下分屏之间切换；窗口再窄也不会自动改回上下分屏。</summary>
+    private void ToggleSplitOrientationButton_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.SplitOrientation = SplitIsVertical ? "Horizontal" : "Vertical";
+        SettingChanged();
+    }
+
+    private void SwapSplitAreasButton_Click(object sender, RoutedEventArgs e)
+    {
+        _settings.SplitSwapped = !_settings.SplitSwapped;
+        SettingChanged();
+    }
+
+    /// <summary>同步顶栏方向按钮的图标和两个按钮的方向相关提示，不使用选中色。</summary>
+    private void RefreshSplitLayoutCommands()
+    {
+        if (ToggleSplitOrientationButton is null || SwapSplitAreasButton is null || SplitOrientationIcon is null) return;
+        bool vertical = SplitIsVertical;
+        SplitOrientationIcon.Symbol = vertical ? "SplitVertical" : "SplitHorizontal";
+        string horizontalOrder = _settings.SplitSwapped ? "作业在左、时钟在右" : "时钟在左、作业在右";
+        string verticalOrder = _settings.SplitSwapped ? "作业在上、时钟在下" : "时钟在上、作业在下";
+        string next = vertical ? "左右分屏" : "上下分屏";
+        AutomationProperties.SetName(ToggleSplitOrientationButton, $"切换为{next}");
+        ToolTipService.SetToolTip(ToggleSplitOrientationButton, $"当前{(vertical ? "上下分屏" : "左右分屏")}，点击切换为{next}");
+        ToolTipService.SetToolTip(SwapSplitAreasButton, _settings.SplitSwapped
+            ? "恢复默认顺序：时钟在前、作业在后"
+            : $"对调时钟与作业区域（当前{(vertical ? verticalOrder : horizontalOrder)}）");
     }
 
     private void ApplyFreeWidgets(bool free)
@@ -295,59 +337,70 @@ public sealed partial class MainWindow
     }
 
     /// <summary>
-    /// 分隔滑条：分屏时停在两区交界处，单区时贴在被占满的一侧边缘（仅时钟在右、仅作业在左，
-    /// 窄窗口改成下、上）。从单区往回流方向拖动即恢复分屏，拖到另一端则再次切换单区。
+    /// 分隔滑条：按当前手动分屏方向停在两区交界处。单区时贴在被占满的一侧边缘，
+    /// 往恢复分屏的方向拖动即可回到分屏，拖到另一端则再次切换单区。
     /// </summary>
     private void AddSplitHandle(bool split)
     {
-        bool compact = RootShell.ActualWidth < 900;
+        bool vertical = SplitIsVertical;
+        bool clockFirst = ClockIsFirstSplitRegion;
         bool clockOnly = _settings.LayoutMode == "Clock";
         double width = Math.Max(1, DisplayRoot.ActualWidth), height = Math.Max(1, DisplayRoot.ActualHeight);
+        // 比例始终表示第一块区域的占比；单区模式下据此把分隔条放到第一块消失或占满的边缘。
+        double ratio = split ? Math.Clamp(_settings.SplitRatio, .01, .99) : (clockOnly == clockFirst ? 1 : 0);
         _splitter = new Thumb
         {
             Background = new SolidColorBrush(Windows.UI.Color.FromArgb(95, 128, 128, 128)),
-            Width = compact ? width : 10,
-            Height = compact ? 10 : height
+            Width = vertical ? width : 10,
+            Height = vertical ? 10 : height
         };
+        string axis = vertical ? "上下" : "左右";
+        string restoreDirection = vertical
+            ? (ratio > .5 ? "向上" : "向下")
+            : (ratio > .5 ? "向左" : "向右");
         ToolTipService.SetToolTip(_splitter, split
-            ? "拖动调整分屏，拖至边缘切换单区"
-            : compact
-                ? clockOnly ? "向上拖动回到分屏" : "向下拖动回到分屏"
-                : clockOnly ? "向左拖动回到分屏" : "向右拖动回到分屏");
-        if (compact)
+            ? $"拖动调整{axis}分屏，拖至边缘切换单区"
+            : $"{restoreDirection}拖动回到分屏");
+        if (vertical)
         {
             Canvas.SetLeft(_splitter, 0);
-            Canvas.SetTop(_splitter, split ? height * _settings.SplitRatio - 5 : clockOnly ? height - 10 : 0);
+            Canvas.SetTop(_splitter, height * ratio - 5);
         }
         else
         {
-            Canvas.SetLeft(_splitter, split ? width * _settings.SplitRatio - 5 : clockOnly ? width - 10 : 0);
+            Canvas.SetLeft(_splitter, width * ratio - 5);
             Canvas.SetTop(_splitter, 0);
         }
         _splitter.DragStarted += (_, _) => BeginSplitDrag();
-        _splitter.DragDelta += (_, args) => DragSplitHandle(compact, args.HorizontalChange, args.VerticalChange);
+        _splitter.DragDelta += (_, args) => DragSplitHandle(vertical, args.HorizontalChange, args.VerticalChange);
         _splitter.DragCompleted += (_, _) => CompleteSplitDrag();
         Canvas.SetZIndex(_splitter, 100);
         FreeLayoutHandles.Children.Add(_splitter);
     }
 
-    /// <summary>按下分隔条时记录起始比例；单区模式按贴边位置起步（仅时钟 1，仅作业 0）。</summary>
+    /// <summary>按下分隔条时记录第一块区域的起始比例；单区模式按当前方向和对调状态决定贴边位置。</summary>
     private void BeginSplitDrag()
     {
         _splitDragging = true;
-        _splitDragRatio = _settings.LayoutMode switch { "Clock" => 1, "Board" => 0, _ => _settings.SplitRatio };
+        bool clockFirst = ClockIsFirstSplitRegion;
+        _splitDragRatio = _settings.LayoutMode switch
+        {
+            "Clock" => clockFirst ? 1 : 0,
+            "Board" => clockFirst ? 0 : 1,
+            _ => _settings.SplitRatio
+        };
         // 先按整块显示区铺好网格，拖动中作业区变大也不用逐帧重建成百上千条网格线。
         RenderSplitDragGrid();
     }
 
     /// <summary>拖动分隔条：按位移换算比例，分隔条即时跟手，两区尺寸合并到下一帧统一重排。</summary>
-    private void DragSplitHandle(bool compact, double horizontalChange, double verticalChange)
+    private void DragSplitHandle(bool vertical, double horizontalChange, double verticalChange)
     {
         double width = Math.Max(1, DisplayRoot.ActualWidth), height = Math.Max(1, DisplayRoot.ActualHeight);
-        _splitDragRatio = Math.Clamp(_splitDragRatio + (compact ? verticalChange : horizontalChange) / (compact ? height : width), .01, .99);
+        _splitDragRatio = Math.Clamp(_splitDragRatio + (vertical ? verticalChange : horizontalChange) / (vertical ? height : width), .01, .99);
         if (_splitter is not null)
         {
-            if (compact) Canvas.SetTop(_splitter, height * _splitDragRatio - 5);
+            if (vertical) Canvas.SetTop(_splitter, height * _splitDragRatio - 5);
             else Canvas.SetLeft(_splitter, width * _splitDragRatio - 5);
         }
         // 指针事件的频率常高于刷新率，每次都重排两区会堆积布局；一帧只应用一次最新比例。
@@ -365,14 +418,14 @@ public sealed partial class MainWindow
         // 拖回分屏范围时立即切回分屏，松手前就能看到分屏比例，松手时才写入最终模式。
         if (_settings.LayoutMode != "Split")
         {
-            if (WidgetLayout.CompleteSplit(_splitDragRatio) != "Split") return;
+            if (WidgetLayout.CompleteSplit(_splitDragRatio, ClockIsFirstSplitRegion) != "Split") return;
             _settings.LayoutMode = "Split";
             ApplyDisplayLayout();
             return;
         }
         // 已经是分屏时只改两区比例，不再重走整套布局（字号、组件迁移、笔迹层等都不变）。
         double ratio = Math.Clamp(_splitDragRatio, .05, .95);
-        if (RootShell.ActualWidth < 900)
+        if (SplitIsVertical)
         {
             DisplayGrid.RowDefinitions[0].Height = new GridLength(ratio, GridUnitType.Star);
             DisplayGrid.RowDefinitions[1].Height = new GridLength(1 - ratio, GridUnitType.Star);
@@ -392,7 +445,7 @@ public sealed partial class MainWindow
         // 拖动时网格按整块显示区铺开，松手后按作业区的最终尺寸重新裁剪一次。
         _renderedGridWidth = 0;
         UpdateBoardBounds();
-        string completed = WidgetLayout.CompleteSplit(_splitDragRatio);
+        string completed = WidgetLayout.CompleteSplit(_splitDragRatio, ClockIsFirstSplitRegion);
         if (completed is "Board" or "Clock")
         {
             _settings.LayoutMode = completed;

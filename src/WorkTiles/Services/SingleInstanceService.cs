@@ -85,11 +85,15 @@ public sealed class SingleInstanceService : IDisposable
     public static async Task<SingleInstanceService?> ReplaceRunningInstanceAsync(SingleInstanceService current)
     {
         current.RequestQuit();
-        current.Dispose();
         for (int attempt = 0; attempt < 40; attempt++)
         {
             SingleInstanceService gate = Start();
-            if (gate.IsFirstInstance) return gate;
+            if (gate.IsFirstInstance)
+            {
+                // 认领成功后才能释放旧闸门；失败返回 null 时调用方还要靠它重试或返回已有窗口。
+                current.Dispose();
+                return gate;
+            }
             gate.Dispose();
             await Task.Delay(250);
         }
@@ -176,7 +180,7 @@ public sealed class SingleInstanceService : IDisposable
         uint foregroundThread = foreground == nint.Zero ? 0 : GetWindowThreadProcessId(foreground, out _);
         if (foregroundThread != 0 && foregroundThread != current) AttachThreadInput(current, foregroundThread, true);
         // SW_RESTORE 让最小化的窗口先回到正常尺寸，置顶请求才真正可见。
-        ShowWindow(windowHandle, IsIconic(windowHandle) ? 9 : 9);
+        ShowWindow(windowHandle, IsIconic(windowHandle) ? 9 : 5);
         SetForegroundWindow(windowHandle);
         if (foregroundThread != 0 && foregroundThread != current) AttachThreadInput(current, foregroundThread, false);
     }
@@ -235,10 +239,11 @@ public sealed class SingleInstanceService : IDisposable
         if (_disposed) return;
         _disposed = true;
         // 只有认领者能让监听线程收工；共享退出信号被误触发会关掉已有窗口的监听。
+        bool listenerStopped = _listener is null;
         if (_owned)
         {
             _quitSignal.Set();
-            _listener?.Join(TimeSpan.FromSeconds(2));
+            listenerStopped = _listener is null || _listener.Join(TimeSpan.FromSeconds(2));
             try { _mutex.ReleaseMutex(); }
             catch (ApplicationException)
             {
@@ -246,9 +251,13 @@ public sealed class SingleInstanceService : IDisposable
             }
         }
         _mutex.Dispose();
-        _foregroundSignal.Dispose();
-        _fullScreenSignal.Dispose();
-        _quitSignal.Dispose();
+        // 监听线程仍可能卡在 WaitAny/TryReadPayload 时，让进程退出回收这些句柄，避免 ObjectDisposedException。
+        if (listenerStopped)
+        {
+            _foregroundSignal.Dispose();
+            _fullScreenSignal.Dispose();
+            _quitSignal.Dispose();
+        }
         GC.SuppressFinalize(this);
     }
 

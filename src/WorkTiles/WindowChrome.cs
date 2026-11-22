@@ -11,17 +11,6 @@ internal static class WindowChrome
         DwmSetWindowAttribute(hwnd, 33, ref preference, sizeof(int));
     }
 
-    public static void AsToolWindow(nint hwnd)
-    {
-        const int exStyle = -20;
-        const nint tool = 0x00000080;
-        const nint noActivate = 0x08000000;
-        nint style = GetWindowLongPtr(hwnd, exStyle);
-        SetWindowLongPtr(hwnd, exStyle, style | tool | noActivate);
-    }
-
-    public static void ShowWithoutActivating(nint hwnd) => ShowWindow(hwnd, 4);
-
     public static uint Dpi(nint hwnd)
     {
         uint dpi = GetDpiForWindow(hwnd);

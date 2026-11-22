@@ -101,6 +101,15 @@ public sealed class MainViewModel : ObservableObject
     public static SolidColorBrush BrushFromHex(string hex, bool usePalette = false)
     {
         string value = (usePalette ? WorkTiles.Services.ColorPalette.Resolve(hex) : hex).TrimStart('#');
+        // #AARRGGBB 与 GridAppearance 使用同一种语义；否则 8 位值会被错误地当成 RGBA。
+        if (value.Length == 8 && value.All(Uri.IsHexDigit))
+        {
+            return new SolidColorBrush(Windows.UI.Color.FromArgb(
+                Convert.ToByte(value[..2], 16),
+                Convert.ToByte(value.Substring(2, 2), 16),
+                Convert.ToByte(value.Substring(4, 2), 16),
+                Convert.ToByte(value.Substring(6, 2), 16)));
+        }
         // 畸形颜色（手工编辑、旧数据、云端下发）回退默认强调色，避免构建磁贴/学科行时在 UI 线程抛异常。
         if (value.Length < 6 || !value[..6].All(Uri.IsHexDigit))
             return new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0x81, 0x8C, 0xF8));

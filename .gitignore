@@ -12,3 +12,7 @@ worktiles.db*
 
 # One-off scratch from debugging sessions
 .tmp-*
+.claude/
+.workbuddy-ai/
+*.user
+TestResults/

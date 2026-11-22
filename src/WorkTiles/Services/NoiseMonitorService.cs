@@ -88,6 +88,11 @@ public sealed class NoiseMonitorService : IDisposable
         bool floating = format.Encoding == WaveFormatEncoding.IeeeFloat ||
             format is WaveFormatExtensible extensible && extensible.SubFormat == NAudio.MediaFoundation.AudioSubtypes.MFAudioFormat_Float;
         int bytesPerSample = format.BitsPerSample / 8;
+        if (bytesPerSample <= 0)
+        {
+            CaptureFailed?.Invoke(this, "不支持的音频采样格式。");
+            return;
+        }
         double? level = null;
         double blockSquares = 0;
         int blockSamples = 0;

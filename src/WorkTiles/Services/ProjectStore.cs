@@ -62,6 +62,7 @@ public sealed class ProjectStore(string? directory = null)
             ProjectLibrary library = JsonSerializer.Deserialize<ProjectLibrary>(File.ReadAllText(LibraryPath), JsonOptions)
                 ?? throw new InvalidDataException("项目清单为空。");
             if (library.Version != 1) throw new InvalidDataException("此项目清单需要其他版本的软件。");
+            SecretProtector.UnprotectSettings(library.Settings);
             foreach (ProjectDocument project in library.Projects)
             {
                 ProjectValidation.Validate(project, false);
@@ -87,6 +88,7 @@ public sealed class ProjectStore(string? directory = null)
         AppState legacy = JsonSerializer.Deserialize<AppState>(File.ReadAllText(legacyPath), JsonOptions)
             ?? throw new InvalidDataException("旧看板数据无法读取。");
         result.Settings = legacy.Settings;
+        SecretProtector.UnprotectSettings(result.Settings);
         ProjectDocument migrated = Create(result, false);
         migrated.Subjects = legacy.Subjects;
         migrated.Theme = legacy.Settings.Theme;
@@ -158,7 +160,16 @@ public sealed class ProjectStore(string? directory = null)
                 if (Path.GetFullPath(asset.Path).StartsWith(Path.GetFullPath(AssetDirectory(project.Id)) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
                     asset.Path = Path.GetRelativePath(DirectoryPath, asset.Path);
             }
+        SecretProtector.ProtectSettings(snapshot.Settings);
         AtomicWrite(LibraryPath, stream => JsonSerializer.Serialize(stream, snapshot, JsonOptions));
+        try
+        {
+            string lastGood = LibraryPath + ".last-good";
+            string temporary = lastGood + ".tmp";
+            File.Copy(LibraryPath, temporary, true);
+            File.Move(temporary, lastGood, true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     public void OwnAttachments(ProjectDocument project)
@@ -335,8 +346,21 @@ public sealed class WthPackageService(ProjectStore store)
         try
         {
             Directory.CreateDirectory(assetDirectory);
+            long written = 0;
             foreach (ZipArchiveEntry entry in archive.Entries.Where(e => IsAssetPath(e.FullName)))
-                entry.ExtractToFile(Path.Combine(assetDirectory, entry.FullName[7..]));
+            {
+                // 不信任 zip 头声明的未压缩长度；按实际写出的字节累计上限。
+                using Stream input = entry.Open();
+                using FileStream output = File.Create(Path.Combine(assetDirectory, entry.FullName[7..]));
+                byte[] buffer = new byte[81920];
+                int read;
+                while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    written += read;
+                    if (written > MaximumBytes) throw new InvalidDataException("作业包解压体积过大。");
+                    output.Write(buffer, 0, read);
+                }
+            }
             foreach (AttachmentState asset in ProjectStore.Attachments(project)) asset.Path = Path.Combine(assetDirectory, asset.Path[7..]);
             return project;
         }

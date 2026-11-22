@@ -1,4 +1,4 @@
-// 仅在隔离的 UI 验证构建中编译。视频样本由 verify-background-media.ps1 生成。
+// 仅在隔离的 UI 验证构建中编译。视频样本由 verify-ui.ps1 -BackgroundMediaOnly 生成。
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -107,10 +107,11 @@ public sealed partial class MainWindow
                 await SaveVisualAsync(recent, Path.Combine(output, "recent-images.png"), (int)recent.ActualWidth, (int)recent.ActualHeight);
                 SaveStateNow();
                 var installed = await Task.Run(WallpaperEngineLibrary.Detect);
-                evidence.Add(installed is null ? "INFO: Wallpaper Engine is not installed; real-library import unverified." : $"INFO: Wallpaper Engine detected at {installed.Directory}; {WallpaperEngineLibrary.ReadVideos(installed).Count} video projects.");
+                IReadOnlyList<WallpaperProject> installedVideos = installed is null ? [] : WallpaperEngineLibrary.ReadVideos(installed);
+                evidence.Add(installed is null ? "INFO: Wallpaper Engine is not installed; real-library import unverified." : $"INFO: Wallpaper Engine detected at {installed.Directory}; {installedVideos.Count} video projects.");
                 if (installed is not null)
                 {
-                    var actual = WallpaperEngineLibrary.ReadVideos(installed).Where(item => Path.GetExtension(item.Path).Equals(".mp4", StringComparison.OrdinalIgnoreCase)).OrderBy(item => new FileInfo(item.Path).Length).FirstOrDefault();
+                    var actual = installedVideos.Where(item => Path.GetExtension(item.Path).Equals(".mp4", StringComparison.OrdinalIgnoreCase)).OrderBy(item => new FileInfo(item.Path).Length).FirstOrDefault();
                     if (actual is not null)
                     {
                         string imported = await MediaLibraryStore.ImportAsync(actual.Path, MediaScope.Background);

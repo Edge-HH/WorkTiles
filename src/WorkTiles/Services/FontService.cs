@@ -54,10 +54,13 @@ public static class FontService
     /// </summary>
     public static bool IsInstalledFamily(string name)
     {
-        if (string.IsNullOrWhiteSpace(name)) return false;
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 256) return false;
         if (Fonts.Value.Contains(name, StringComparer.CurrentCultureIgnoreCase)) return true;
-        return InstalledCache.GetOrAdd(name, key => ResolveFamilyName(key) is { Length: > 0 } resolved &&
+        bool installed = InstalledCache.GetOrAdd(name, key => ResolveFamilyName(key) is { Length: > 0 } resolved &&
             Fonts.Value.Contains(resolved, StringComparer.CurrentCultureIgnoreCase));
+        // RTF 字体名来自外部数据；缓存设上限，避免构造海量不同名字的项目撑大内存。
+        if (InstalledCache.Count > 1024) InstalledCache.Clear();
+        return installed;
     }
 
     /// <summary>GDI 字体映射返回的家族名。不存在的名字也会被映射到替身字体，因此不能单独用来判断存在性。</summary>

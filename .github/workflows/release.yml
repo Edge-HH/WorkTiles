@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: 📥 获取项目代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
 
       - name: 🛠️ 配置 .NET 8
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
         with:
           dotnet-version: 8.0.x
 
@@ -44,7 +44,7 @@ jobs:
           "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: 📥 获取集控服务端代码
-        uses: actions/checkout@v5
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           repository: Edge-HH/WorkTilesServer
           path: WorkTilesServer
@@ -58,6 +58,20 @@ jobs:
         run: |
           dotnet run --project ./tests/SyncLogic/SyncLogic.csproj -c Release --nologo -p:WorkTilesServerDir=$PWD/WorkTilesServer/
           if ($LASTEXITCODE -ne 0) { throw "集控同步测试失败。" }
+
+      - name: 🛡️ 依赖漏洞扫描
+        shell: pwsh
+        run: |
+          dotnet list .\src\WorkTiles\WorkTiles.csproj package --vulnerable --include-transitive
+          if ($LASTEXITCODE -ne 0) { throw "依赖漏洞扫描失败。" }
+
+      - name: 🔒 校验捆绑的 7za.exe
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash .\src\WorkTiles\Tools\7zip\x64\7za.exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($hash -ne 'edbee35370e14030e4c785cf88200f42dc651c1eb4217c1e3963c38a12f099b0') {
+            throw "7za.exe SHA-256 不匹配：$hash"
+          }
 
       - name: 📦 生成自带运行环境的程序
         shell: pwsh
@@ -92,7 +106,7 @@ jobs:
           .\tests\verify-release-startup.ps1 -PublishDirectory .\artifacts\package-check
 
       - name: 📤 上传便携版产物
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: WorkTiles-win-x64-${{ steps.version.outputs.version }}
           path: .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip
@@ -103,10 +117,47 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          REF_NAME: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
         run: |
-          gh release create "${{ github.ref_name }}" `
+          gh release create $env:REF_NAME `
             .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip `
-            --repo "${{ github.repository }}" `
+            --repo $env:REPO `
             --verify-tag `
             --generate-notes `
-            --title "WorkTiles ${{ github.ref_name }}"
+            --title "WorkTiles $env:REF_NAME"
+
+
+  test-logic:
+    runs-on: windows-latest
+    steps:
+      - name: 📥 获取项目代码
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: 🛠️ 配置 .NET 8
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1 # v5
+        with:
+          dotnet-version: 8.0.x
+
+      - name: 🧪 逻辑测试
+        shell: pwsh
+        run: |
+          dotnet run --project ./tests/ProjectLogic/ProjectLogic.csproj -c Release --nologo
+          if ($LASTEXITCODE -ne 0) { throw "ProjectLogic 失败。" }
+          dotnet run --project ./tests/SettingsLogic/SettingsLogic.csproj -c Release --nologo
+          if ($LASTEXITCODE -ne 0) { throw "SettingsLogic 失败。" }
+          dotnet run --project ./tests/UpdateLogic/UpdateLogic.csproj -c Release --nologo
+          if ($LASTEXITCODE -ne 0) { throw "UpdateLogic 失败。" }
+
+      - name: 📐 契约脚本
+        shell: pwsh
+        run: |
+          foreach ($script in @(
+            'verify-requested-ui-contract.ps1',
+            'verify-color-formatting-contract.ps1',
+            'verify-rich-text-roundtrip.ps1',
+            'verify-interaction-contract.ps1',
+            'verify-icon-font-contract.ps1')) {
+            & "./tests/$script"
+            if ($LASTEXITCODE -ne 0) { throw "$script 失败。" }
+          }

@@ -78,7 +78,9 @@ public static class SettingsSchema
     [
         // 布局
         new("LayoutMode", "Layout", "布局模式", SettingKind.Enum, "Split", Options: [new("Split", "分屏"), new("Board", "仅作业"), new("Clock", "仅时钟"), new("Free", "自由布局")]),
-        new("SplitRatio", "Layout", "时钟区宽度", SettingKind.Number, 0.4, 0.1, 0.9, 0.01, Hint: "也可以在预览里拖动分隔条。", When: "LayoutMode=Split"),
+        new("SplitRatio", "Layout", "分屏比例", SettingKind.Number, 0.4, 0.1, 0.9, 0.01, Hint: "比例按第一块区域计算；可在顶部菜单栏切换方向或对调时钟与作业，也可以拖动分隔条。", When: "LayoutMode=Split"),
+        new("SplitOrientation", "Layout", "分屏方向", SettingKind.Enum, "Horizontal", Options: [new("Horizontal", "左右分屏"), new("Vertical", "上下分屏")], When: "LayoutMode=Split"),
+        new("SplitSwapped", "Layout", "对调时钟与作业区域", SettingKind.Bool, false, When: "LayoutMode=Split"),
         new("InfiniteBoard", "Layout", "无限作业板", SettingKind.Bool, false, Hint: "开启后可滚动、触摸平移、Ctrl + 滚轮缩放；编辑磁贴时可用滚动条平移。"),
         new("GridSize", "Layout", "网格大小", SettingKind.Number, 48, 32, 160, 1, Unit: "px"),
         new("GridSnappingEnabled", "Layout", "吸附到网格", SettingKind.Bool, true, Section: "自动布局"),
@@ -281,7 +283,18 @@ public static class SettingsSchema
             case (JsonArray x, JsonArray y):
                 return x.Count == y.Count && x.Zip(y).All(p => Same(p.First, p.Second));
             case (JsonValue x, JsonValue y):
-                if (x.GetValueKind() == JsonValueKind.Number && y.GetValueKind() == JsonValueKind.Number) return double.Parse(x.ToJsonString(), System.Globalization.CultureInfo.InvariantCulture) == double.Parse(y.ToJsonString(), System.Globalization.CultureInfo.InvariantCulture);
+                if (x.GetValueKind() == JsonValueKind.Number && y.GetValueKind() == JsonValueKind.Number)
+                {
+                    string xs = x.ToJsonString(), ys = y.ToJsonString();
+                    if (xs == ys) return true;
+                    // 超过 double 精度的整数按原文比较，避免 2^53 以上不同值被判等。
+                    if (long.TryParse(xs, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long lx) &&
+                        long.TryParse(ys, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out long ly))
+                        return lx == ly;
+                    return double.TryParse(xs, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double dx) &&
+                        double.TryParse(ys, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double dy) &&
+                        double.IsFinite(dx) && double.IsFinite(dy) && dx == dy;
+                }
                 return x.ToJsonString() == y.ToJsonString();
             default: return false;
         }
@@ -343,6 +356,16 @@ public static class SettingsSchema
         return d;
     }
 
+    /// <summary>背景媒体只接受 asset: 引用、盘符绝对路径或普通本机路径；拒绝 UNC 与其他 URL scheme，避免 File.Exists 触发 SMB 外联。</summary>
+    public static bool IsSafeLocalPath(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return false;
+        if (AssetReference.TryParse(value, out _, out _)) return true;
+        if (value.StartsWith(@"\\", StringComparison.Ordinal) || value.StartsWith("//", StringComparison.Ordinal)) return false;
+        int colon = value.IndexOf(':');
+        return colon < 0 || (colon == 1 && char.IsAsciiLetter(value[0]));
+    }
+
     private static readonly string[] ImageModes = ["Zoom", "Stretch", "Fit"];
 
     /// <summary>背景设置的字段与桌面端 BackgroundSettings 一一对应；路径只接受 asset: 引用或本机路径文本，长度受限。</summary>
@@ -354,10 +377,10 @@ public static class SettingsSchema
         Copy("Color", n => Text(n, 9) is { } c && IsColor(c) ? JsonValue.Create(c.ToUpperInvariant()) : null);
         Copy("ColorOpacity", n => Number(n, 0, 1, null) is { } d ? JsonValue.Create(d) : null);
         Copy("ColorCleared", Bool);
-        Copy("ImagePath", n => Text(n, 1024) is { } p ? JsonValue.Create(p) : null);
+        Copy("ImagePath", n => Text(n, 1024) is { } p && IsSafeLocalPath(p) ? JsonValue.Create(p) : null);
         Copy("ImageMode", n => Text(n, 20) is { } m && ImageModes.Contains(m) ? JsonValue.Create(m) : null);
         Copy("PlaylistEnabled", Bool);
-        Copy("Playlist", n => n is JsonArray a ? new JsonArray(a.Select(x => Text(x, 1024)).OfType<string>().Take(200).Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) : null);
+        Copy("Playlist", n => n is JsonArray a ? new JsonArray(a.Select(x => Text(x, 1024)).OfType<string>().Where(IsSafeLocalPath).Take(200).Select(x => (JsonNode?)JsonValue.Create(x)).ToArray()) : null);
         Copy("Shuffle", Bool);
         Copy("SwitchOnTimer", Bool);
         Copy("SwitchIntervalSeconds", n => Number(n, 1, 86400, null) is { } d ? JsonValue.Create(d) : null);

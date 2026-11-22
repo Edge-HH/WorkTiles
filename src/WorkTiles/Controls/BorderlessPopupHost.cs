@@ -67,6 +67,7 @@ internal sealed class BorderlessPopupHost : IDisposable
     {
         if (_disposed || _hwnd != 0) return;
         EnsureClass();
+        if (_classAtom == 0) return;
         _width = Math.Max(1, width);
         _height = Math.Max(1, height);
         _hwnd = CreateWindowEx(

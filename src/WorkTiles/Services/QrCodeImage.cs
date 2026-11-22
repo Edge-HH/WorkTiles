@@ -10,9 +10,9 @@ public static class QrCodeImage
 {
     public static byte[] CreatePng(string payload, int pixelsPerModule = 6)
     {
-        QRCodeGenerator generator = new();
+        using QRCodeGenerator generator = new();
         using QRCodeData data = generator.CreateQrCode(payload, QRCodeGenerator.ECCLevel.M);
-        PngByteQRCode code = new(data);
+        using PngByteQRCode code = new(data);
         return code.GetGraphic(pixelsPerModule, [0, 0, 0], [255, 255, 255], drawQuietZones: true);
     }
 }

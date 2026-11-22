@@ -29,6 +29,20 @@ public sealed partial class MainWindow
     private bool _layoutPreviewQueued;
     private bool _layoutSnapPending;
     private bool _layoutArrangePending;
+    private readonly DispatcherTimer _colorRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(150) };
+    private bool _colorRefreshHooked;
+
+    /// <summary>取色器拖动期间合并成一次全量刷新，Flyout 关闭前也能落地最后一种颜色。</summary>
+    private void QueueColorSettingChanged()
+    {
+        if (!_colorRefreshHooked)
+        {
+            _colorRefreshHooked = true;
+            _colorRefreshTimer.Tick += (_, _) => { _colorRefreshTimer.Stop(); SettingChanged(); };
+        }
+        _colorRefreshTimer.Stop();
+        _colorRefreshTimer.Start();
+    }
 
     private sealed record SettingsPage(StackPanel Container, UIElement Content, string Title, string Description);
 
@@ -88,7 +102,7 @@ public sealed partial class MainWindow
         _gridSizeSlider.SmallChange = 1;
         _gridSizeSlider.LargeChange = 8;
         layout.Children.Add(_gridSizeSlider);
-        layout.Children.Add(Note("分屏模式可拖动分隔条调整比例，拖至两端切换为单区；仅作业与仅时钟会把分隔条留在屏幕边缘，往回拖动即可恢复分屏；进入编辑模式后可拖动时钟或组件的任意位置，悬停时使用右下角灰色小框缩放；仅时钟模式没有作业板，编辑工具栏只保留画笔，画笔可以写在屏幕任意位置。"));
+        layout.Children.Add(Note("分屏模式可在顶部菜单栏切换左右或上下分屏、对调时钟与作业区域，也可以拖动分隔条调整比例，拖至两端切换为单区；仅作业与仅时钟会把分隔条留在屏幕边缘，往回拖动即可恢复分屏；进入编辑模式后可拖动时钟或组件的任意位置，悬停时使用右下角灰色小框缩放；仅时钟模式没有作业板，编辑工具栏只保留画笔，画笔可以写在屏幕任意位置。"));
         LayoutSettingsPanel.Children.Clear();
         layout.Children.Add(Heading("自动布局"));
         // 与编辑工具栏的吸附按钮是同一个设置，两边状态实时同步。
@@ -282,7 +296,7 @@ public sealed partial class MainWindow
         {
             update(GridAppearance.FormatColor(args.NewColor));
             _renderedGridAppearance = string.Empty;
-            SettingChanged();
+            QueueColorSettingChanged();
         };
         return button;
     }
@@ -296,6 +310,8 @@ public sealed partial class MainWindow
             _settings.Autofill.Subject.MatchLevel, value => _settings.Autofill.Subject.MatchLevel = value, read: () => _settings.Autofill.Subject.MatchLevel));
         page.Children.Add(Note("开启后，在磁贴标题里输入中文、全拼或首字母会弹出候选，上下键切换、Tab 或回车采纳，也可以直接点击；采纳候选会把标题与磁贴主题色切换为该学科的默认颜色。"));
         page.Children.Add(Note("宽松：输入 1 个字符即提示，首字母允许跳字；正常：汉字 1 个或字母 2 个起按前缀匹配；严格：2 个字符起，只认完整前缀。"));
+        if (_autofill.PinyinWarning is { } pinyinWarning)
+            page.Children.Add(Note("拼音补全不可用：" + pinyinWarning));
         page.Children.Add(Note("行内的色卡始终显示当前色系下的学科颜色。颜色浮层默认只给常用预设色，需要精确取色时展开「自定义颜色」；点「随机」后，每次采纳该学科都从预设色里随机取一个（不连续重复），再点一次恢复固定颜色，手动取色也会关闭随机。"));
 
         StackPanel list = SettingsStack();
@@ -1120,11 +1136,15 @@ public sealed partial class MainWindow
     {
         ComboBox combo = new() { Header = label, HorizontalAlignment = HorizontalAlignment.Stretch };
         for (int i = 0; i < labels.Length; i++) combo.Items.Add(new ComboBoxItem { Content = labels[i], Tag = values[i] });
-        combo.SelectedIndex = Math.Max(0, Array.IndexOf(values, value));
+        int selected = Array.IndexOf(values, value);
+        combo.SelectedIndex = Math.Max(0, selected);
+        if (selected < 0 && values.Length > 0) update(values[0]);
         combo.SelectionChanged += (_, _) => { if (!_refreshingSettingControls && combo.SelectedItem is ComboBoxItem item) { update((string)item.Tag); SettingChanged(); } };
         if (read is not null) _refreshSettingControls.Add(() =>
         {
-            int index = Math.Max(0, Array.IndexOf(values, read()));
+            int index = Array.IndexOf(values, read());
+            if (index < 0 && values.Length > 0) { update(values[0]); index = 0; }
+            index = Math.Max(0, index);
             if (combo.SelectedIndex != index) combo.SelectedIndex = index;
         });
         return combo;
@@ -1170,7 +1190,7 @@ public sealed partial class MainWindow
         StackPanel panel = SettingsStack(), imageControls = SettingsStack();
         ColorPicker color = new() { IsAlphaEnabled = false, IsHexInputVisible = true };
         try { color.Color = ViewModels.MainViewModel.BrushFromHex(string.IsNullOrEmpty(style.Color) ? "#202024" : style.Color).Color; } catch { }
-        color.ColorChanged += (_, args) => { style.Color = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}"; SettingChanged(); };
+        color.ColorChanged += (_, args) => { style.Color = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}"; QueueColorSettingChanged(); };
         if (surface)
             panel.Children.Add(SurfaceColorEditor(style.Color, style.ColorOpacity, () => style.ColorCleared,
                 (value, cleared) => { style.Color = value; style.ColorCleared = cleared; }, value => style.ColorOpacity = value, surfaceChanged));
@@ -1546,6 +1566,7 @@ public sealed partial class MainWindow
         if (SharedBackgroundVisual is null) return;
         foreach (Action refresh in _refreshSettingAvailability) refresh();
         ApplyDisplayLayout();
+        RefreshSplitLayoutCommands();
         ApplyMenuBarOffset();
         ApplyExperimentalNavigation();
         // 布局模式切换会改变编辑工具栏可用项和整屏笔迹的显示状态。
