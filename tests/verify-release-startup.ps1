@@ -15,10 +15,11 @@ try {
         throw '发布包未在 30 秒内完成窗口加载验证。'
     }
     $marker = Join-Path $testRoot 'startup-ok.txt'
-    if ($process.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $marker) -or (Get-Content -LiteralPath $marker -Raw) -ne 'WINDOW_LOADED') {
+    $markerText = if (Test-Path -LiteralPath $marker) { (Get-Content -LiteralPath $marker -Raw) } else { '<missing>' }
+    if ($process.ExitCode -ne 0 -or $markerText -ne 'WINDOW_LOADED') {
         $crash = Join-Path $testRoot 'data/crash.log'
         if (Test-Path -LiteralPath $crash) { Get-Content -LiteralPath $crash -Tail 18 }
-        throw "发布包启动失败，退出码 $($process.ExitCode)"
+        throw "发布包启动失败：退出码 $($process.ExitCode)，startup-ok=$markerText"
     }
     'PASS: published application loaded the real WinUI window and exited normally.'
 }
