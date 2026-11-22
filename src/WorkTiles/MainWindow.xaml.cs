@@ -177,6 +177,8 @@ public sealed partial class MainWindow : Window
         Activated += (_, _) => DispatcherQueue.TryEnqueue(StartAutomaticUpdateCheck);
         Closed += (_, _) =>
         {
+            // 先掐掉排队中的作业板缩放回调：窗口已销毁，再碰视口会崩在 CoreMessaging。
+            _boardClosed = true;
             _isLoaded = false;
             _clockTimer.Stop();
             _weatherTimer.Stop();

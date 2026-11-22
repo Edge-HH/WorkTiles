@@ -39,6 +39,8 @@ public sealed partial class MainWindow
     /// <summary>布局刷新后要按新尺寸重新提交缩放，期间视口的中间状态不算用户改动。</summary>
     private bool _pendingBoardViewReset;
     private int _boardZoomApply;
+    /// <summary>窗口关掉以后作业板视口已经销毁，排队中的缩放回调必须直接放弃，否则会崩在 CoreMessaging。</summary>
+    private bool _boardClosed;
     private bool _wasInfiniteBoard;
     /// <summary>本次排布把浮岛放在控制窗上下（竖版控制窗）还是左右。</summary>
     private bool _islandVerticalBand;
@@ -718,11 +720,11 @@ public sealed partial class MainWindow
         _applyingBoardZoom = true;
         DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
         {
-            if (apply != _boardZoomApply) return;
+            if (_boardClosed || apply != _boardZoomApply) return;
             BoardScroller.UpdateLayout();
             DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
             {
-                if (apply != _boardZoomApply) return;
+                if (_boardClosed || apply != _boardZoomApply) return;
                 if (BoardScroller.ZoomMode != ZoomMode.Enabled)
                 {
                     _applyingBoardZoom = false;
@@ -739,7 +741,7 @@ public sealed partial class MainWindow
                 // 比例回写是异步的。标志再留一帧，避免旧比例把刚刚设下的值盖掉。
                 DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                 {
-                    if (apply == _boardZoomApply) _applyingBoardZoom = false;
+                    if (!_boardClosed && apply == _boardZoomApply) _applyingBoardZoom = false;
                 });
             });
         });
