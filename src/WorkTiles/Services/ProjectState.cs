@@ -107,8 +107,8 @@ public sealed class BoardSettingsState
     public bool AutoSaveEnabled { get; set; } = true;
     /// <summary>允许多实例：默认关闭，关闭后同一安装目录只允许同时打开一个软件窗口。</summary>
     public bool AllowMultipleInstances { get; set; }
-    /// <summary>已打开时再次启动的行为：Foreground（移至前台）、FullScreen（全屏）、None（不执行任何操作）。</summary>
-    public string SecondLaunchAction { get; set; } = "Foreground";
+    /// <summary>已打开时再次启动的行为：Prompt（提示实例重复）、Foreground（打开主界面）、FullScreen（打开主界面并全屏）、None（不执行任何操作）。</summary>
+    public string SecondLaunchAction { get; set; } = "Prompt";
     /// <summary>预览（查看模式）下显示顶部菜单栏；默认关闭，菜单栏只在编辑模式显示。</summary>
     public bool ShowMenuBarInPreview { get; set; }
     /// <summary>时钟是否显示秒。关闭后只显示时和分。</summary>
@@ -144,9 +144,9 @@ public sealed class BoardSettingsState
     /// <summary>关闭自动排列后，每个项目记住磁贴在工作区里的位置。坐标相对工作区左上角，单位 DIP。</summary>
     public Dictionary<string, List<DesktopTilePlacement>> DesktopTilePlacements { get; set; } = new();
 
-    /// <summary>再次启动行为只认三种取值；旧配置或手改值一律回到“移至前台”。</summary>
+    /// <summary>再次启动行为只认四种取值；无法识别的旧配置或手改值回到“提示实例重复”。已保存的打开主界面、全屏和不操作仍然有效。</summary>
     public static string NormalizeSecondLaunchAction(string? value) =>
-        value is "Foreground" or "FullScreen" or "None" ? value : "Foreground";
+        value is "Prompt" or "Foreground" or "FullScreen" or "None" ? value : "Prompt";
 }
 
 /// <summary>

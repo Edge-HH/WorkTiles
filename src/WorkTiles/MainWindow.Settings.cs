@@ -50,11 +50,28 @@ public sealed partial class MainWindow
         general.Children.Add(launch);
         general.Children.Add(silent);
         general.Children.Add(Note("开启开机自启后才可以静默启动。静默启动时开机不显示主界面，只留托盘图标；若桌面磁贴已开启，则照常显示磁贴。"));
+        general.Children.Add(Choice("重复打开操作",
+            ["提示实例重复", "打开主界面", "打开主界面并全屏", "不执行任何操作"],
+            [SingleInstanceService.PromptAction, SingleInstanceService.ForegroundAction, SingleInstanceService.FullScreenAction, SingleInstanceService.NoneAction],
+            _settings.SecondLaunchAction, value => _settings.SecondLaunchAction = value, read: () => _settings.SecondLaunchAction));
+        general.Children.Add(Note("同一安装目录已经打开时，再次启动按这里处理。提示会询问是重启正在运行的实例，还是回到已经打开的窗口。"));
         general.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
             _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
         general.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
+        general.Children.Add(Heading("菜单栏"));
+        general.Children.Add(Toggle("预览下显示菜单栏", _settings.ShowMenuBarInPreview, value =>
+            _settings.ShowMenuBarInPreview = value, changed: () => { UpdateProjectCommands(); ScheduleSave(); }, read: () => _settings.ShowMenuBarInPreview));
+        general.Children.Add(Note("默认关闭：菜单栏只在编辑模式下显示，查看模式下保持画面整洁；开启后查看模式也会显示“项目”“文件”菜单栏。"));
+        // 避让距离按整数像素调节，拖动时只移动顶栏，不触发整窗刷新。
+        Slider menuBarOffsetSlider = Range("避让距离", 0, 200, Math.Round(_settings.MenuBarAvoidDistance), value =>
+        { _settings.MenuBarAvoidDistance = Math.Round(value); }, () => { ApplyMenuBarOffset(); ScheduleSave(); }, read: () => Math.Round(_settings.MenuBarAvoidDistance));
+        menuBarOffsetSlider.StepFrequency = 1;
+        menuBarOffsetSlider.SmallChange = 1;
+        menuBarOffsetSlider.LargeChange = 10;
+        general.Children.Add(menuBarOffsetSlider);
+        general.Children.Add(Note("用于避让ClassIsland主界面等窗口。"));
         _refreshSettingAvailability.Add(() => silent.IsEnabled = _settings.LaunchAtStartup);
-        RegisterSettingsPage("General", GeneralSettingsPanel, general, "常规", "开机自启、静默启动和桌面磁贴。");
+        RegisterSettingsPage("General", GeneralSettingsPanel, general, "常规", "开机自启、重复打开、桌面磁贴和菜单栏。");
 
         StackPanel layout = SettingsStack();
         _layoutChoice = Choice("布局模式", ["分屏", "仅作业", "仅时钟", "自由布局"],
@@ -100,24 +117,6 @@ public sealed partial class MainWindow
         layout.Children.Add(Note("点击自动排列时按文字、图片和笔迹收紧磁贴；自动对齐会尽量统一相近尺寸并对齐行列。看板与图片导出共用这些设置，优先从左上角排列。"));
         _refreshSettingAvailability.Add(UpdateAutoLayoutGapStep);
         RegisterSettingsPage("Layout", LayoutSettingsPanel, layout, "布局", "调整布局模式、无限作业板与网格。");
-
-        StackPanel window = SettingsStack();
-        window.Children.Add(Note("同一安装目录只打开一个窗口。再次启动时可以选择重启正在运行的实例，或取消并回到已经打开的窗口。桌面磁贴在「常规」页。"));
-        RegisterSettingsPage("Window", WindowSettingsPanel, window, "窗口", "同一安装目录只打开一个窗口。再次启动时可以选择退出正在运行的实例。");
-
-        StackPanel menuBar = SettingsStack();
-        menuBar.Children.Add(Toggle("预览下显示菜单栏", _settings.ShowMenuBarInPreview, value =>
-            _settings.ShowMenuBarInPreview = value, changed: () => { UpdateProjectCommands(); ScheduleSave(); }, read: () => _settings.ShowMenuBarInPreview));
-        menuBar.Children.Add(Note("默认关闭：菜单栏只在编辑模式下显示，查看模式下保持画面整洁；开启后查看模式也会显示“项目”“文件”菜单栏。"));
-        // 避让距离按整数像素调节，拖动时只移动顶栏，不触发整窗刷新。
-        Slider menuBarOffsetSlider = Range("避让距离", 0, 200, Math.Round(_settings.MenuBarAvoidDistance), value =>
-        { _settings.MenuBarAvoidDistance = Math.Round(value); }, () => { ApplyMenuBarOffset(); ScheduleSave(); }, read: () => Math.Round(_settings.MenuBarAvoidDistance));
-        menuBarOffsetSlider.StepFrequency = 1;
-        menuBarOffsetSlider.SmallChange = 1;
-        menuBarOffsetSlider.LargeChange = 10;
-        menuBar.Children.Add(menuBarOffsetSlider);
-        menuBar.Children.Add(Note("用于避让ClassIsland主界面等窗口。"));
-        RegisterSettingsPage("WindowMenuBar", MenuBarSettingsPanel, menuBar, "菜单栏", "设置菜单栏的显示时机与顶部避让。");
 
         StackPanel tile = SettingsStack();
         tile.Children.Add(CreateAppearancePreview("Tile"));

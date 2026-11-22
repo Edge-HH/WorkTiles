@@ -10,11 +10,12 @@ public sealed record SecondLaunchRequest(string Action, LaunchArgs? Arguments);
 
 /// <summary>
 /// 窗口启动闸门：同一安装目录只允许同时打开一个软件窗口。
-/// 再次启动会弹出选择窗口，可以退出正在运行的实例再启动，或直接返回。
+/// 再次启动按“重复打开操作”处理：提示实例重复、打开主界面、打开并全屏，或不做任何事。
 /// 互斥体和唤醒事件按数据目录命名，不同便携副本互不干扰。
 /// </summary>
 public sealed class SingleInstanceService : IDisposable
 {
+    public const string PromptAction = "Prompt";
     public const string ForegroundAction = "Foreground";
     public const string FullScreenAction = "FullScreen";
     public const string NoneAction = "None";
@@ -94,6 +95,13 @@ public sealed class SingleInstanceService : IDisposable
         }
         return null;
     }
+
+    /// <summary>再次启动是否先弹出“已在运行”。带项目、视图或窗口模式参数时不弹，交给已有窗口。</summary>
+    public static bool ShouldPrompt(string action, LaunchArgs arguments) =>
+        action == PromptAction
+        && arguments.Project is null
+        && !arguments.HasViewOverride
+        && arguments.Windowed is null;
 
     /// <summary>
     /// 把这次启动转成一次唤醒，交给已有窗口执行；“不执行任何操作”不发任何信号。
@@ -183,7 +191,7 @@ public sealed class SingleInstanceService : IDisposable
 
     /// <summary>
     /// 启动闸门需要的窗口设置，从数据目录的项目清单读取（新结构 projects.json，旧结构 pancake.json）。
-    /// 文件缺失或损坏时按“关闭允许多实例 + 移至前台”处理，保持只开一个窗口的默认行为。
+    /// 文件缺失或损坏时按“提示实例重复”处理。
     /// </summary>
     public static (bool AllowMultipleInstances, string SecondLaunchAction) ReadLaunchSettings()
     {
@@ -202,7 +210,7 @@ public sealed class SingleInstanceService : IDisposable
                 // 单个文件读不出来不能挡住启动闸门，继续尝试旧结构或回落默认值。
             }
         }
-        return (false, ForegroundAction);
+        return (false, PromptAction);
     }
 
     private void Listen()

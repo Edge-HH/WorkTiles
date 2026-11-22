@@ -171,6 +171,7 @@ public sealed partial class MainWindow : Window
             _noiseMonitor.Dispose();
             _noiseAlertPlayer.Dispose();
             _tray?.Dispose();
+            UninstallShowDesktopMonitor();
         };
     }
 
@@ -227,9 +228,10 @@ public sealed partial class MainWindow : Window
                 args.Cancel = true;
                 _appWindow.Hide();
             };
+        InstallShowDesktopMonitor();
     }
 
-    /// <summary>接管窗口启动闸门：再次启动时按“已打开时再次启动的行为”唤醒本窗口，带参数时按参数行动。</summary>
+    /// <summary>接管窗口启动闸门：再次启动选择打开主界面时唤醒本窗口，带参数时按参数行动。</summary>
     public void AttachSingleInstanceGate(SingleInstanceService gate)
     {
         _instanceGate = gate;
@@ -239,7 +241,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 再次启动的唤醒动作：移至前台，或全屏并移至前台；“不执行任何操作”根本不发信号。
+    /// 再次启动的唤醒动作：打开主界面，或打开并全屏；“不执行任何操作”根本不发信号。
     /// 转发参数存在时按参数行动：切换全屏/窗口、打开指定项目，再应用 --view。
     /// </summary>
     private async Task HandleSecondLaunchAsync(SecondLaunchRequest request)
@@ -1612,7 +1614,7 @@ public sealed partial class MainWindow : Window
             _autofill.Prune(DateTime.Now);
             _settings.GridLineThickness = Math.Clamp(_settings.GridLineThickness, .5, 5);
             _settings.GridDotDiameter = Math.Clamp(_settings.GridDotDiameter, 1, 12);
-            // 再次启动行为只认三种取值；旧配置或手改值回到默认的“移至前台”。
+            // 无法识别的再次启动行为回到“提示实例重复”。
             _settings.SecondLaunchAction = BoardSettingsState.NormalizeSecondLaunchAction(_settings.SecondLaunchAction);
             // 字号按整数调节：旧版字号滑块按 0.01 步进留下的小数值（如 20.37）在这里统一收敛。
             _settings.TileBodyFontSize = Math.Round(_settings.TileBodyFontSize, MidpointRounding.AwayFromZero);

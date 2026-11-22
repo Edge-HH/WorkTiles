@@ -459,6 +459,19 @@ LaunchArgs combined = LaunchArgs.Parse(["--windowed", "--view=ink", "--project=D
 Check(combined.Windowed is true && combined.View == LaunchArgs.ViewInk && combined.Project == "D:\\课表\\数学.wth",
     "多个启动参数可以组合使用");
 
+Check(new BoardSettingsState().SecondLaunchAction == SingleInstanceService.PromptAction, "重复打开默认提示实例重复");
+Check(BoardSettingsState.NormalizeSecondLaunchAction("Foreground") == SingleInstanceService.ForegroundAction, "已保存的打开主界面仍然有效");
+Check(BoardSettingsState.NormalizeSecondLaunchAction("FullScreen") == SingleInstanceService.FullScreenAction, "已保存的全屏仍然有效");
+Check(BoardSettingsState.NormalizeSecondLaunchAction("None") == SingleInstanceService.NoneAction, "已保存的不操作仍然有效");
+Check(BoardSettingsState.NormalizeSecondLaunchAction("nope") == SingleInstanceService.PromptAction, "无法识别的重复打开操作回到提示");
+Check(SingleInstanceService.ShouldPrompt(SingleInstanceService.PromptAction, LaunchArgs.Parse([])), "提示模式下再次启动先询问");
+Check(!SingleInstanceService.ShouldPrompt(SingleInstanceService.ForegroundAction, LaunchArgs.Parse([])), "打开主界面不再询问");
+Check(!SingleInstanceService.ShouldPrompt(SingleInstanceService.FullScreenAction, LaunchArgs.Parse([])), "打开并全屏不再询问");
+Check(!SingleInstanceService.ShouldPrompt(SingleInstanceService.NoneAction, LaunchArgs.Parse([])), "不执行任何操作不再询问");
+Check(!SingleInstanceService.ShouldPrompt(SingleInstanceService.PromptAction, LaunchArgs.Parse(["--project", "语文"])), "带项目参数时不弹重复提示");
+Check(!SingleInstanceService.ShouldPrompt(SingleInstanceService.PromptAction, LaunchArgs.Parse(["--view=editor"])), "带视图参数时不弹重复提示");
+Check(!SingleInstanceService.ShouldPrompt(SingleInstanceService.PromptAction, LaunchArgs.Parse(["--windowed"])), "带窗口模式参数时不弹重复提示");
+
 string secret = LockService.CreateTotpSecret();
 Check(secret.Length >= 32 && secret.All(c => "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567".Contains(c)), "密钥使用 Base32 标准字母表");
 Check(LockService.Base32Decode(secret).Length == 20, "160 位密钥解码为 20 字节");

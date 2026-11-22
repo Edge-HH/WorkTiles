@@ -149,8 +149,8 @@ internal enum DesktopCornerMode
 /// 1. 创建纯 WS_POPUP + WS_EX_NOREDIRECTIONBITMAP + WS_EX_TOOLWINDOW 窗口（无边框、无标题栏、无白边）；
 /// 2. 通过 DwmExtendFrameIntoClientArea(-1)、DWMWA_BORDER_COLOR=NONE 与透明/亚克力 SystemBackdrop 实现逐像素透明与圆角透底；
 ///    显示、改尺寸和 SetWindowRgn 之后要重新写这些属性，否则系统会沿窗口补回一圈白边；
-/// 3. 非编辑态下以 Progman 作为 Owner（GWLP_HWNDPARENT）并保持 WS_EX_NOACTIVATE，配合 Win+D 事件钩子，
-///    保证按 Win+D 时不被最小化且不被桌面遮挡，同时普通窗口仍可覆盖在上方。
+/// 3. 非编辑态以 Progman 为 Owner 并保持 WS_EX_NOACTIVATE，普通窗口仍可盖在上面。
+///    编辑态允许激活；主窗口还看得见时重排会暂时挂回 Progman，点到磁贴才卸 owner，避免整组被抬出桌面。
 /// </summary>
 internal sealed class DesktopWidgetHost : IDisposable
 {
@@ -208,6 +208,12 @@ internal sealed class DesktopWidgetHost : IDisposable
     private static readonly List<DesktopWidgetHost> _activeHosts = [];
     private static nint _winEventHook;
     private static WinEventProc? _winEventProc;
+
+    /// <summary>桌面成为前台、磁贴抬到普通窗口之上以前。全屏主窗口在这里先收起。</summary>
+    internal static Action? BeforeDesktopForeground;
+
+    /// <summary>主窗口仍可见地盖住桌面时为 true，这次不要把磁贴抬到它上面。</summary>
+    internal static Func<bool>? AppCoversDesktop;
     private static readonly EnumChildProc StripChildBorderDelegate = StripChildBorder;
 
     private nint _hwnd;
@@ -436,24 +442,41 @@ internal sealed class DesktopWidgetHost : IDisposable
         return false;
     }
 
-    /// <summary>将命令栏保持在所有桌面磁贴之上，同时整组停留在桌面之上、普通窗口之下。</summary>
+    /// <summary>
+    /// 主窗口还看得见时，重排前先挂回桌面。编辑态平时没有 owner，直接 HWND_BOTTOM 会掉到壁纸后面。
+    /// 插入线不挂桌面，避免把桌面抬到磁贴前面。
+    /// </summary>
+    internal static void HoldAnchoredOwners()
+    {
+        foreach (DesktopWidgetHost host in _activeHosts)
+            host.HoldDesktopOwner();
+    }
+
+    /// <summary>挂回 Progman，不改能否点击。点到磁贴时再卸 owner。</summary>
+    internal void HoldDesktopOwner()
+    {
+        if (_disposed || _hwnd == 0 || !AnchorToDesktop) return;
+        nint owner = GetDesktopOwnerHandle();
+        if (owner == 0) return;
+        if (GetWindowLongPtr(_hwnd, GwlpHwndParent) != owner)
+            SetWindowLongPtr(_hwnd, GwlpHwndParent, owner);
+    }
+
+    /// <summary>真正点到编辑中的磁贴时卸掉桌面归属，避免这次点击把整个桌面抬起来。</summary>
+    internal void ReleaseOwnerForInput()
+    {
+        if (_disposed || _hwnd == 0 || !_interactive || !AnchorToDesktop) return;
+        if (GetWindowLongPtr(_hwnd, GwlpHwndParent) != 0)
+            SetWindowLongPtr(_hwnd, GwlpHwndParent, 0);
+    }
+
+    /// <summary>将命令栏保持在所有桌面磁贴之上，同时整组停留在桌面之上、普通窗口之下。编辑不改变这层 Z 序。</summary>
     public static void RestackDesktopGroup(IReadOnlyList<nint> commandHwnds, IReadOnlyList<nint> tileHwnds, bool editing)
     {
+        _ = editing;
         List<nint> commands = [];
         foreach (nint hwnd in commandHwnds)
             if (hwnd != 0) commands.Add(hwnd);
-
-        if (editing)
-        {
-            foreach (nint tile in tileHwnds)
-            {
-                if (tile != 0)
-                    SetWindowPos(tile, HwndTop, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
-            }
-            foreach (nint command in commands)
-                SetWindowPos(command, HwndTop, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate);
-            return;
-        }
 
         if (commands.Count > 0)
         {
@@ -634,7 +657,9 @@ internal sealed class DesktopWidgetHost : IDisposable
             if (_instances.TryGetValue(hwnd, out DesktopWidgetHost? target) && target._visible)
             {
                 ShowWindow(hwnd, SwShowNoActivate);
-                target.EnsureVisibleAboveDesktop();
+                // 全屏窗口还铺着时先别抬。显示桌面会先收起主窗口，再由前台分支把磁贴抬回桌面之上。
+                if (AppCoversDesktop?.Invoke() != true)
+                    target.EnsureVisibleAboveDesktop();
             }
             return;
         }
@@ -643,19 +668,26 @@ internal sealed class DesktopWidgetHost : IDisposable
         {
             if (IsDesktopShellWindow(hwnd))
             {
-                foreach (DesktopWidgetHost item in _activeHosts)
-                {
-                    if (!item._visible || item.IsAlwaysAboveTiles) continue;
-                    item.UpdateDesktopAnchor();
-                    item.EnsureVisibleAboveDesktop();
-                }
-                foreach (DesktopWidgetHost item in _activeHosts)
-                {
-                    if (!item._visible || !item.IsAlwaysAboveTiles) continue;
-                    item.UpdateDesktopAnchor();
-                    item.EnsureVisibleAboveDesktop();
-                }
+                BeforeDesktopForeground?.Invoke();
+                if (AppCoversDesktop?.Invoke() == true) return;
+                RaiseVisibleHostsAboveDesktop();
             }
+        }
+    }
+
+    internal static void RaiseVisibleHostsAboveDesktop()
+    {
+        foreach (DesktopWidgetHost item in _activeHosts)
+        {
+            if (!item._visible || item.IsAlwaysAboveTiles) continue;
+            item.UpdateDesktopAnchor();
+            item.EnsureVisibleAboveDesktop();
+        }
+        foreach (DesktopWidgetHost item in _activeHosts)
+        {
+            if (!item._visible || !item.IsAlwaysAboveTiles) continue;
+            item.UpdateDesktopAnchor();
+            item.EnsureVisibleAboveDesktop();
         }
     }
 
@@ -666,6 +698,10 @@ internal sealed class DesktopWidgetHost : IDisposable
         SetWindowPos(_hwnd, HwndTop, 0, 0, 0, 0, SwpNoMove | SwpNoSize | SwpNoActivate | SwpShowWindow);
         ApplyDwmAttributes();
     }
+
+    internal static bool IsTileHost(nint hwnd) => _instances.ContainsKey(hwnd);
+
+    internal static bool IsShellDesktopWindow(nint hwnd) => IsDesktopShellWindow(hwnd);
 
     private static bool IsDesktopShellWindow(nint hwnd)
     {
@@ -703,7 +739,10 @@ internal sealed class DesktopWidgetHost : IDisposable
                     if (wParam != 0) return 0;
                     break;
                 case WmMouseActivate:
-                    return host._interactive ? MaActivate : MaNoActivate;
+                    if (!host._interactive) return MaNoActivate;
+                    // 主界面重排时会暂时挂回桌面。这里再卸，点击才不会把 Progman 抬到参照窗口前面。
+                    host.ReleaseOwnerForInput();
+                    return MaActivate;
                 case WmSysCommand:
                     if ((wParam.ToInt64() & 0xFFF0) == ScMinimize) return 0;
                     break;

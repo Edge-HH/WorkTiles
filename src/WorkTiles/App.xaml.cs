@@ -134,15 +134,29 @@ public partial class App : Application
             return;
         }
 #endif
-        // 同一安装目录只开一个窗口。已经有实例时先问用户：退出那个实例再启动，或返回。
+        // 同一安装目录只开一个窗口。已经有实例时按“重复打开操作”处理。
         // 冒烟与验证模式已在上面提前返回，各自跑隔离副本，不参与互斥。
         SingleInstanceService instanceGate = SingleInstanceService.Start();
         if (!instanceGate.IsFirstInstance)
         {
-            ShowInstancePrompt(instanceGate, startFullScreen, launchArgs);
+            HandleSecondInstance(instanceGate, startFullScreen, launchArgs);
             return;
         }
         StartMainWindow(instanceGate, startFullScreen, launchArgs);
+    }
+
+    private void HandleSecondInstance(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)
+    {
+        string action = SingleInstanceService.ReadLaunchSettings().SecondLaunchAction;
+        // 带项目、视图或窗口模式参数时不弹提示，交给已经打开的窗口执行。
+        if (SingleInstanceService.ShouldPrompt(action, launchArgs))
+        {
+            ShowInstancePrompt(instanceGate, startFullScreen, launchArgs);
+            return;
+        }
+        instanceGate.ForwardToRunningInstance(action, launchArgs);
+        instanceGate.Dispose();
+        Exit();
     }
 
     private void StartMainWindow(SingleInstanceService instanceGate, bool startFullScreen, LaunchArgs launchArgs)

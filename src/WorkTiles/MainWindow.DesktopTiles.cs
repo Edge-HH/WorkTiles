@@ -670,7 +670,13 @@ public sealed partial class MainWindow
             if (window.Handle != 0) tiles.Add(window.Handle);
         if (_desktopInsertLine is { IsShowing: true, Handle: var line } && line != 0)
             tiles.Add(line);
+        // 主窗口还在时先挂回桌面再沉底，避免编辑态的无主窗口被这次重排抬到主界面前面。
+        // 已经最小化或为显示桌面收起时不挂回去，否则壁纸会盖住正在桌面上编辑的磁贴。
+        bool cover = AppCoversDesktop();
+        if (cover) DesktopWidgetHost.HoldAnchoredOwners();
         DesktopWindowNative.StackCommandAboveTiles(_desktopCommands.Handles, tiles, DesktopEditActive);
+        if (!cover && DesktopEditActive)
+            DesktopWidgetHost.RaiseVisibleHostsAboveDesktop();
     }
 
     private RectInt32 ToPixels(DesktopTileSlot slot) => new(

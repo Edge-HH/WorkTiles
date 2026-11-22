@@ -239,10 +239,12 @@ public sealed partial class MainWindow
                 List<string> fileMenu = FileMenuFlyout.Items.OfType<MenuFlyoutItem>().Select(item => item.Text).ToList();
                 Check(fileMenu.SequenceEqual(["新建", "重命名", "删除", "保存", "导入", "导出"]),
                     "save sits above import and export (" + string.Join(" / ", fileMenu) + ")");
-                NavigationViewItem menuBarNav = WindowNavigationGroup.MenuItems.OfType<NavigationViewItem>().First(item => Equals(item.Content, "菜单栏"));
-                NavigationViewItem windowNav = WindowNavigationGroup.MenuItems.OfType<NavigationViewItem>().First(item => Equals(item.Content, "窗口"));
-                Check(menuBarNav.Icon is FluentIcon menuIcon && windowNav.Icon is FluentIcon windowIcon && menuIcon.Symbol == windowIcon.Symbol,
-                    "menu bar settings use the same icon as window settings");
+                Check(!SettingsRoot.MenuItems.OfType<NavigationViewItem>().Any(item => Equals(item.Content, "窗口") || Equals(item.Content, "菜单栏")),
+                    "window settings group is removed");
+                Check(FindVisuals<ToggleSwitch>(_settingsPages["General"].Content).Any(toggle => Equals(toggle.Header, "预览下显示菜单栏")),
+                    "menu bar preview toggle lives on the general page");
+                Check(FindVisuals<ComboBox>(_settingsPages["General"].Content).Any(box => Equals(box.Header, "重复打开操作")),
+                    "duplicate launch action lives on the general page");
                 var editor = FindVisuals<RichEditBox>(BoardCanvas).Last(editor => !TransparentInputMarkers.IsOverlayMirror(editor));
                 editor.IsReadOnly = false;
                 ITextRange story = editor.Document.GetRange(0, int.MaxValue);
@@ -1736,8 +1738,8 @@ public sealed partial class MainWindow
             .Where(item => item.Tag is not null)
             .ToList();
         check(settingsPages.Count == _settingsPages.Count, "each settings content page has a navigation item");
-        // 窗口、外观、组件与自动填充四个分组（窗口分组随本机窗口设置的加入扩到 4）。
-        check(SettingsRoot.MenuItems.OfType<NavigationViewItem>().Count(item => item.MenuItems.Count > 0) == 4,
+        // 外观、组件与自动填充三个分组。窗口分页已并入常规。
+        check(SettingsRoot.MenuItems.OfType<NavigationViewItem>().Count(item => item.MenuItems.Count > 0) == 3,
             "settings subpages live in expandable navigation groups");
         check(ReferenceEquals(SettingsRoot.SelectedItem, AboutNavigationGroup) &&
             settingsPages.Count(item => item.IsSelected) == 1,
@@ -1866,8 +1868,15 @@ public sealed partial class MainWindow
         check(FindVisuals<ToggleSwitch>(_settingsPages["AppearanceClock"].Content).Any(toggle => Equals(toggle.Header, "显示秒") && toggle.IsOn)
             && FindVisuals<ComboBox>(_settingsPages["AppearanceClock"].Content).Any(box => Equals(box.Header, "秒数样式")),
             "clock settings offer seconds and a small-or-large digit style");
-        check(!FindVisuals<ToggleSwitch>(_settingsPages["Window"].Content).Any(toggle => Equals(toggle.Header, "允许多实例")),
-            "window settings no longer offer multiple instances");
+        ComboBox secondLaunch = FindVisuals<ComboBox>(_settingsPages["General"].Content).Single(box => Equals(box.Header, "重复打开操作"));
+        check(secondLaunch.Items.OfType<ComboBoxItem>().Select(item => (string)item.Content).SequenceEqual(
+            ["提示实例重复", "打开主界面", "打开主界面并全屏", "不执行任何操作"]),
+            "duplicate launch offers prompt, open, fullscreen, and none");
+        check(FindVisuals<ToggleSwitch>(_settingsPages["General"].Content).Any(toggle => Equals(toggle.Header, "预览下显示菜单栏"))
+            && FindVisuals<Slider>(_settingsPages["General"].Content).Any(slider => Equals(slider.Header, "避让距离")),
+            "menu bar settings live on the general page");
+        check(!FindVisuals<ToggleSwitch>(_settingsPages["General"].Content).Any(toggle => Equals(toggle.Header, "允许多实例")),
+            "general settings do not offer multiple instances");
         ElementTheme originalAboutTheme = RootShell.RequestedTheme;
         RootShell.RequestedTheme = ElementTheme.Light;
         await NextLayoutAsync();
