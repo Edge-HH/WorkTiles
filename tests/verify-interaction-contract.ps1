@@ -249,3 +249,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Output 'PASS: interaction, rich text, local data, weather, and update contracts are present.'
+exit 0

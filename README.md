@@ -182,7 +182,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\tests\verify-interaction-c
 | `dotnet run --project tests/ProjectLogic` | 项目与 `.wth` 往返、紧密网格排版、区域中轴、相邻磁贴吸附 | 否 |
 | `dotnet run --project tests/SettingsLogic` | 设置迁移、锁屏与 TOTP、自动填充、备份、桌面磁贴排版、设置清单 | 否 |
 | `dotnet run --project tests/UpdateLogic` | 解压、覆盖、数据保留、锁定文件回滚、危险路径拒绝、摘要缺失拒绝 | 否 |
-| `dotnet run --project tests/SyncLogic` | 集控同步端到端；需要 `-p:WorkTilesServerDir` 指向 `release.yml` 固定的服务端快照 | 否 |
+| `dotnet run --project tests/SyncLogic` | 集控同步端到端；需要 `-p:WorkTilesServerDir` 指向本地检出的服务端仓库（发版流水线不再跑，只在本地验证） | 否 |
 | `tests/verify-layout-persistence.ps1 -PublishDirectory <dir>` | 启动、正常关闭、主题与布局保持；使用 `--layout-probe`，不碰真实自启/麦克风 | 否 |
 | `tests/verify-ui.ps1 -PublishDirectory <dir> -EvidenceDirectory <dir>` | 隔离 WinUI 验证；可用 `-SelectionOnly`、`-GridCoverageOnly`、`-AutoLayoutOnly`、`-AutofillImeOnly`、`-ImageDragOnly` 等开关缩窄 | 是 |
 | `tests/verify-requested-ui-contract.ps1` 等契约脚本 | 静态 XAML/C# 契约；需要 PowerShell 7 | 否 |

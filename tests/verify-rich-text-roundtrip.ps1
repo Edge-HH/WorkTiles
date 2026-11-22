@@ -32,3 +32,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Output 'PASS: rich-text round trips exclude generated trailing paragraphs.'
+exit 0

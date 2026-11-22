@@ -48,3 +48,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Output 'PASS: color swatches render, clear highlighting correctly, and target the preserved selection.'
+exit 0

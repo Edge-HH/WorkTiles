@@ -218,3 +218,4 @@ if ($failures.Count -gt 0) {
 }
 
 Write-Output 'PASS: requested toolbar, palette, settings navigation, project header, noise volume, discard, arrange, and update contracts are present.'
+exit 0

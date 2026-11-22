@@ -21,3 +21,4 @@ foreach ($name in @('HarmonyOS_Sans_SC_Regular.ttf', 'HarmonyOS_Sans_SC_Bold.ttf
     if (-not (Test-Path (Join-Path $fonts $name))) { throw "缺少字体或许可：$name" }
 }
 Write-Output "PASS: $count Fluent semantic glyphs exist in the bundled font; font licenses are present."
+exit 0

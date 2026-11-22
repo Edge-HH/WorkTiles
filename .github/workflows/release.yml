@@ -43,21 +43,9 @@ jobs:
           }
           "version=$version" >> $env:GITHUB_OUTPUT
 
-      - name: 📥 获取集控服务端代码
-        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
-        with:
-          repository: Edge-HH/WorkTilesServer
-          path: WorkTilesServer
-          # 固定到与本次发版测试过的服务端版本，服务端仓库更新协议后同步改这里；
-          # 不固定的话服务端 main 的改动会让发版流水线里的同步测试随时挂掉。
-          # ci-desktop-sync 分支：服务端 Shared 与桌面端对齐的快照（暂不含桌面端未落地的 WidgetProfile）。
-          ref: 95318321ee020ae7e9dd7111d958de55c81b621b
-
-      - name: 🧪 集控同步测试
-        shell: pwsh
-        run: |
-          dotnet run --project ./tests/SyncLogic/SyncLogic.csproj -c Release --nologo -p:WorkTilesServerDir=$PWD/WorkTilesServer/
-          if ($LASTEXITCODE -ne 0) { throw "集控同步测试失败。" }
+      # 集控（WorkTiles.Server）已迁出到独立仓库，发版流水线不再检出、也不再跑同步测试：
+      # 跨仓库私有检出依赖额外凭据，服务端协议变动还会把桌面端发版卡死。
+      # 同步一致性请在本地用 tests/SyncLogic 单独验证（见 README）。
 
       - name: 🛡️ 依赖漏洞扫描
         shell: pwsh
@@ -120,12 +108,20 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
-          gh release create $env:REF_NAME `
-            .\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip `
-            --repo $env:REPO `
-            --verify-tag `
-            --generate-notes `
-            --title "WorkTiles $env:REF_NAME"
+          $zip = ".\artifacts\WorkTiles-win-x64-${{ steps.version.outputs.version }}.zip"
+          # 同一次发版重跑时 Release 可能已经建好，直接覆盖附件，避免 "release already exists"。
+          gh release view $env:REF_NAME --repo $env:REPO *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $env:REF_NAME $zip --repo $env:REPO --clobber
+          }
+          else {
+            gh release create $env:REF_NAME $zip `
+              --repo $env:REPO `
+              --verify-tag `
+              --generate-notes `
+              --title "WorkTiles $env:REF_NAME"
+          }
+          if ($LASTEXITCODE -ne 0) { throw "创建 GitHub 正式发布失败。" }
 
 
   test-logic:
@@ -152,12 +148,15 @@ jobs:
       - name: 📐 契约脚本
         shell: pwsh
         run: |
+          # 这些脚本只在失败时 exit 1，成功时不会写 $LASTEXITCODE，
+          # 不先清零就会拿到上一个命令的残留值（新会话里是 $null），把通过判成失败。
           foreach ($script in @(
             'verify-requested-ui-contract.ps1',
             'verify-color-formatting-contract.ps1',
             'verify-rich-text-roundtrip.ps1',
             'verify-interaction-contract.ps1',
             'verify-icon-font-contract.ps1')) {
+            $global:LASTEXITCODE = 0
             & "./tests/$script"
-            if ($LASTEXITCODE -ne 0) { throw "$script 失败。" }
+            if (-not $? -or $LASTEXITCODE -ne 0) { throw "$script 失败。" }
           }
