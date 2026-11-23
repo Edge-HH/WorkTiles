@@ -303,7 +303,7 @@ public sealed partial class MainWindow
         SubjectTileControl? tile = null;
         tile = new SubjectTileControl(
             subject,
-            DeleteSubject,
+            _ => ConfirmDesktopDelete(window, subject),
             _ => { },
             _ => { },
             _ => { },
@@ -354,6 +354,13 @@ public sealed partial class MainWindow
         ApplyDesktopCorner(window);
         window.SetEditing(DesktopEditActive);
         ArrangeDesktopTiles();
+    }
+
+    /// <summary>在这块磁贴窗口上确认。不要把确认框开到主窗口，否则会把已收起的主界面拉回来。</summary>
+    private void ConfirmDesktopDelete(DesktopTileWindow window, SubjectBoard subject)
+    {
+        window.Tile?.HideAutofill();
+        window.ConfirmRemove(DeleteSubjectMessage(subject), () => RemoveSubject(subject));
     }
 
     private DesktopCommandWindow CreateDesktopCommands()

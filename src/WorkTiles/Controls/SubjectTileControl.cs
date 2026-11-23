@@ -622,29 +622,144 @@ public sealed class SubjectTileControl : Grid
 
     private bool _entriesRebuildPending;
     private bool _lostFocusHooked;
+    private bool _localEntryEdit;
 
     private void Entries_CollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        // 另一视图增删作业时，本视图若正在输入/组合，等焦点离开后再重建，避免销毁编辑器和未上屏的组合文本。
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        // 按钮在这块磁贴里。这一份必须马上改行，不能等失焦。另一份正在组字时只推迟，不拆编辑器。
+        if (_localEntryEdit)
+        {
+            bool rebuild = _entriesRebuildPending || !TryApplyEntryDelta(e);
+            if (rebuild) RebuildEntries();
+            else _modelStamp = ModelStamp();
+            NoteEntryPerf(rebuild ? "rebuild" : "delta", e.Action, started);
+            return;
+        }
+        // 视觉树已经和模型脱节，等失焦后的整表重建一次收齐，不要在旧树上打补丁。
+        if (_entriesRebuildPending)
+        {
+            NoteEntryPerf("pending-hold", e.Action, started);
+            return;
+        }
         if (ContainsFocus())
         {
-            _entriesRebuildPending = true;
-            if (!_lostFocusHooked)
-            {
-                _lostFocusHooked = true;
-                LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (!_entriesRebuildPending || ContainsFocus()) return;
-                    RebuildEntries();
-                });
-            }
+            DeferEntryRebuild();
+            NoteEntryPerf("defer", e.Action, started);
+            return;
+        }
+        if (TryApplyEntryDelta(e))
+        {
+            _modelStamp = ModelStamp();
+            NoteEntryPerf("delta", e.Action, started);
             return;
         }
         RebuildEntries();
+        NoteEntryPerf("rebuild", e.Action, started);
+    }
+
+    private static void NoteEntryPerf(string path, NotifyCollectionChangedAction action, long started) =>
+        System.Diagnostics.Debug.WriteLine(
+            $"[PERF-a4f2] entries {path} {action} {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0.0}ms");
+
+    private void DeferEntryRebuild()
+    {
+        _entriesRebuildPending = true;
+        if (_lostFocusHooked) return;
+        _lostFocusHooked = true;
+        LostFocus += (_, _) => DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!_entriesRebuildPending || ContainsFocus()) return;
+            RebuildEntries();
+        });
+    }
+
+    /// <summary>单条添加或删除只改对应的行。其它变化返回 false，由调用方整表重建。</summary>
+    private bool TryApplyEntryDelta(NotifyCollectionChangedEventArgs e)
+    {
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add when e.NewStartingIndex >= 0
+                && e.NewItems is { Count: 1 } && e.NewItems[0] is HomeworkEntry added:
+                return InsertEntryVisual(added, e.NewStartingIndex);
+            case NotifyCollectionChangedAction.Remove when e.OldItems is { Count: 1 }
+                && e.OldItems[0] is HomeworkEntry removed:
+                return RemoveEntryVisual(removed);
+            default:
+                return false;
+        }
+    }
+
+    private bool InsertEntryVisual(HomeworkEntry homework, int index)
+    {
+        int at = ChildIndexForRow(index);
+        if (at < 0) return false;
+        (Grid row, AttachmentArea? images) = BuildEntryVisuals(homework, index + 1);
+        _entriesPanel.Children.Insert(at, row);
+        if (images is not null) _entriesPanel.Children.Insert(at + 1, images);
+        RenumberEntryLabels();
+        return true;
+    }
+
+    private bool RemoveEntryVisual(HomeworkEntry homework)
+    {
+        for (int i = 0; i < _entriesPanel.Children.Count; i++)
+        {
+            if (_entriesPanel.Children[i] is not Grid row) continue;
+            if (FindHomeworkEditor(row) is not { Tag: HomeworkEntry entry } editor || !ReferenceEquals(entry, homework)) continue;
+            ReleaseEntryEditor(editor);
+            _entriesPanel.Children.RemoveAt(i);
+            if (i < _entriesPanel.Children.Count && _entriesPanel.Children[i] is AttachmentArea)
+                _entriesPanel.Children.RemoveAt(i);
+            RenumberEntryLabels();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>第 index 条作业行在面板里的子元素位置。刚好接在末尾时返回 Count。</summary>
+    private int ChildIndexForRow(int rowIndex)
+    {
+        int seen = 0;
+        for (int i = 0; i < _entriesPanel.Children.Count; i++)
+        {
+            if (_entriesPanel.Children[i] is not Grid row || FindHomeworkEditor(row) is null) continue;
+            if (seen == rowIndex) return i;
+            seen++;
+        }
+        return seen == rowIndex ? _entriesPanel.Children.Count : -1;
+    }
+
+    private void RenumberEntryLabels()
+    {
+        int index = 1;
+        foreach (Grid row in _entriesPanel.Children.OfType<Grid>())
+        {
+            if (FindHomeworkEditor(row) is null) continue;
+            if (row.Children.Count > 0 && row.Children[0] is TextBlock label)
+                label.Text = $"{index}.";
+            index++;
+        }
+    }
+
+    private void ReleaseEntryEditor(RichEditBox editor)
+    {
+        _pendingRichText.Remove(editor);
+        if (_pendingRichText.Count == 0) _richTextTimer?.Stop();
+        _paragraphAlignSkipped.Remove(editor);
+        if (ReferenceEquals(_formattingEditor, editor)) _formattingEditor = null;
+        for (int i = _entryAutofills.Count - 1; i >= 0; i--)
+        {
+            if (!_entryAutofills[i].Owns(editor)) continue;
+            _entryAutofills[i].Flush();
+            _entryAutofills[i].Hide();
+            _entryAutofills.RemoveAt(i);
+        }
     }
 
     private void RebuildEntries()
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         _entriesRebuildPending = false;
         // 停手后的富文本还在计时器里。先写回作业，再建新的编辑器，否则新编辑器会读到旧的 RTF，刚打的字和格式会消失。
         FlushPendingText();
@@ -658,74 +773,81 @@ public sealed class SubjectTileControl : Grid
         int index = 1;
         foreach (HomeworkEntry homework in _subject.Entries)
         {
-            Grid row = new() { ColumnSpacing = 4 };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            RichEditBox editor = CreateRichEditor(homework);
-            // 序号和正文第一行共用字号、字体和上沿。正文默认在编辑框里垂直居中，序号会显得偏高。
-            editor.VerticalContentAlignment = VerticalAlignment.Top;
-            row.Children.Add(new TextBlock
-            {
-                Text = $"{index}.",
-                FontSize = editor.FontSize,
-                FontFamily = editor.FontFamily,
-                FontWeight = editor.FontWeight,
-                FontStyle = editor.FontStyle,
-                Foreground = BoardTheme.TextBrush,
-                VerticalAlignment = VerticalAlignment.Top,
-                Margin = new Thickness(0, editor.Padding.Top, 6, 0)
-            });
-
-            Grid.SetColumn(editor, 1);
-            row.Children.Add(editor);
-
-            if (_isEditing)
-            {
-                StackPanel? formatting = null;
-                editor.GotFocus += (_, _) =>
-                {
-                    // 工具栏由窗口统一承载，只在当前作业获得焦点时创建并切换。
-                    RichEditBox? previous = _formattingEditor;
-                    _formattingEditor = editor;
-                    formatting ??= BuildFormattingToolbar(editor, homework);
-                    FormattingToolbarChanged?.Invoke(formatting, true);
-                    if (previous is not null && !ReferenceEquals(previous, editor))
-                        TransparentInputMarkers.Refresh(previous);
-                };
-                editor.Unloaded += (_, _) =>
-                {
-                    if (formatting is not null) FormattingToolbarChanged?.Invoke(formatting, false);
-                };
-            }
-
-            if (_isEditing)
-            {
-                StackPanel actions = new() { Orientation = Orientation.Horizontal };
-                actions.Children.Add(CreateIconButton(FluentGlyphs.ImageAdd, "添加图片", async (_, _) => await _addAttachment(homework)));
-                actions.Children.Add(CreateIconButton(FluentGlyphs.Delete, "删除这条作业", (_, _) => DeleteHomework(homework), true));
-                Grid.SetColumn(actions, 2);
-                row.Children.Add(actions);
-            }
-
+            (Grid row, AttachmentArea? images) = BuildEntryVisuals(homework, index);
             _entriesPanel.Children.Add(row);
-            // 每条作业的图片放进自己的图片区，移动和缩放都不越出这条作业，区域变高时下一条作业自动下移。
-            AttachmentArea? images = null;
-            foreach (AttachmentItem attachment in homework.Attachments.Where(item => item.Kind == "图片" && !string.IsNullOrWhiteSpace(item.Path)))
-            {
-                AttachmentImageControl image = new(
-                    attachment,
-                    () => DeleteAttachment(homework, attachment),
-                    _contentChanged,
-                    _interactionChanged);
-                image.SetEditing(_isEditing);
-                images ??= new AttachmentArea { Margin = new Thickness(29, -4, 4, 4) };
-                images.Children.Add(image);
-            }
             if (images is not null) _entriesPanel.Children.Add(images);
             index++;
         }
         _modelStamp = ModelStamp();
+        NoteEntryPerf("rebuild-body", NotifyCollectionChangedAction.Reset, started);
+    }
+
+    private (Grid Row, AttachmentArea? Images) BuildEntryVisuals(HomeworkEntry homework, int index)
+    {
+        Grid row = new() { ColumnSpacing = 4 };
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        RichEditBox editor = CreateRichEditor(homework);
+        // 序号和正文第一行共用字号、字体和上沿。正文默认在编辑框里垂直居中，序号会显得偏高。
+        editor.VerticalContentAlignment = VerticalAlignment.Top;
+        row.Children.Add(new TextBlock
+        {
+            Text = $"{index}.",
+            FontSize = editor.FontSize,
+            FontFamily = editor.FontFamily,
+            FontWeight = editor.FontWeight,
+            FontStyle = editor.FontStyle,
+            Foreground = BoardTheme.TextBrush,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, editor.Padding.Top, 6, 0)
+        });
+
+        Grid.SetColumn(editor, 1);
+        row.Children.Add(editor);
+
+        if (_isEditing)
+        {
+            StackPanel? formatting = null;
+            editor.GotFocus += (_, _) =>
+            {
+                // 工具栏由窗口统一承载，只在当前作业获得焦点时创建并切换。
+                RichEditBox? previous = _formattingEditor;
+                _formattingEditor = editor;
+                formatting ??= BuildFormattingToolbar(editor, homework);
+                FormattingToolbarChanged?.Invoke(formatting, true);
+                if (previous is not null && !ReferenceEquals(previous, editor))
+                    TransparentInputMarkers.Refresh(previous);
+            };
+            editor.Unloaded += (_, _) =>
+            {
+                if (formatting is not null) FormattingToolbarChanged?.Invoke(formatting, false);
+            };
+        }
+
+        if (_isEditing)
+        {
+            StackPanel actions = new() { Orientation = Orientation.Horizontal };
+            actions.Children.Add(CreateIconButton(FluentGlyphs.ImageAdd, "添加图片", async (_, _) => await _addAttachment(homework)));
+            actions.Children.Add(CreateIconButton(FluentGlyphs.Delete, "删除这条作业", (_, _) => DeleteHomework(homework), true));
+            Grid.SetColumn(actions, 2);
+            row.Children.Add(actions);
+        }
+
+        // 每条作业的图片放进自己的图片区，移动和缩放都不越出这条作业，区域变高时下一条作业自动下移。
+        AttachmentArea? images = null;
+        foreach (AttachmentItem attachment in homework.Attachments.Where(item => item.Kind == "图片" && !string.IsNullOrWhiteSpace(item.Path)))
+        {
+            AttachmentImageControl image = new(
+                attachment,
+                () => DeleteAttachment(homework, attachment),
+                _contentChanged,
+                _interactionChanged);
+            image.SetEditing(_isEditing);
+            images ??= new AttachmentArea { Margin = new Thickness(29, -4, 4, 4) };
+            images.Children.Add(image);
+        }
+        return (row, images);
     }
 
     private void DeleteAttachment(HomeworkEntry homework, AttachmentItem attachment)
@@ -1073,6 +1195,8 @@ public sealed class SubjectTileControl : Grid
 
     private void ScheduleRichCapture(RichEditBox editor, HomeworkEntry homework)
     {
+        // 行已经拆走时不要再排进计时器，否则到点会去读已卸载的文档。
+        if (!editor.IsLoaded) return;
         _pendingRichText[editor] = homework;
         _richTextTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
         _richTextTimer.Tick -= FlushRichTextTick;
@@ -1105,6 +1229,7 @@ public sealed class SubjectTileControl : Grid
     private void CaptureRichText(RichEditBox editor, HomeworkEntry homework)
     {
         _pendingRichText.Remove(editor);
+        if (!editor.IsLoaded) return;
         ITextRange contentRange = ContentRange(editor);
         contentRange.GetText(TextGetOptions.None, out string plain);
         contentRange.GetText(TextGetOptions.FormatRtf, out string rtf);
@@ -1288,16 +1413,29 @@ public sealed class SubjectTileControl : Grid
 
     private void AddHomework()
     {
-        // 新增的作业是空内容，编辑框里只显示灰色的“在这里输入作业内容”提示。
-        _subject.Entries.Add(new HomeworkEntry());
-        _subject.NotifyEntriesChanged();
+        // 点击已经把焦点移出编辑器。先写回还在计时器里的富文本，不能只靠 150 毫秒后的导出。
+        FlushPendingText();
+        _localEntryEdit = true;
+        try
+        {
+            // 新增的作业是空内容，编辑框里只显示灰色的“在这里输入作业内容”提示。
+            _subject.Entries.Add(new HomeworkEntry());
+            _subject.NotifyEntriesChanged();
+        }
+        finally { _localEntryEdit = false; }
         _contentChanged();
     }
 
     private void DeleteHomework(HomeworkEntry homework)
     {
-        _subject.Entries.Remove(homework);
-        _subject.NotifyEntriesChanged();
+        FlushPendingText();
+        _localEntryEdit = true;
+        try
+        {
+            _subject.Entries.Remove(homework);
+            _subject.NotifyEntriesChanged();
+        }
+        finally { _localEntryEdit = false; }
         _contentChanged();
     }
 

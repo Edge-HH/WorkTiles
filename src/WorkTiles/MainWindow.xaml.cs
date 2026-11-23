@@ -711,7 +711,13 @@ public sealed partial class MainWindow : Window
 
     private async void DeleteSubject(SubjectBoard subject)
     {
-        if (await ShowConfirmAsync("删除这个科目", $"确定删除“{subject.Name}”以及其中的文字、图片和笔迹吗？") != ContentDialogResult.Primary) return;
+        if (await ShowConfirmAsync("删除这个科目", DeleteSubjectMessage(subject)) != ContentDialogResult.Primary) return;
+        RemoveSubject(subject);
+    }
+
+    /// <summary>桌面磁贴在自己的窗口上确认后再调用。不要在这条路径上激活主窗口。</summary>
+    private void RemoveSubject(SubjectBoard subject)
+    {
         if (FindTile(subject) is { } tile) { tile.Detach(); BoardCanvas.Children.Remove(tile); }
         ViewModel.Subjects.Remove(subject);
         if (RichTextToolbarHost is not null) RichTextToolbarHost.Content = null;
@@ -721,6 +727,9 @@ public sealed partial class MainWindow : Window
         SyncDesktopTiles();
         ScheduleSave();
     }
+
+    private static string DeleteSubjectMessage(SubjectBoard subject) =>
+        $"确定删除“{subject.Name}”以及其中的文字、图片和笔迹吗？";
 
     private void LayoutChanged(SubjectBoard subject)
     {
