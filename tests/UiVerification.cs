@@ -154,8 +154,13 @@ public sealed partial class MainWindow
                         && AccentCheckedFill(arrangeWindow.AutoArrangeButton, false),
                         "desktop auto-arrange checked background uses the Windows accent");
                     FluentIcon arrangeIcon = (FluentIcon)arrangeWindow.AutoArrangeButton.Content;
+                    arrangeWindow.ApplyTheme(ElementTheme.Light);
                     Check(ReferenceEquals(arrangeIcon.Foreground, SystemAccent.CheckedForeground),
-                        "desktop auto-arrange checked icon is white");
+                        "desktop auto-arrange checked icon is white in light mode");
+                    arrangeWindow.ApplyTheme(ElementTheme.Dark);
+                    Check(ReferenceEquals(arrangeIcon.Foreground, SystemAccent.CheckedForegroundOnDark),
+                        "desktop auto-arrange checked icon is black in dark mode");
+                    arrangeWindow.ApplyTheme(BoardTheme.IsLight ? ElementTheme.Light : ElementTheme.Dark);
                     arrangeWindow.SetAutoArrange(false);
                     Check(arrangeIcon.Foreground is SolidColorBrush offBrush
                         && offBrush.Color.R == BoardTheme.TextColor.R

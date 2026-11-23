@@ -840,7 +840,8 @@ internal sealed class DesktopCommandWindow
     }
 
     /// <summary>
-    /// 自动排列打开时用 Windows 强调色底和白色图标。全局开关选中色是中性灰。
+    /// 自动排列打开时用 Windows 强调色底。浅色模式底深、图标白；深色模式底浅、图标黑。
+    /// 全局开关选中色是中性灰。
     /// 选中底直接写在按钮上：模板里的画刷过渡不处理透明度，从透明静止色切到强调色时会停在看不见的状态。
     /// </summary>
     private void ApplyArrangeAccent(bool force)
@@ -861,8 +862,9 @@ internal sealed class DesktopCommandWindow
 
     private void ApplyArrangeIcon()
     {
+        bool light = _arrangeTheme == ElementTheme.Light || (_arrangeTheme is null && BoardTheme.IsLight);
         _arrangeIcon.Foreground = _arrangeButton.IsChecked == true
-            ? SystemAccent.CheckedForeground
+            ? SystemAccent.CheckedIconBrush(light)
             : new SolidColorBrush(BoardTheme.TextColor);
     }
 

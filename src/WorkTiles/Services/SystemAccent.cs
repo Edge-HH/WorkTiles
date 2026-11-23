@@ -32,8 +32,14 @@ public static class SystemAccent
         ApplyCurrent();
     }
 
-    /// <summary>选中态的白色图标。强调色底上不再沿用正文色。</summary>
+    /// <summary>浅色模式选中图标。强调色底是 AccentDark1，白色才看得清。</summary>
     public static readonly SolidColorBrush CheckedForeground = new(Color.FromArgb(255, 255, 255, 255));
+
+    /// <summary>深色模式选中图标。强调色底是 AccentLight2（浅色），黑色才看得清。</summary>
+    public static readonly SolidColorBrush CheckedForegroundOnDark = new(Color.FromArgb(255, 0, 0, 0));
+
+    /// <summary>选中图标：浅色模式白，深色模式黑。跟当前主题的强调色深浅走，不跟正文色走。</summary>
+    public static SolidColorBrush CheckedIconBrush(bool light) => light ? CheckedForeground : CheckedForegroundOnDark;
 
     /// <summary>主题字典里已经涂好的强调色填充。调用方拿引用，系统强调色变化后颜色跟着变。</summary>
     public static Brush ThemeFill(bool light)
