@@ -8,6 +8,8 @@ public sealed partial class MainWindow
 {
     private double _infiniteWidth, _infiniteHeight;
     private bool _updatingBoardBounds;
+    private bool _boardBoundsAgain;
+    private int _gridRefreshTicket;
     private uint? _panPointer;
     private Point _panStart;
     private double _panX, _panY;

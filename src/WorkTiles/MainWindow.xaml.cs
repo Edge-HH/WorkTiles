@@ -461,6 +461,7 @@ public sealed partial class MainWindow : Window
         ApplyExtendedSettings();
         StartEditLockHeartbeat();
         SyncDesktopTiles();
+        ScheduleGridRefresh();
     }
 
     private void FinishEditing()
@@ -483,6 +484,7 @@ public sealed partial class MainWindow : Window
         ScheduleSave();
         ReleaseCloudEditLock();
         SyncDesktopTiles();
+        ScheduleGridRefresh();
     }
 
     private async void DiscardEditButton_Click(object sender, RoutedEventArgs e)
@@ -507,6 +509,7 @@ public sealed partial class MainWindow : Window
         ScheduleSave();
         ReleaseCloudEditLock();
         SyncDesktopTiles();
+        ScheduleGridRefresh();
     }
 
     private async void SettingsButton_Click(object sender, RoutedEventArgs e)
@@ -787,9 +790,39 @@ public sealed partial class MainWindow : Window
         ScheduleSave();
     }
 
+    /// <summary>等这一帧布局结束再画网格。进入编辑时菜单栏刚占位，当时算的窗口盖不住新视口。</summary>
+    private void ScheduleGridRefresh()
+    {
+        int ticket = ++_gridRefreshTicket;
+        DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+        {
+            if (ticket != _gridRefreshTicket || _boardClosed) return;
+            _renderedGridWidth = 0;
+            _renderedGridWindow = string.Empty;
+            UpdateBoardBounds();
+        });
+    }
+
+    private static Line GridLine(double x1, double y1, double x2, double y2, Brush stroke, double thickness) => new()
+    {
+        X1 = x1, Y1 = y1, X2 = x2, Y2 = y2,
+        Stroke = stroke,
+        StrokeThickness = thickness
+    };
+
     private void UpdateBoardBounds()
     {
-        if (_updatingBoardBounds) return;
+        if (_updatingBoardBounds)
+        {
+            if (_boardBoundsAgain) return;
+            _boardBoundsAgain = true;
+            DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+            {
+                _boardBoundsAgain = false;
+                UpdateBoardBounds();
+            });
+            return;
+        }
         _updatingBoardBounds = true;
         try
         {
@@ -927,7 +960,7 @@ public sealed partial class MainWindow : Window
             for (double y = top; y <= bottom; y += GridSize)
             for (double x = left; x <= right; x += GridSize)
             {
-                Ellipse dot = new() { Width = diameter, Height = diameter, Fill = fill };
+                Ellipse dot = new() { Width = diameter, Height = diameter, Fill = fill, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
                 Canvas.SetLeft(dot, x - diameter / 2); Canvas.SetTop(dot, y - diameter / 2);
                 canvas.Children.Add(dot);
             }
@@ -936,23 +969,9 @@ public sealed partial class MainWindow : Window
         SolidColorBrush stroke = new(GridAppearance.ParseColor(_settings.GridColor, Windows.UI.Color.FromArgb(105, 86, 86, 92)));
         double thickness = Math.Clamp(_settings.GridLineThickness, .5, 5) * inverseScale;
         for (double x = left; x <= right; x += GridSize)
-        {
-            canvas.Children.Add(new Line
-            {
-                X1 = x, X2 = x, Y1 = top, Y2 = bottom,
-                Stroke = stroke,
-                StrokeThickness = thickness
-            });
-        }
+            canvas.Children.Add(GridLine(x, top, x, bottom, stroke, thickness));
         for (double y = top; y <= bottom; y += GridSize)
-        {
-            canvas.Children.Add(new Line
-            {
-                X1 = left, X2 = right, Y1 = y, Y2 = y,
-                Stroke = stroke,
-                StrokeThickness = thickness
-            });
-        }
+            canvas.Children.Add(GridLine(left, y, right, y, stroke, thickness));
     }
 
     private void GridSnapToggleButton_Checked(object sender, RoutedEventArgs e)
@@ -977,7 +996,7 @@ public sealed partial class MainWindow : Window
     }
 
     /// <summary>
-    /// 选中态改回 Windows 强调色底、白色图标。全局开关选中色是中性灰。
+    /// 选中态改回 Windows 强调色底。浅色模式底深、图标白；深色模式底浅、图标黑。全局开关选中色是中性灰。
     /// 画笔引用主题字典里已经涂好的强调色，深浅主题和系统强调色变化后不用再铺一遍。
     /// </summary>
     private void ApplyGridSnapAccent()
@@ -986,7 +1005,7 @@ public sealed partial class MainWindow : Window
         ApplyGridSnapIconForeground();
     }
 
-    /// <summary>图标包在说明文字外面，选中态的前景有时传不进去，这里直接写成白色。</summary>
+    /// <summary>图标包在说明文字外面，选中态的前景有时传不进去，这里按当前主题直接铺。</summary>
     private void ApplyGridSnapIconForeground()
     {
         FluentIcon? icon = null;
@@ -997,7 +1016,7 @@ public sealed partial class MainWindow : Window
             icon = panel.Children.OfType<FluentIcon>().FirstOrDefault();
         if (icon is null) return;
         if (GridSnapToggleButton.IsChecked == true)
-            icon.Foreground = SystemAccent.CheckedForeground;
+            icon.Foreground = SystemAccent.CheckedIconBrush(BoardTheme.IsLight);
         else
             icon.ClearValue(IconElement.ForegroundProperty);
     }

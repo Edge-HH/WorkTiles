@@ -146,6 +146,11 @@ public sealed partial class MainWindow
                     "menu bar shows the WorkTiles logo");
                 Check(AccentCheckedFill(GridSnapToggleButton, BoardTheme.IsLight),
                     "grid snap checked background uses the Windows accent");
+                FluentIcon snapIcon = (FluentIcon)GridSnapToggleButton.Content;
+                Check(ReferenceEquals(snapIcon.Foreground, SystemAccent.CheckedIconBrush(BoardTheme.IsLight)),
+                    BoardTheme.IsLight
+                        ? "main grid snap checked icon is white in light mode"
+                        : "main grid snap checked icon is black in dark mode");
                 DesktopCommandWindow arrangeWindow = new();
                 try
                 {
@@ -1461,6 +1466,7 @@ public sealed partial class MainWindow
         _settings.AutoLayoutResize = true; _settings.AutoLayoutAlign = true; _settings.AutoLayoutGap = 0;
         _settings.GridSnappingEnabled = false; IsGridSnappingEnabled = false;
         BuildTiles(); EnterEditing(); await NextLayoutAsync();
+        CheckGridCoversViewport("entering edit mode covers the visible board with the grid", check);
         ArrangeTiles(1100, 780);
         await NextLayoutAsync();
         check(ViewModel.Subjects.GroupBy(subject => subject.Y).Any(row => row.Count() >= 2),
