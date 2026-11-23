@@ -241,6 +241,13 @@ public sealed partial class MainWindow : Window
         });
     }
 
+    /// <summary>顶栏只有标准标题按钮那么高，系统按钮保持加高会探出菜单栏。</summary>
+    private void UseStandardTitleBarHeight()
+    {
+        if (_appWindow is null || !OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) return;
+        _appWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
+    }
+
     private void InitializeAppWindow()
     {
         nint windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -249,6 +256,7 @@ public sealed partial class MainWindow : Window
         AppIcon.Apply(_appWindow);
         if (_appWindow is { } appWindow)
         {
+            UseStandardTitleBarHeight();
             Microsoft.UI.Windowing.DisplayArea area = Microsoft.UI.Windowing.DisplayArea.GetFromWindowId(
                 appWindow.Id, Microsoft.UI.Windowing.DisplayAreaFallback.Primary);
             int width = Math.Min(1440, Math.Max(1024, area.WorkArea.Width));
@@ -1094,6 +1102,7 @@ public sealed partial class MainWindow : Window
         RefreshCloudStatusViews();
         if (_appWindow is not null)
         {
+            UseStandardTitleBarHeight();
             _appWindow.TitleBar.ButtonForegroundColor = BoardTheme.TextColor;
             _appWindow.TitleBar.ButtonInactiveForegroundColor = BoardTheme.TextColor;
             _appWindow.TitleBar.ButtonBackgroundColor = Microsoft.UI.Colors.Transparent;
