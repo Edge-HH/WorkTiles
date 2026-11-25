@@ -5,4 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>WorkTiles.Shared</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- 只把更新日志的 Markdown 解析成文档模型；界面渲染在 WinUI 工程，这里不引用 WinUI。 -->
+    <PackageReference Include="Markdig" Version="1.6.0" />
+  </ItemGroup>
 </Project>

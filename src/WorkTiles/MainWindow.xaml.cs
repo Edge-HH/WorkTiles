@@ -1501,7 +1501,7 @@ public sealed partial class MainWindow : Window
 
     private async void ViewChangelogButton_Click(object sender, RoutedEventArgs e) => await ShowChangelogAsync();
 
-    /// <summary>更新日志：读取当前更新源最新 Release 的说明文本，只读展示、可选中复制。</summary>
+    /// <summary>更新日志：读取当前更新源最新 Release 的说明，按 Markdown 渲染，可选中复制。</summary>
     private async Task ShowChangelogAsync()
     {
         ReleaseSnapshot? latest;
@@ -1515,19 +1515,35 @@ public sealed partial class MainWindow : Window
         _dialogOpen = true;
         try
         {
-            ScrollViewer scroll = new() { MaxHeight = 420, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-            scroll.Content = new TextBlock
+            ScrollViewer scroll = new()
             {
-                Text = string.IsNullOrWhiteSpace(latest?.Notes) ? "最新发布没有填写更新说明。" : latest!.Notes,
-                TextWrapping = TextWrapping.Wrap,
-                IsTextSelectionEnabled = true
+                MaxHeight = 420,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                HorizontalScrollMode = ScrollMode.Disabled
             };
+            bool hasNotes = !string.IsNullOrWhiteSpace(latest?.Notes);
+            scroll.Content = hasNotes
+                ? new ChangelogView(latest!.Notes, compact: false, RootShell.ActualTheme)
+                : new TextBlock
+                {
+                    Text = "最新发布没有填写更新说明。",
+                    TextWrapping = TextWrapping.Wrap,
+                    IsTextSelectionEnabled = true
+                };
             ContentDialog dialog = new()
             {
                 XamlRoot = RootShell.XamlRoot,
                 Title = latest is null ? "更新日志（当前更新源没有发布）" : $"更新日志 · {latest.Tag}",
                 Content = scroll, CloseButtonText = "关闭"
             };
+            // 模板读的是这两个资源。直接设 Width 会裁掉按钮行。必须是 double。
+            if (hasNotes)
+            {
+                dialog.Resources["ContentDialogMinWidth"] = 480d;
+                dialog.Resources["ContentDialogMaxWidth"] = 560d;
+            }
+            dialog.RequestedTheme = RootShell.ActualTheme;
             await dialog.ShowAsync();
         }
         finally { _dialogOpen = false; }
@@ -1540,9 +1556,16 @@ public sealed partial class MainWindow : Window
         content.Children.Add(new TextBlock { Text = prompt, TextWrapping = TextWrapping.Wrap });
         if (!string.IsNullOrWhiteSpace(notes))
         {
+            content.MinWidth = 480;
             content.Children.Add(new TextBlock { Text = $"{tag} 更新内容", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold, FontSize = 13 });
-            ScrollViewer scroll = new() { MaxHeight = 260, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-            scroll.Content = new TextBlock { Text = notes, FontSize = 12, TextWrapping = TextWrapping.Wrap, IsTextSelectionEnabled = true };
+            ScrollViewer scroll = new()
+            {
+                MaxHeight = 260,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                HorizontalScrollMode = ScrollMode.Disabled
+            };
+            scroll.Content = new ChangelogView(notes, compact: true, RootShell.ActualTheme);
             content.Children.Add(scroll);
         }
         ContentDialog dialog = new()
@@ -1552,6 +1575,8 @@ public sealed partial class MainWindow : Window
             // 默认按钮保持“稍后”：启动时自动检查也会弹出，误按回车不应直接重启更新。
             DefaultButton = ContentDialogButton.Close
         };
+        if (!string.IsNullOrWhiteSpace(notes)) dialog.Resources["ContentDialogMaxWidth"] = 560d;
+        dialog.RequestedTheme = RootShell.ActualTheme;
         // 窗口不可见时弹框没人能关，还会一直占住 _dialogOpen；直接按“稍后”处理。
         if (!AppWindow.IsVisible) return ContentDialogResult.None;
         // WinUI 同一时间只能显示一个 ContentDialog；重复触发按“取消”处理，避免异步点击直接崩溃。
