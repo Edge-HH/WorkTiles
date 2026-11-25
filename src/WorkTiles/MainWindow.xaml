@@ -13,7 +13,7 @@
 
         <!-- 避让距离加在菜单栏上边距，这一层用同一块背景把空出来的区域填上。 -->
         <Grid x:Name="TopBarHost" Grid.Row="0" Background="{ThemeResource BoardSurfaceBrush}">
-        <Grid x:Name="TopBar" Height="68" VerticalAlignment="Bottom" Padding="28,0" Background="{ThemeResource BoardSurfaceBrush}" BorderBrush="{ThemeResource BoardLineBrush}" BorderThickness="0,0,0,1" ColumnSpacing="16">
+        <Grid x:Name="TopBar" Height="34" VerticalAlignment="Bottom" Padding="14,0" Background="{ThemeResource BoardSurfaceBrush}" BorderBrush="{ThemeResource BoardLineBrush}" BorderThickness="0,0,0,1" ColumnSpacing="8">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" />
@@ -21,29 +21,26 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid x:Name="BrandRegion" Background="Transparent">
-                <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center" IsHitTestVisible="False">
-                    <Image x:Name="BrandLogo" Width="40" Height="40" Stretch="Uniform" Source="ms-appx:///Assets/Logo/logo.png" />
-                    <StackPanel VerticalAlignment="Center" Spacing="1">
-                        <TextBlock FontSize="17" FontWeight="SemiBold" Foreground="{ThemeResource BoardTextBrush}" Text="WorkTiles" />
-                        <TextBlock FontSize="11" Foreground="{ThemeResource BoardTextBrush}" Text="班级作业看板" />
-                    </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <Image x:Name="BrandLogo" Width="20" Height="20" Stretch="Uniform" Source="ms-appx:///Assets/Logo/logo.png" />
+                    <TextBlock FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" Foreground="{ThemeResource BoardTextBrush}" Text="WorkTiles" />
                 </StackPanel>
             </Grid>
-            <StackPanel x:Name="ProjectCommands" Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center" Visibility="Collapsed">
-                <DropDownButton x:Name="ProjectPicker" MaxWidth="260" Height="36" CornerRadius="4">
+            <StackPanel x:Name="ProjectCommands" Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center" Visibility="Collapsed">
+                <DropDownButton x:Name="ProjectPicker" MaxWidth="260" Height="26" MinHeight="26" Padding="10,0" CornerRadius="4" VerticalContentAlignment="Center">
                     <DropDownButton.Content>
-                        <StackPanel Orientation="Horizontal" Spacing="7">
-                            <icons:FluentIcon Symbol="Folder" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <icons:FluentIcon Symbol="Folder" FontSize="14" />
                             <TextBlock x:Name="ProjectNameText" Text="选择项目" />
                             <TextBlock x:Name="SubjectCountText" Foreground="{ThemeResource BoardTextMutedBrush}" />
-                            <icons:FluentIcon x:Name="ProjectSyncIcon" Symbol="Cloud" Foreground="{ThemeResource BoardSuccessBrush}" Visibility="Collapsed" />
+                            <icons:FluentIcon x:Name="ProjectSyncIcon" Symbol="Cloud" FontSize="14" Foreground="{ThemeResource BoardSuccessBrush}" Visibility="Collapsed" />
                         </StackPanel>
                     </DropDownButton.Content>
                     <DropDownButton.Flyout><Flyout Opening="RecentProjects_Opening"><ScrollViewer MaxHeight="420" Width="240"><StackPanel x:Name="RecentProjectsPanel" Spacing="8" /></ScrollViewer></Flyout></DropDownButton.Flyout>
                 </DropDownButton>
-                <DropDownButton Height="36" CornerRadius="4">
+                <DropDownButton Height="26" MinHeight="26" Padding="10,0" CornerRadius="4" VerticalContentAlignment="Center">
                     <DropDownButton.Content>
-                        <StackPanel Orientation="Horizontal" Spacing="7"><icons:FluentIcon Symbol="Document" /><TextBlock Text="文件" /></StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="6"><icons:FluentIcon Symbol="Document" FontSize="14" /><TextBlock Text="文件" /></StackPanel>
                     </DropDownButton.Content>
                     <DropDownButton.Flyout><MenuFlyout x:Name="FileMenuFlyout">
                         <MenuFlyoutItem Text="新建" Click="NewProject_Click" />
@@ -56,18 +53,18 @@
                     </MenuFlyout></DropDownButton.Flyout>
                 </DropDownButton>
                 <StackPanel x:Name="SplitLayoutCommands" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center" Visibility="Collapsed">
-                    <Border Width="1" Height="24" Margin="4,0" Background="{ThemeResource BoardLineBrush}" />
+                    <Border Width="1" Height="14" Margin="4,0" Background="{ThemeResource BoardLineBrush}" />
                     <Button x:Name="ToggleSplitOrientationButton" Style="{StaticResource BoardIconButtonStyle}"
-                            Height="36" MinHeight="36" Width="36" MinWidth="36" Padding="0" CornerRadius="4"
+                            Height="26" MinHeight="26" Width="26" MinWidth="26" Padding="0" CornerRadius="4"
                             Background="{ThemeResource BoardButtonClearBrush}" BorderThickness="0"
                             Click="ToggleSplitOrientationButton_Click" AutomationProperties.Name="切换分屏方向">
-                        <icons:FluentIcon x:Name="SplitOrientationIcon" Symbol="SplitHorizontal" FontSize="18" />
+                        <icons:FluentIcon x:Name="SplitOrientationIcon" Symbol="SplitHorizontal" FontSize="14" />
                     </Button>
                     <Button x:Name="SwapSplitAreasButton" Style="{StaticResource BoardIconButtonStyle}"
-                            Height="36" MinHeight="36" Width="36" MinWidth="36" Padding="0" CornerRadius="4"
+                            Height="26" MinHeight="26" Width="26" MinWidth="26" Padding="0" CornerRadius="4"
                             Background="{ThemeResource BoardButtonClearBrush}" BorderThickness="0"
                             Click="SwapSplitAreasButton_Click" AutomationProperties.Name="对调时钟与作业区域">
-                        <icons:FluentIcon x:Name="SwapSplitAreasIcon" Symbol="Swap" FontSize="18" />
+                        <icons:FluentIcon x:Name="SwapSplitAreasIcon" Symbol="Swap" FontSize="14" />
                     </Button>
                 </StackPanel>
             </StackPanel>

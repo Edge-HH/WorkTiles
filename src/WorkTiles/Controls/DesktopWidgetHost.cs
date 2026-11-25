@@ -31,6 +31,13 @@ internal sealed class TransparentDesktopBackdrop : SystemBackdrop
         DesktopWidgetHost.Trace("TransparentDesktopBackdrop.OnTargetConnected end");
     }
 
+    protected override void OnDefaultSystemBackdropConfigurationChanged(ICompositionSupportsSystemBackdrop target, XamlRoot xamlRoot)
+    {
+        // 这层只铺透明画刷，不跟系统主题配置走。基类会拿 target 去套默认配置，
+        // 切深浅色时 target 已经不是它期望的状态，会抛 ArgumentException（参数名 target），
+        // 一路进到应用的未处理异常。这里接住回调，不要再交给基类。
+    }
+
     protected override void OnTargetDisconnected(ICompositionSupportsSystemBackdrop disconnectedTarget)
     {
         base.OnTargetDisconnected(disconnectedTarget);

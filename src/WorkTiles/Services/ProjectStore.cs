@@ -151,8 +151,10 @@ public sealed class ProjectStore(string? directory = null)
 
     public void Save(ProjectLibrary library)
     {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
         foreach (ProjectDocument project in library.Projects) ProjectValidation.Validate(project, false);
         ProjectLibrary snapshot = Clone(library);
+        NoteSavePerf("clone", started);
         foreach (ProjectDocument project in snapshot.Projects)
             foreach (AttachmentState asset in Attachments(project))
             {
@@ -161,7 +163,10 @@ public sealed class ProjectStore(string? directory = null)
                     asset.Path = Path.GetRelativePath(DirectoryPath, asset.Path);
             }
         SecretProtector.ProtectSettings(snapshot.Settings);
+        long writeStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         AtomicWrite(LibraryPath, stream => JsonSerializer.Serialize(stream, snapshot, JsonOptions));
+        NoteSavePerf("write", writeStarted);
+        long copyStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             string lastGood = LibraryPath + ".last-good";
@@ -170,7 +175,12 @@ public sealed class ProjectStore(string? directory = null)
             File.Move(temporary, lastGood, true);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+        NoteSavePerf("last-good", copyStarted);
     }
+
+    private static void NoteSavePerf(string step, long started) =>
+        System.Diagnostics.Debug.WriteLine(
+            $"[PERF-a4f2] save {step} {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0.0}ms");
 
     public void OwnAttachments(ProjectDocument project)
     {

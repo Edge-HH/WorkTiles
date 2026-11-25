@@ -146,6 +146,11 @@ public sealed partial class MainWindow
                     "menu bar shows the WorkTiles logo");
                 Check(AccentCheckedFill(GridSnapToggleButton, BoardTheme.IsLight),
                     "grid snap checked background uses the Windows accent");
+                FluentIcon snapIcon = (FluentIcon)GridSnapToggleButton.Content;
+                Check(ReferenceEquals(snapIcon.Foreground, SystemAccent.CheckedIconBrush(BoardTheme.IsLight)),
+                    BoardTheme.IsLight
+                        ? "main grid snap checked icon is white in light mode"
+                        : "main grid snap checked icon is black in dark mode");
                 DesktopCommandWindow arrangeWindow = new();
                 try
                 {
@@ -154,8 +159,13 @@ public sealed partial class MainWindow
                         && AccentCheckedFill(arrangeWindow.AutoArrangeButton, false),
                         "desktop auto-arrange checked background uses the Windows accent");
                     FluentIcon arrangeIcon = (FluentIcon)arrangeWindow.AutoArrangeButton.Content;
+                    arrangeWindow.ApplyTheme(ElementTheme.Light);
                     Check(ReferenceEquals(arrangeIcon.Foreground, SystemAccent.CheckedForeground),
-                        "desktop auto-arrange checked icon is white");
+                        "desktop auto-arrange checked icon is white in light mode");
+                    arrangeWindow.ApplyTheme(ElementTheme.Dark);
+                    Check(ReferenceEquals(arrangeIcon.Foreground, SystemAccent.CheckedForegroundOnDark),
+                        "desktop auto-arrange checked icon is black in dark mode");
+                    arrangeWindow.ApplyTheme(BoardTheme.IsLight ? ElementTheme.Light : ElementTheme.Dark);
                     arrangeWindow.SetAutoArrange(false);
                     Check(arrangeIcon.Foreground is SolidColorBrush offBrush
                         && offBrush.Color.R == BoardTheme.TextColor.R
@@ -1456,6 +1466,7 @@ public sealed partial class MainWindow
         _settings.AutoLayoutResize = true; _settings.AutoLayoutAlign = true; _settings.AutoLayoutGap = 0;
         _settings.GridSnappingEnabled = false; IsGridSnappingEnabled = false;
         BuildTiles(); EnterEditing(); await NextLayoutAsync();
+        CheckGridCoversViewport("entering edit mode covers the visible board with the grid", check);
         ArrangeTiles(1100, 780);
         await NextLayoutAsync();
         check(ViewModel.Subjects.GroupBy(subject => subject.Y).Any(row => row.Count() >= 2),

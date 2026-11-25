@@ -16,3 +16,5 @@ worktiles.db*
 .workbuddy-ai/
 *.user
 TestResults/
+
+.claude/worktrees/

@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using Microsoft.UI.Composition;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Hosting;
@@ -271,6 +272,7 @@ internal sealed class DesktopTileWindow : DesktopSurfaceWindow
     private AutofillPopup? _popup;
     private SubjectTileControl? _tile;
     private bool _editing;
+    private Popup? _confirmPopup;
 
     public DesktopTileWindow()
     {
@@ -293,6 +295,7 @@ internal sealed class DesktopTileWindow : DesktopSurfaceWindow
 
     public void SetEditing(bool editing)
     {
+        if (!editing) DismissConfirm();
         if (_editing != editing)
         {
             _editing = editing;
@@ -326,6 +329,109 @@ internal sealed class DesktopTileWindow : DesktopSurfaceWindow
             tint,
             Math.Min(alpha, 0.25f),
             Math.Min(alpha * 0.5f, 0.35f));
+    }
+
+    /// <summary>
+    /// 在这块磁贴岛上确认删除。浮层挂在窗口根上，不进 Viewbox，也不使用会激活主窗口的 ContentDialog。
+    /// </summary>
+    internal void ConfirmRemove(string message, Action onConfirm)
+    {
+        DismissConfirm();
+        if (Root.XamlRoot is null) return;
+        ElementTheme theme = Root.ActualTheme;
+        bool light = theme == ElementTheme.Light || (theme == ElementTheme.Default && BoardTheme.IsLight);
+        ElementTheme cardTheme = light ? ElementTheme.Light : ElementTheme.Dark;
+        SolidColorBrush text = new(BoardTheme.TextColorFor(light));
+        StackPanel body = new() { Spacing = 12, MaxWidth = 320 };
+        body.Children.Add(new TextBlock
+        {
+            Text = "删除这个科目",
+            FontSize = 16,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = text,
+            TextWrapping = TextWrapping.Wrap
+        });
+        body.Children.Add(new TextBlock
+        {
+            Text = message,
+            FontSize = 14,
+            Foreground = text,
+            TextWrapping = TextWrapping.Wrap
+        });
+        Button cancel = new()
+        {
+            Content = "取消", MinWidth = 88, HorizontalAlignment = HorizontalAlignment.Stretch,
+            RequestedTheme = cardTheme
+        };
+        Button confirm = new()
+        {
+            Content = "确定",
+            MinWidth = 88,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            RequestedTheme = cardTheme,
+            Style = (Style)Application.Current.Resources["AccentButtonStyle"]
+        };
+        StackPanel actions = new() { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        actions.Children.Add(cancel);
+        actions.Children.Add(confirm);
+        body.Children.Add(actions);
+        Border card = new()
+        {
+            Background = new SolidColorBrush(BoardTheme.SurfaceColorFor(light)),
+            BorderBrush = new SolidColorBrush(BoardTheme.LineColorFor(light)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(16),
+            MinWidth = 260,
+            Child = body,
+            RequestedTheme = light ? ElementTheme.Light : ElementTheme.Dark
+        };
+        cancel.Click += (_, _) => DismissConfirm();
+        confirm.Click += (_, _) =>
+        {
+            confirm.IsEnabled = false;
+            cancel.IsEnabled = false;
+            DismissConfirm();
+            onConfirm();
+        };
+        card.KeyDown += (_, args) =>
+        {
+            if (args.Key != Windows.System.VirtualKey.Escape) return;
+            DismissConfirm();
+            args.Handled = true;
+        };
+        Popup popup = new()
+        {
+            Child = card,
+            IsLightDismissEnabled = true,
+            ShouldConstrainToRootBounds = false,
+            HorizontalOffset = 12,
+            VerticalOffset = 12
+        };
+        popup.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(_confirmPopup, popup)) return;
+            _confirmPopup = null;
+            Root.Children.Remove(popup);
+        };
+        _confirmPopup = popup;
+        Root.Children.Add(popup);
+        popup.XamlRoot = Root.XamlRoot;
+        // 等这次点击结束再打开。同一下指针抬起会被当成点到浮层外面，确认卡会立刻关掉。
+        Root.DispatcherQueue.TryEnqueue(() =>
+        {
+            if (!ReferenceEquals(_confirmPopup, popup) || Root.XamlRoot is null) return;
+            popup.IsOpen = true;
+            cancel.Focus(FocusState.Programmatic);
+        });
+    }
+
+    internal void DismissConfirm()
+    {
+        if (_confirmPopup is not { } popup) return;
+        _confirmPopup = null;
+        popup.IsOpen = false;
+        Root.Children.Remove(popup);
     }
 }
 /// <summary>
@@ -840,7 +946,8 @@ internal sealed class DesktopCommandWindow
     }
 
     /// <summary>
-    /// 自动排列打开时用 Windows 强调色底和白色图标。全局开关选中色是中性灰。
+    /// 自动排列打开时用 Windows 强调色底。浅色模式底深、图标白；深色模式底浅、图标黑。
+    /// 全局开关选中色是中性灰。
     /// 选中底直接写在按钮上：模板里的画刷过渡不处理透明度，从透明静止色切到强调色时会停在看不见的状态。
     /// </summary>
     private void ApplyArrangeAccent(bool force)
@@ -861,8 +968,9 @@ internal sealed class DesktopCommandWindow
 
     private void ApplyArrangeIcon()
     {
+        bool light = _arrangeTheme == ElementTheme.Light || (_arrangeTheme is null && BoardTheme.IsLight);
         _arrangeIcon.Foreground = _arrangeButton.IsChecked == true
-            ? SystemAccent.CheckedForeground
+            ? SystemAccent.CheckedIconBrush(light)
             : new SolidColorBrush(BoardTheme.TextColor);
     }
 

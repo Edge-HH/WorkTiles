@@ -452,6 +452,8 @@ internal sealed class HomeworkAutofillInput
 
     public void Hide() => _popup.HideIfOwnedBy(this);
 
+    internal bool Owns(RichEditBox editor) => ReferenceEquals(_editor, editor);
+
     /// <summary>文本相比上次结算发生变化时才计数一次；只做格式化或反复打开不计数。</summary>
     public void Flush()
     {
