@@ -15,6 +15,8 @@ public static class FluentGlyphs
     public const string Components = "\uE06F"; // ic_fluent_apps_20_regular
     public const string Info = "\uE9E4"; // ic_fluent_info_20_regular
     public const string Back = "\uE109"; // ic_fluent_arrow_left_20_regular
+    public const string Eye = "\uE813"; // ic_fluent_eye_20_regular
+    public const string EyeOff = "\uE817"; // ic_fluent_eye_off_20_regular
     public const string Dismiss = "\uE671"; // ic_fluent_dismiss_20_regular
     public const string Add = "\uE00D"; // ic_fluent_add_20_regular
     public const string Grid = "\uE929"; // ic_fluent_grid_20_regular
@@ -74,6 +76,8 @@ public static class FluentGlyphs
         nameof(Components) => Components,
         nameof(Info) => Info,
         nameof(Back) => Back,
+        nameof(Eye) => Eye,
+        nameof(EyeOff) => EyeOff,
         nameof(Dismiss) => Dismiss,
         nameof(Add) => Add,
         nameof(Grid) => Grid,

@@ -128,7 +128,7 @@ internal static class TrayMenuWindow
             panel.Children.Add(header);
             Rule();
             Item("Window", "打开主界面", TrayIcon.CommandOpen);
-            Item(tilesVisible ? "Board" : "Grid", tilesVisible ? "隐藏桌面磁贴" : "显示桌面磁贴",
+            Item(tilesVisible ? "EyeOff" : "Eye", tilesVisible ? "隐藏桌面磁贴" : "显示桌面磁贴",
                 tilesVisible ? TrayIcon.CommandHideTiles : TrayIcon.CommandShowTiles);
             Rule();
             Item("Settings", "应用设置", TrayIcon.CommandSettings);

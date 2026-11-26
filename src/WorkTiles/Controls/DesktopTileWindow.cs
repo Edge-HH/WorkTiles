@@ -446,11 +446,13 @@ internal sealed class DesktopCommandWindow
     private readonly FluentIcon _editIcon;
     private readonly FluentIcon _addIcon;
     private readonly FluentIcon _arrangeIcon;
+    private readonly FluentIcon _tilesVisibilityIcon;
     private readonly FluentIcon _backIcon;
     private readonly FluentIcon _zoomOutIcon;
     private readonly FluentIcon _zoomInIcon;
     private readonly Button _editButton;
     private readonly Button _addButton;
+    private readonly Button _tilesVisibilityButton;
     private readonly Button _backButton;
     private readonly ToggleButton _arrangeButton;
     private readonly List<ButtonBase> _buttons = [];
@@ -489,6 +491,7 @@ internal sealed class DesktopCommandWindow
         _editIcon = new FluentIcon { Symbol = "Edit", FontSize = 16 };
         _addIcon = new FluentIcon { Symbol = "Add", FontSize = 16 };
         _arrangeIcon = new FluentIcon { Symbol = "Layout", FontSize = 16 };
+        _tilesVisibilityIcon = new FluentIcon { Symbol = "EyeOff", FontSize = 16 };
         _backIcon = new FluentIcon { Symbol = "Back", FontSize = 16 };
         _zoomOutIcon = new FluentIcon { Symbol = "ZoomOut", FontSize = 16 };
         _zoomInIcon = new FluentIcon { Symbol = "ZoomIn", FontSize = 16 };
@@ -518,13 +521,14 @@ internal sealed class DesktopCommandWindow
         };
         ToolTipService.SetToolTip(_arrangeButton, "关闭自动排列");
         _buttons.Add(_arrangeButton);
+        _tilesVisibilityButton = IconButton(_tilesVisibilityIcon, "隐藏桌面磁贴", () => TilesVisibilityInvoked?.Invoke());
         _backButton = IconButton(_backIcon, "返回作业板", () => ReturnInvoked?.Invoke());
         _commandStack = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Spacing = 4,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { _editButton, _addButton, _arrangeButton, _backButton }
+            Children = { _editButton, _addButton, _arrangeButton, _tilesVisibilityButton, _backButton }
         };
         _zoomText = new TextBlock
         {
@@ -599,6 +603,7 @@ internal sealed class DesktopCommandWindow
     public event Action? EditInvoked;
     public event Action? AddInvoked;
     public event Action<bool>? AutoArrangeInvoked;
+    public event Action? TilesVisibilityInvoked;
     public event Action? ReturnInvoked;
     public event Action<double>? ZoomChanged;
     public event Action? ChromeChanged;
@@ -657,6 +662,16 @@ internal sealed class DesktopCommandWindow
     }
 
     internal ToggleButton AutoArrangeButton => _arrangeButton;
+    internal Button TilesVisibilityButton => _tilesVisibilityButton;
+    internal Button ReturnButton => _backButton;
+    internal StackPanel CommandButtons => _commandStack;
+    internal FluentIcon TilesVisibilityIcon => _tilesVisibilityIcon;
+
+    public void SetTilesHidden(bool hidden)
+    {
+        _tilesVisibilityIcon.Symbol = hidden ? "Eye" : "EyeOff";
+        ToolTipService.SetToolTip(_tilesVisibilityButton, hidden ? "显示桌面磁贴" : "隐藏桌面磁贴");
+    }
 
     public void SetAutoArrange(bool enabled)
     {
@@ -818,7 +833,7 @@ internal sealed class DesktopCommandWindow
         {
             double button = Math.Max(1, _button);
             double spacing = _spacing;
-            int commands = _editing ? 4 : 2;
+            int commands = _editing ? 5 : 3;
             double commandOuter = Outer(commands * button + Math.Max(0, commands - 1) * spacing, _padding, _border);
             double height = Outer(button, _padding, _border);
             double slider = Math.Max(80, button * 2.5);
@@ -938,6 +953,7 @@ internal sealed class DesktopCommandWindow
         }
         _editIcon.Foreground = foreground;
         _addIcon.Foreground = foreground;
+        _tilesVisibilityIcon.Foreground = foreground;
         _backIcon.Foreground = foreground;
         _zoomOutIcon.Foreground = foreground;
         _zoomInIcon.Foreground = foreground;

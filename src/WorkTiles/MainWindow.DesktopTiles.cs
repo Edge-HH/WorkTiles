@@ -31,6 +31,7 @@ public sealed partial class MainWindow
     private Guid? _desktopEditingProject;
     private SubjectTileControl? _tileContentSource;
     private bool _desktopClosed;
+    private bool _desktopTilesHidden;
     private bool _syncingDesktop;
     private bool _desktopSyncPosted;
     private bool _desktopSyncAgain;
@@ -70,9 +71,11 @@ public sealed partial class MainWindow
         _desktopCommandAnimTimer.Tick += (_, _) => AdvanceDesktopCommandAnimation();
     }
 
+    private bool DesktopTilesVisible => _settings.DesktopTilesEnabled && !_desktopTilesHidden;
+
     /// <summary>右下角控制窗点了编辑，并且编辑锁已经通过。</summary>
     private bool DesktopEditActive =>
-        _desktopEditing && _settings.DesktopTilesEnabled && CurrentProject is not null && !NeedsEditAuth() && !NeedsCloudEditLock();
+        _desktopEditing && DesktopTilesVisible && CurrentProject is not null && !NeedsEditAuth() && !NeedsCloudEditLock();
 
     private void ToggleDesktopEdit()
     {
@@ -82,9 +85,15 @@ public sealed partial class MainWindow
 
     private void BeginDesktopEdit(Action? then = null)
     {
-        if (_desktopClosed || _initialView == "verification") return;
+        if (_desktopClosed || _initialView == "verification" || _desktopTilesHidden) return;
         void Enable()
         {
+            if (_desktopClosed || _initialView == "verification" || _desktopTilesHidden ||
+                !_settings.DesktopTilesEnabled || CurrentProject is null)
+            {
+                ReleaseUnusedEditLock();
+                return;
+            }
             _desktopEditing = true;
             ApplyDesktopEditing();
             if (_editLockGranted is not null) StartEditLockHeartbeat();
@@ -134,6 +143,7 @@ public sealed partial class MainWindow
                     _editAuthGranted = true;
                     then();
                 }
+                else ReleaseUnusedEditLock();
             }
             finally { _editAuthPending = false; }
         });
@@ -158,6 +168,12 @@ public sealed partial class MainWindow
                     ShowCloudNotice(EditLockedText(project, result.HeldBy), InfoBarSeverity.Warning, "云端修改中");
                     return;
                 }
+                if (_desktopClosed || _initialView == "verification" || _desktopTilesHidden ||
+                    !_settings.DesktopTilesEnabled)
+                {
+                    if (result.Acquired) _ = CloudSync.ReleaseEditLockAsync(_settings.CloudSync, project.Id);
+                    return;
+                }
                 _editLockGranted = project.Id;
                 then();
             }
@@ -175,6 +191,25 @@ public sealed partial class MainWindow
     {
         ShowBoard();
         SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
+    }
+
+    private void ToggleDesktopTilesVisibility() => SetDesktopTilesHidden(!_desktopTilesHidden);
+
+    private void SetDesktopTilesHidden(bool hidden)
+    {
+        if (_desktopClosed || _desktopCommands is null || !_settings.DesktopTilesEnabled || _desktopTilesHidden == hidden) return;
+        _desktopTilesHidden = hidden;
+        if (hidden)
+        {
+            if (_desktopEditing) EndDesktopEdit();
+            CloseDesktopTileWindows();
+        }
+        _desktopCommands.SetTilesHidden(hidden);
+        _desktopCommandActivity = Environment.TickCount64;
+        if (!hidden) SyncDesktopTiles();
+        PlaceDesktopCommands();
+        StackDesktopCommand();
+        UpdateDesktopCommandAutoHide();
     }
 
     private void NoteTileContentChanged(SubjectTileControl source)
@@ -234,6 +269,18 @@ public sealed partial class MainWindow
             _desktopEditingProject = null;
             return;
         }
+        if (_desktopTilesHidden)
+        {
+            if (_desktopEditing) EndDesktopEdit();
+            CloseDesktopTileWindows();
+            _desktopCommands ??= CreateDesktopCommands();
+            _desktopCommands.ApplyTheme(RootShell.RequestedTheme);
+            _desktopCommands.SetEditing(false);
+            _desktopCommands.SetTilesHidden(true);
+            ApplyDesktopCommandChrome();
+            ArrangeDesktopTiles();
+            return;
+        }
 
         List<SubjectBoard> ordered = OrderDesktopSubjects();
         HashSet<SubjectBoard> keep = new(ordered, SubjectIdentity.Instance);
@@ -272,6 +319,7 @@ public sealed partial class MainWindow
         _desktopCommands ??= CreateDesktopCommands();
         _desktopCommands.ApplyTheme(theme);
         _desktopCommands.SetEditing(editing);
+        _desktopCommands.SetTilesHidden(false);
         ApplyDesktopCommandChrome();
         ArrangeDesktopTiles();
         }
@@ -298,6 +346,11 @@ public sealed partial class MainWindow
 
     private void AttachDesktopTile(DesktopTileWindow window, SubjectBoard subject)
     {
+        if (_desktopTilesHidden || !_desktopWindows.TryGetValue(subject, out DesktopTileWindow? current) || !ReferenceEquals(current, window))
+        {
+            window.CloseSurface();
+            return;
+        }
         if (window.Tile is not null) return;
         AutofillPopup popup = new();
         SubjectTileControl? tile = null;
@@ -371,6 +424,7 @@ public sealed partial class MainWindow
         window.AddInvoked += AddDesktopSubject;
         window.AboveTiles = true;
         window.AutoArrangeInvoked += SetDesktopAutoArrange;
+        window.TilesVisibilityInvoked += ToggleDesktopTilesVisibility;
         window.ZoomChanged += SetDesktopZoom;
         window.ReturnInvoked += ReturnToBoard;
         window.ChromeChanged += PlaceDesktopCommands;
@@ -647,10 +701,16 @@ public sealed partial class MainWindow
         _desktopDpi = dpi;
         // dpi 为 0 时按 96 处理，避免窗口被排到坐标原点。
         _desktopScale = (dpi == 0 ? 96u : dpi) / 96d;
+        _desktopSlots.Clear();
+        if (_desktopTilesHidden)
+        {
+            PlaceDesktopCommands();
+            StackDesktopCommand();
+            return;
+        }
 
         DesktopWorkArea work = new(area.X / _desktopScale, area.Y / _desktopScale, area.Width / _desktopScale, area.Height / _desktopScale);
         double zoom = DesktopZoom;
-        _desktopSlots.Clear();
         if (_settings.DesktopTilesAutoArrange)
         {
             List<(double Width, double Height)> sizes = _desktopSubjects.Select(subject => (subject.TileWidth * zoom, subject.TileHeight * zoom)).ToList();
@@ -950,16 +1010,13 @@ public sealed partial class MainWindow
         return area.Width > 0 && area.Height > 0;
     }
 
-    private void CloseDesktopSurfaces()
+    private void CloseDesktopTileWindows()
     {
         foreach (SubjectBoard subject in _desktopKnownNames.Keys.ToList())
             subject.PropertyChanged -= DesktopSubject_PropertyChanged;
         _desktopKnownNames.Clear();
         foreach (DesktopTileWindow window in _desktopWindows.Values) { window.Tile?.Detach(); window.CloseSurface(); }
         _desktopWindows.Clear();
-        _desktopCommandAnimTimer.Stop();
-        _desktopCommands?.CloseSurface();
-        _desktopCommands = null;
         _desktopInsertLine?.CloseSurface();
         _desktopInsertLine = null;
         _desktopInsertIndex = -1;
@@ -967,6 +1024,16 @@ public sealed partial class MainWindow
         _desktopSlots.Clear();
         _desktopDragSubject = null;
         _desktopResizeSubject = null;
+    }
+
+    private void CloseDesktopSurfaces()
+    {
+        CloseDesktopTileWindows();
+        _desktopCommandAnimTimer.Stop();
+        _desktopTilesHidden = false;
+        _desktopCommands?.SetTilesHidden(false);
+        _desktopCommands?.CloseSurface();
+        _desktopCommands = null;
     }
 
     private void BeginDesktopResize(SubjectBoard subject, DesktopResizeEdge edge)

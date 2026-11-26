@@ -1238,13 +1238,13 @@ public sealed partial class MainWindow : Window
     private void InstallTrayIcon()
     {
         nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-        _tray = new TrayIcon(hwnd, () => _settings.DesktopTilesEnabled);
+        _tray = new TrayIcon(hwnd, () => DesktopTilesVisible);
         _tray.Command += command => DispatcherQueue.TryEnqueue(() => HandleTrayCommand(command));
     }
 
     private void ShowTrayMenu()
     {
-        TrayMenuWindow.Show(_settings.DesktopTilesEnabled, command => DispatcherQueue.TryEnqueue(() =>
+        TrayMenuWindow.Show(DesktopTilesVisible, command => DispatcherQueue.TryEnqueue(() =>
         {
             switch (command)
             {
@@ -1254,9 +1254,11 @@ public sealed partial class MainWindow : Window
                     SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
                     break;
                 case TrayIcon.CommandShowTiles:
+                    bool changed = !_settings.DesktopTilesEnabled;
                     _settings.DesktopTilesEnabled = true;
+                    SetDesktopTilesHidden(false);
                     SyncDesktopTiles();
-                    ScheduleSave();
+                    if (changed) ScheduleSave();
                     break;
                 case TrayIcon.CommandHideTiles:
                     _settings.DesktopTilesEnabled = false;
@@ -1283,7 +1285,14 @@ public sealed partial class MainWindow : Window
                 SingleInstanceService.BringToForeground(WinRT.Interop.WindowNative.GetWindowHandle(this));
                 break;
             case TrayIcon.CommandShowTiles:
-                RunAfterEditAuth(() => { _settings.DesktopTilesEnabled = true; SyncDesktopTiles(); ScheduleSave(); });
+                RunAfterEditAuth(() =>
+                {
+                    bool changed = !_settings.DesktopTilesEnabled;
+                    _settings.DesktopTilesEnabled = true;
+                    SetDesktopTilesHidden(false);
+                    SyncDesktopTiles();
+                    if (changed) ScheduleSave();
+                });
                 break;
             case TrayIcon.CommandHideTiles:
                 RunAfterEditAuth(() => { _settings.DesktopTilesEnabled = false; SyncDesktopTiles(); ScheduleSave(); });

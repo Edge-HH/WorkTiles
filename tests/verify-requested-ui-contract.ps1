@@ -1,4 +1,4 @@
-﻿$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Stop'
 
 $projectRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $xaml = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\MainWindow.xaml'))
@@ -114,6 +114,8 @@ if ($xaml -notmatch 'x:Name="SettingsContentHost"' -or
 }
 $exportTiles = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\ExportTileVisual.cs'))
 $desktopHost = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\DesktopWidgetHost.cs'))
+$desktopCommand = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\DesktopTileWindow.cs'))
+$desktopState = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\MainWindow.DesktopTiles.cs'))
 if (([regex]::Matches($tiles, 'ApplyTransparentInputChrome\(')).Count -lt 2 -or
     $exportTiles -notmatch 'ApplyTransparentInputChrome\(' -or
     $tiles -notmatch '"TextControlBackground"' -or
@@ -210,6 +212,21 @@ if ($islands -notmatch 'ApplyIslandControlShift' -or
 $icons = [System.IO.File]::ReadAllText((Join-Path $projectRoot 'src\WorkTiles\Controls\FluentIcon.cs'))
 if ($icons -notmatch 'nameof\(ZoomIn\) => ZoomIn' -or $icons -notmatch 'nameof\(ZoomOut\) => ZoomOut') {
     $failures.Add('缩放悬浮岛缺少随字体分发的放大 / 缩小图标映射。')
+}
+if ($icons -notmatch 'public const string Eye = "\\uE813"' -or
+    $icons -notmatch 'public const string EyeOff = "\\uE817"' -or
+    $icons -notmatch 'nameof\(Eye\) => Eye' -or
+    $icons -notmatch 'nameof\(EyeOff\) => EyeOff') {
+    $failures.Add('桌面磁贴显隐缺少随字体分发的眼睛图标映射。')
+}
+if ($desktopCommand -notmatch '_tilesVisibilityButton, _backButton' -or
+    $desktopCommand -notmatch 'int commands = _editing \? 5 : 3' -or
+    $desktopCommand -notmatch 'TilesVisibilityInvoked' -or
+    $desktopCommand -notmatch 'SetTilesHidden\(bool hidden\)' -or
+    $desktopState -notmatch '_desktopTilesHidden' -or
+    $desktopState -notmatch 'CloseDesktopTileWindows\(\)' -or
+    $tray -notmatch 'tilesVisible \? "EyeOff" : "Eye"') {
+    $failures.Add('桌面控制窗没有在返回左侧加入眼睛显隐按钮，或托盘未复用同一套图标。')
 }
 
 if ($failures.Count -gt 0) {

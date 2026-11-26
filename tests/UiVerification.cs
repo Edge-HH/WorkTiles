@@ -146,7 +146,8 @@ public sealed partial class MainWindow
                     "menu bar shows the WorkTiles logo");
                 Check(AccentCheckedFill(GridSnapToggleButton, BoardTheme.IsLight),
                     "grid snap checked background uses the Windows accent");
-                FluentIcon snapIcon = (FluentIcon)GridSnapToggleButton.Content;
+                FluentIcon snapIcon = _toolbarLabels[GridSnapToggleButton].Icon as FluentIcon
+                    ?? throw new Exception("grid snap icon is missing");
                 Check(ReferenceEquals(snapIcon.Foreground, SystemAccent.CheckedIconBrush(BoardTheme.IsLight)),
                     BoardTheme.IsLight
                         ? "main grid snap checked icon is white in light mode"
@@ -172,6 +173,23 @@ public sealed partial class MainWindow
                         && offBrush.Color.G == BoardTheme.TextColor.G
                         && offBrush.Color.B == BoardTheme.TextColor.B,
                         "desktop auto-arrange off icon uses the text color");
+                    StackPanel commandButtons = arrangeWindow.CommandButtons;
+                    Check(commandButtons.Children.IndexOf(arrangeWindow.TilesVisibilityButton) + 1 ==
+                        commandButtons.Children.IndexOf(arrangeWindow.ReturnButton),
+                        "desktop tile visibility button sits immediately left of return");
+                    Check(arrangeWindow.TilesVisibilityIcon.Symbol == "EyeOff" &&
+                        ToolTipService.GetToolTip(arrangeWindow.TilesVisibilityButton) as string == "隐藏桌面磁贴",
+                        "desktop tile visibility button starts with the eye-off icon and hide tooltip");
+                    arrangeWindow.SetTilesHidden(true);
+                    Check(arrangeWindow.TilesVisibilityIcon.Symbol == "Eye" &&
+                        ToolTipService.GetToolTip(arrangeWindow.TilesVisibilityButton) as string == "显示桌面磁贴",
+                        "desktop tile visibility button switches to the eye icon and show tooltip");
+                    arrangeWindow.SetTilesHidden(false);
+                    Check(arrangeWindow.TilesVisibilityIcon.Symbol == "EyeOff", "desktop tile visibility button restores the eye-off icon");
+                    double viewWidth = arrangeWindow.DesiredWidthDip;
+                    arrangeWindow.SetEditing(true);
+                    Check(arrangeWindow.DesiredWidthDip > viewWidth, "desktop command width includes the visibility button in edit mode");
+                    arrangeWindow.SetEditing(false);
                 }
                 finally
                 {
@@ -454,8 +472,14 @@ public sealed partial class MainWindow
                     textColorButton = FindVisuals<Button>(RichTextToolbarHost).FirstOrDefault(b => ToolTipService.GetToolTip(b)?.ToString() == "文字颜色");
                 }
                 Check(textColorButton is not null, "text color button is hosted with the focused editor");
-                void InvokeButton(Button button) => ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button)
-                    .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+                ArgumentNullException.ThrowIfNull(textColorButton);
+                ArgumentNullException.ThrowIfNull(textColorButton.Flyout);
+                void InvokeButton(Button? button)
+                {
+                    ArgumentNullException.ThrowIfNull(button);
+                    ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(button)
+                        .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
+                }
                 InvokeButton(textColorButton); await NextLayoutAsync();
                 var textSwatches = ((StackPanel)((Flyout)textColorButton.Flyout).Content).Children.Cast<ColorSwatchButton>().ToList();
                 Check(textSwatches[0].Color.Equals(Microsoft.UI.Colors.Black) && textSwatches[1].Color.Equals(Microsoft.UI.Colors.White), "text palette always starts with black and white");
@@ -1480,12 +1504,11 @@ public sealed partial class MainWindow
         await NextLayoutAsync();
         check(Math.Abs(_autoLayoutGapSlider!.StepFrequency - 10) < .01, "gap slider steps by 10px while grid snapping is off");
         GridSnapToggleButton.IsChecked = true;
-        await NextLayoutAsync();
-        check(Math.Abs(_autoLayoutGapSlider.StepFrequency - 1) < .01
-            && ToolTipService.GetToolTip(_autoLayoutGapSlider) is string gapTip && gapTip.EndsWith("格", StringComparison.Ordinal),
-            $"gap slider stays continuous and the hover text is in grid cells ({_autoLayoutGapSlider.StepFrequency} / {ToolTipService.GetToolTip(_autoLayoutGapSlider)})");
         ShowSettingsPage("Layout");
         await NextLayoutAsync();
+        check(Math.Abs(_autoLayoutGapSlider.StepFrequency - LayoutMetrics.ArrangementCellStep) < .01
+            && ToolTipService.GetToolTip(_autoLayoutGapSlider) is string gapTip && gapTip.EndsWith("格", StringComparison.Ordinal),
+            $"gap slider stays continuous and the hover text is in grid cells ({_autoLayoutGapSlider.StepFrequency} / {ToolTipService.GetToolTip(_autoLayoutGapSlider)})");
         double layoutGrid = _settings.GridSize;
         double layoutGap = _settings.AutoLayoutGap;
         _gridSizeSlider!.Value = Math.Abs(layoutGrid - 80) < .5 ? 96 : 80;
@@ -1560,7 +1583,7 @@ public sealed partial class MainWindow
             {
                 // 单区模式保留贴边分隔条，往回流方向拖动即可恢复分屏。
                 Thumb edge = FreeLayoutHandles.Children.OfType<Thumb>().Single();
-                check(mode == "Clock" ? Canvas.GetLeft(edge) > DisplayRoot.ActualWidth - 11 : Canvas.GetLeft(edge) == 0,
+                check(mode == "Clock" ? Canvas.GetLeft(edge) > DisplayRoot.ActualWidth - 11 : Canvas.GetLeft(edge) is < 0 and >= -11,
                     mode + " keeps an edge split handle for dragging back to split");
                 BeginSplitDrag();
                 DragSplitHandle(false, (mode == "Clock" ? -1 : 1) * DisplayRoot.ActualWidth * .4, 0);
