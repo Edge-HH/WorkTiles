@@ -213,6 +213,10 @@ public static class SettingsSchema
         ["DesktopTilesAutoArrange"] = "本机桌面磁贴",
         ["DesktopTilesZoom"] = "本机桌面磁贴",
         ["DesktopTilePlacements"] = "本机桌面磁贴",
+        ["DesktopTileLookSynced"] = "本机桌面磁贴",
+        ["DesktopTileLook"] = "本机桌面磁贴",
+        ["DesktopCommandLookSynced"] = "本机桌面磁贴",
+        ["DesktopCommandLook"] = "本机桌面磁贴",
         ["LaunchAtStartup"] = "本机开机自启",
         ["SilentStartup"] = "本机开机自启"
     };

@@ -39,6 +39,11 @@ public sealed class SubjectTileControl : Grid
     private readonly Func<HomeworkEntry, Task> _addAttachment;
     private readonly Action _contentChanged;
     private readonly BoardSettingsState _settings;
+    /// <summary>桌面磁贴可改用独立外观。未设置时沿用构造时传入的主界面设置。</summary>
+    public Func<DesktopTileLook>? LookSource { get; set; }
+
+    private DesktopTileLook CurrentLook(BoardSettingsState fallback) =>
+        LookSource?.Invoke() ?? DesktopTileLook.Capture(fallback);
     private readonly AutofillService? _autofill;
     private readonly AutofillPopup? _autofillPopup;
     private readonly List<HomeworkAutofillInput> _entryAutofills = [];
@@ -323,15 +328,16 @@ public sealed class SubjectTileControl : Grid
 
     public void ApplyAppearance(BoardSettingsState settings, bool applyBodyDefaults = true)
     {
-        ApplyTitleSize(settings.TileTitleSize);
+        DesktopTileLook look = CurrentLook(settings);
+        ApplyTitleSize(look.TitleSize);
         // 预览拖动只更新标题和背景；正文格式写入 RichEditBox 很贵，不能跟在网格/间隔滑块后面跑。
         if (applyBodyDefaults) ApplyBodyDefaults(settings);
         _nameEditor.MaxWidth = Math.Max(240, Width - 150);
-        _watermark.Visibility = settings.ShowTileSubjectLabel ? Visibility.Visible : Visibility.Collapsed;
-        _frame.CornerRadius = new CornerRadius(Math.Clamp(settings.TileCornerRadius, 0, 40));
+        _watermark.Visibility = look.ShowSubjectLabel ? Visibility.Visible : Visibility.Collapsed;
+        _frame.CornerRadius = new CornerRadius(Math.Clamp(look.CornerRadius, 0, 40));
         // 保持透明画刷以接收双击等命中测试，同时不遮挡桌面透明与圆角透底。
         _frame.Background = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
-        _backgroundVisual.Apply(settings.TileBackground, BoardTheme.SurfaceBrush, surface: true);
+        _backgroundVisual.Apply(look.Background, BoardTheme.SurfaceBrush, surface: true);
     }
 
     public void ApplyBodyDefaults(BoardSettingsState settings, bool overrideFormatted = false)
@@ -860,12 +866,13 @@ public sealed class SubjectTileControl : Grid
 
     private RichEditBox CreateRichEditor(HomeworkEntry homework)
     {
+        DesktopTileLook body = CurrentLook(_settings);
         RichEditBox editor = new()
         {
-            FontFamily = FontService.Family(_settings.TileBodyFontFamily),
-            FontSize = Math.Clamp(_settings.TileBodyFontSize, 12, 72),
-            FontWeight = _settings.TileBodyBold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
-            FontStyle = _settings.TileBodyItalic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
+            FontFamily = FontService.Family(body.BodyFontFamily),
+            FontSize = Math.Clamp(body.BodyFontSize, 12, 72),
+            FontWeight = body.BodyBold ? Microsoft.UI.Text.FontWeights.Bold : Microsoft.UI.Text.FontWeights.Normal,
+            FontStyle = body.BodyItalic ? Windows.UI.Text.FontStyle.Italic : Windows.UI.Text.FontStyle.Normal,
             Padding = new Thickness(2, 0, 2, 0),
             MinHeight = 42,
             TextWrapping = TextWrapping.Wrap,
@@ -1001,16 +1008,17 @@ public sealed class SubjectTileControl : Grid
                 if (tailText.Length > 0 && tailText.All(character => character is '\r' or '\n'))
                     styleEnd = end;
             }
+            DesktopTileLook look = CurrentLook(_settings);
             ITextRange range = editor.Document.GetRange(0, styleEnd);
-            range.CharacterFormat.Name = FontService.RtfFamilyName(_settings.TileBodyFontFamily);
-            range.CharacterFormat.Size = (float)Math.Clamp(_settings.TileBodyFontSize, 12, 72);
-            range.CharacterFormat.Bold = _settings.TileBodyBold ? FormatEffect.On : FormatEffect.Off;
-            range.CharacterFormat.Italic = _settings.TileBodyItalic ? FormatEffect.On : FormatEffect.Off;
+            range.CharacterFormat.Name = FontService.RtfFamilyName(look.BodyFontFamily);
+            range.CharacterFormat.Size = (float)Math.Clamp(look.BodyFontSize, 12, 72);
+            range.CharacterFormat.Bold = look.BodyBold ? FormatEffect.On : FormatEffect.Off;
+            range.CharacterFormat.Italic = look.BodyItalic ? FormatEffect.On : FormatEffect.Off;
             range.CharacterFormat.ForegroundColor = BoardTheme.TextColor;
-            editor.Document.Selection.CharacterFormat.Name = FontService.RtfFamilyName(_settings.TileBodyFontFamily);
-            editor.Document.Selection.CharacterFormat.Size = (float)Math.Clamp(_settings.TileBodyFontSize, 12, 72);
-            editor.Document.Selection.CharacterFormat.Bold = _settings.TileBodyBold ? FormatEffect.On : FormatEffect.Off;
-            editor.Document.Selection.CharacterFormat.Italic = _settings.TileBodyItalic ? FormatEffect.On : FormatEffect.Off;
+            editor.Document.Selection.CharacterFormat.Name = FontService.RtfFamilyName(look.BodyFontFamily);
+            editor.Document.Selection.CharacterFormat.Size = (float)Math.Clamp(look.BodyFontSize, 12, 72);
+            editor.Document.Selection.CharacterFormat.Bold = look.BodyBold ? FormatEffect.On : FormatEffect.Off;
+            editor.Document.Selection.CharacterFormat.Italic = look.BodyItalic ? FormatEffect.On : FormatEffect.Off;
         }
         finally
         {

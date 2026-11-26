@@ -69,9 +69,6 @@ public sealed partial class MainWindow
             [SingleInstanceService.PromptAction, SingleInstanceService.ForegroundAction, SingleInstanceService.FullScreenAction, SingleInstanceService.NoneAction],
             _settings.SecondLaunchAction, value => _settings.SecondLaunchAction = value, read: () => _settings.SecondLaunchAction));
         general.Children.Add(Note("同一安装目录已经打开时，再次启动按这里处理。提示会询问是重启正在运行的实例，还是回到已经打开的窗口。"));
-        general.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
-            _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
-        general.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
         general.Children.Add(Heading("菜单栏"));
         general.Children.Add(Toggle("预览下显示菜单栏", _settings.ShowMenuBarInPreview, value =>
             _settings.ShowMenuBarInPreview = value, changed: () => { UpdateProjectCommands(); ScheduleSave(); }, read: () => _settings.ShowMenuBarInPreview));
@@ -85,7 +82,8 @@ public sealed partial class MainWindow
         general.Children.Add(menuBarOffsetSlider);
         general.Children.Add(Note("用于避让ClassIsland主界面等窗口。"));
         _refreshSettingAvailability.Add(() => silent.IsEnabled = _settings.LaunchAtStartup);
-        RegisterSettingsPage("General", GeneralSettingsPanel, general, "常规", "开机自启、重复打开、桌面磁贴和菜单栏。");
+        RegisterSettingsPage("General", GeneralSettingsPanel, general, "常规", "开机自启、重复打开和菜单栏。");
+        BuildDesktopTileSettings();
 
         StackPanel layout = SettingsStack();
         _layoutChoice = Choice("布局模式", ["分屏", "仅作业", "仅时钟", "自由布局"],
@@ -948,6 +946,7 @@ public sealed partial class MainWindow
         }
         // 服务器计划状态可能变化，每次打开考试页都按当前设置重建本机安排。
         if (tag == "Exam") RefreshLocalExamEditor();
+        if (tag is "DesktopTileLook" or "DesktopCommandLook") RefreshSettingControls();
 
         _selectedSettingsPage = tag;
         foreach (StackPanel container in _settingsPages.Values.Select(page => page.Container).Distinct())
@@ -986,8 +985,19 @@ public sealed partial class MainWindow
     private void RefreshSettingControls()
     {
         _refreshingSettingControls = true;
-        try { foreach (Action refresh in _refreshSettingControls) refresh(); }
+        try
+        {
+            MirrorDesktopLooksIfSynced();
+            foreach (Action refresh in _refreshSettingControls) refresh();
+        }
         finally { _refreshingSettingControls = false; }
+    }
+
+    /// <summary>同步开启时把主界面外观抄进桌面副本，禁用的设置项仍显示正在跟随的值。不换背景对象。</summary>
+    private void MirrorDesktopLooksIfSynced()
+    {
+        if (_settings.DesktopTileLookSynced) _settings.DesktopTileLook.CopyFrom(_settings);
+        if (_settings.DesktopCommandLookSynced) _settings.DesktopCommandLook.CopyFrom(_settings);
     }
 
     private void TileTitleSizeChanged()
@@ -995,7 +1005,7 @@ public sealed partial class MainWindow
         // 连续拖动不走全窗口刷新，保留预览编辑器以及所有背景资源。
         foreach (SubjectTileControl tile in BoardCanvas.Children.OfType<SubjectTileControl>())
             tile.ApplyTitleSize(_settings.TileTitleSize);
-        ForEachDesktopTile(tile => tile.ApplyTitleSize(_settings.TileTitleSize));
+        ForEachDesktopTile(tile => tile.ApplyTitleSize(_settings.EffectiveDesktopTileLook().TitleSize));
         _tileAppearancePreview?.ApplyTitleSize(_settings.TileTitleSize);
         ScheduleSave();
     }
@@ -1150,7 +1160,7 @@ public sealed partial class MainWindow
         return combo;
     }
 
-    private StackPanel SurfaceColorEditor(string color, double opacity, Func<bool> cleared, Action<string, bool> updateColor, Action<double> updateOpacity, Action? changed = null)
+    private StackPanel SurfaceColorEditor(string color, double opacity, Func<bool> cleared, Action<string, bool> updateColor, Action<double> updateOpacity, Action? changed = null, Func<string>? readColor = null, Func<double>? readOpacity = null)
     {
         StackPanel panel = SettingsStack();
         ColorPicker picker = new() { IsAlphaEnabled = false, IsHexInputVisible = true,
@@ -1162,6 +1172,7 @@ public sealed partial class MainWindow
         Flyout flyout = new() { Content = flyoutContent };
         void ApplyColor()
         {
+            if (_refreshingSettingControls) return;
             updateColor($"#{picker.Color.R:X2}{picker.Color.G:X2}{picker.Color.B:X2}", false);
             (changed ?? QueueSurfaceRefresh)();
         }
@@ -1169,8 +1180,13 @@ public sealed partial class MainWindow
         apply.Click += (_, _) => { ApplyColor(); flyout.Hide(); };
         flyoutContent.Children.Add(apply);
         panel.Children.Add(new Button { Content = "背景颜色", Flyout = flyout });
+        if (readColor is not null) _refreshSettingControls.Add(() =>
+        {
+            Windows.UI.Color next = GridAppearance.ParseColor(readColor(), BoardTheme.SurfaceBrush.Color);
+            if (picker.Color != next) picker.Color = next;
+        });
         Slider transparency = Range("背景颜色透明度（%）", 0, 100, (1 - opacity) * 100,
-            value => updateOpacity(1 - value / 100), changed ?? QueueSurfaceRefresh);
+            value => updateOpacity(1 - value / 100), changed ?? QueueSurfaceRefresh, read: readOpacity is null ? null : () => (1 - readOpacity()) * 100);
         transparency.StepFrequency = 1;
         panel.Children.Add(transparency);
         Button clear = new() { Content = "清除背景颜色" };
@@ -1193,7 +1209,8 @@ public sealed partial class MainWindow
         color.ColorChanged += (_, args) => { style.Color = $"#{args.NewColor.R:X2}{args.NewColor.G:X2}{args.NewColor.B:X2}"; QueueColorSettingChanged(); };
         if (surface)
             panel.Children.Add(SurfaceColorEditor(style.Color, style.ColorOpacity, () => style.ColorCleared,
-                (value, cleared) => { style.Color = value; style.ColorCleared = cleared; }, value => style.ColorOpacity = value, surfaceChanged));
+                (value, cleared) => { style.Color = value; style.ColorCleared = cleared; }, value => style.ColorOpacity = value, surfaceChanged,
+                () => style.Color, () => style.ColorOpacity));
         else
             imageControls.Children.Add(new Button { Content = "背景颜色", Flyout = new Flyout { Content = color } });
         imageControls.Children.Add(new ContentControl { Content = CreateBackgroundMediaEditor(style, scope), HorizontalContentAlignment = HorizontalAlignment.Stretch });
@@ -1564,6 +1581,7 @@ public sealed partial class MainWindow
     private void ApplyExtendedSettings()
     {
         if (SharedBackgroundVisual is null) return;
+        MirrorDesktopLooksIfSynced();
         foreach (Action refresh in _refreshSettingAvailability) refresh();
         ApplyDisplayLayout();
         RefreshSplitLayoutCommands();

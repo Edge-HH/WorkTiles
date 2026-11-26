@@ -736,6 +736,42 @@ Check(dataRoundTrip.Data.AutoBackup.Enabled && dataRoundTrip.Data.AutoBackup.Int
 Check(dataRoundTrip.Lock.Enabled && dataRoundTrip.Lock.RequireAuthForEditing && !dataRoundTrip.Lock.RequireAuthForSettings,
     "锁定开关与验证范围往返持久化");
 Check(!dataDefaults.DesktopTilesEnabled && dataDefaults.DesktopTileOrder.Count == 0, "旧配置默认不在桌面显示磁贴");
+Check(dataDefaults.DesktopTileLookSynced && dataDefaults.DesktopCommandLookSynced, "旧配置默认与主界面同步桌面磁贴和控制窗外观");
+var desktopLook = new BoardSettingsState
+{
+    TileCornerRadius = 12,
+    TileTitleSize = 40,
+    ToolbarScale = 1.5,
+    DesktopTileLookSynced = false,
+    DesktopCommandLookSynced = false
+};
+desktopLook.DesktopTileLook.CornerRadius = 28;
+desktopLook.DesktopTileLook.Background.Color = "#112233";
+desktopLook.DesktopTileLook.Background.Playlist.Add("asset:tile.png");
+desktopLook.DesktopCommandLook.Scale = 1.8;
+desktopLook.DesktopCommandLook.Glass = true;
+var desktopLookRestored = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(desktopLook))!;
+Check(!desktopLookRestored.DesktopTileLookSynced && desktopLookRestored.DesktopTileLook.CornerRadius == 28
+    && desktopLookRestored.DesktopTileLook.Background.Color == "#112233"
+    && desktopLookRestored.DesktopTileLook.Background.Playlist.SequenceEqual(["asset:tile.png"]),
+    "关闭同步后的桌面磁贴外观往返持久化");
+Check(!desktopLookRestored.DesktopCommandLookSynced && desktopLookRestored.DesktopCommandLook.Scale == 1.8
+    && desktopLookRestored.DesktopCommandLook.Glass, "关闭同步后的桌面控制窗外观往返持久化");
+var syncedLook = new BoardSettingsState { TileCornerRadius = 12, ToolbarScale = 1.5 };
+syncedLook.DesktopTileLook.CornerRadius = 28;
+syncedLook.DesktopCommandLook.Scale = 1.8;
+Check(syncedLook.EffectiveDesktopTileLook().CornerRadius == 12 && syncedLook.EffectiveDesktopCommandLook().Scale == 1.5,
+    "同步开启时桌面外观跟随主界面，忽略副本");
+syncedLook.DesktopTileLookSynced = false;
+syncedLook.DesktopCommandLookSynced = false;
+Check(syncedLook.EffectiveDesktopTileLook().CornerRadius == 28 && syncedLook.EffectiveDesktopCommandLook().Scale == 1.8,
+    "关闭同步后桌面外观使用副本");
+syncedLook.DesktopTileLook.CopyFrom(syncedLook);
+Check(syncedLook.DesktopTileLook.CornerRadius == 12, "关闭同步时从主界面抄下当前磁贴外观");
+Check(!SettingsSchema.IsSynced("DesktopTileLook") && !SettingsSchema.IsSynced("DesktopCommandLook")
+    && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopTileLookSynced")
+    && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopCommandLook"),
+    "桌面外观是本机设置，不进班级同步");
 Check(dataDefaults.DesktopTilesAutoArrange && dataDefaults.DesktopTilesZoom == 1 && dataDefaults.DesktopTilePlacements.Count == 0,
     "桌面磁贴默认自动排列、原始比例，自由位置为空");
 BoardSettingsState desktopRoundTrip = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(new BoardSettingsState

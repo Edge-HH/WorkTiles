@@ -147,6 +147,22 @@ public sealed class BoardSettingsState
     public double DesktopTilesZoom { get; set; } = 1;
     /// <summary>关闭自动排列后，每个项目记住磁贴在工作区里的位置。坐标相对工作区左上角，单位 DIP。</summary>
     public Dictionary<string, List<DesktopTilePlacement>> DesktopTilePlacements { get; set; } = new();
+    /// <summary>桌面磁贴外观跟随主界面。默认开启；旧配置缺这个字段时也保持跟随。</summary>
+    public bool DesktopTileLookSynced { get; set; } = true;
+    /// <summary>关闭同步后，桌面磁贴使用的标题、正文、圆角和背景。同步开启时不参与绘制。</summary>
+    public DesktopTileLook DesktopTileLook { get; set; } = new();
+    /// <summary>桌面控制窗外观跟随主界面控制窗。默认开启。</summary>
+    public bool DesktopCommandLookSynced { get; set; } = true;
+    /// <summary>关闭同步后，桌面控制窗使用的大小、圆角、边框和背景。</summary>
+    public DesktopCommandLook DesktopCommandLook { get; set; } = new();
+
+    /// <summary>桌面磁贴实际使用的外观。同步开启时取主界面，关闭时取本机副本。</summary>
+    public DesktopTileLook EffectiveDesktopTileLook() =>
+        DesktopTileLookSynced ? DesktopTileLook.Capture(this) : DesktopTileLook;
+
+    /// <summary>桌面控制窗实际使用的外观。同步开启时取主界面，关闭时取本机副本。</summary>
+    public DesktopCommandLook EffectiveDesktopCommandLook() =>
+        DesktopCommandLookSynced ? DesktopCommandLook.Capture(this) : DesktopCommandLook;
 
     /// <summary>再次启动行为只认四种取值；无法识别的旧配置或手改值回到“提示实例重复”。已保存的打开主界面、全屏和不操作仍然有效。</summary>
     public static string NormalizeSecondLaunchAction(string? value) =>
@@ -372,6 +388,110 @@ public sealed class BackgroundSettings
     public bool SwitchOnMediaEnded { get; set; } = true;
     public bool Glass { get; set; }
     public double Blur { get; set; } = 20;
+}
+
+/// <summary>桌面磁贴可脱离主界面的外观。字段与主界面磁贴外观一一对应，不含粘贴行为。</summary>
+public sealed class DesktopTileLook
+{
+    public double TitleSize { get; set; } = 29;
+    public double BodyFontSize { get; set; } = 20;
+    public string BodyFontFamily { get; set; } = BoardSettingsState.DefaultTileBodyFontFamily;
+    public bool BodyBold { get; set; }
+    public bool BodyItalic { get; set; }
+    public bool ShowSubjectLabel { get; set; } = true;
+    public double CornerRadius { get; set; } = 3;
+    public BackgroundSettings Background { get; set; } = new();
+
+    public static DesktopTileLook Capture(BoardSettingsState settings)
+    {
+        DesktopTileLook look = new()
+        {
+            TitleSize = settings.TileTitleSize,
+            BodyFontSize = settings.TileBodyFontSize,
+            BodyFontFamily = settings.TileBodyFontFamily,
+            BodyBold = settings.TileBodyBold,
+            BodyItalic = settings.TileBodyItalic,
+            ShowSubjectLabel = settings.ShowTileSubjectLabel,
+            CornerRadius = settings.TileCornerRadius,
+            Background = new()
+        };
+        CopyBackground(look.Background, settings.TileBackground);
+        return look;
+    }
+
+    /// <summary>把主界面磁贴外观抄进已有副本，不换掉背景对象，设置页编辑器仍持有同一份引用。</summary>
+    public void CopyFrom(BoardSettingsState settings)
+    {
+        TitleSize = settings.TileTitleSize;
+        BodyFontSize = settings.TileBodyFontSize;
+        BodyFontFamily = settings.TileBodyFontFamily;
+        BodyBold = settings.TileBodyBold;
+        BodyItalic = settings.TileBodyItalic;
+        ShowSubjectLabel = settings.ShowTileSubjectLabel;
+        CornerRadius = settings.TileCornerRadius;
+        Background ??= new();
+        CopyBackground(Background, settings.TileBackground);
+    }
+
+    public static void CopyBackground(BackgroundSettings target, BackgroundSettings source)
+    {
+        target.Color = source.Color;
+        target.ColorOpacity = source.ColorOpacity;
+        target.ColorCleared = source.ColorCleared;
+        target.ImagePath = source.ImagePath;
+        target.ImageMode = source.ImageMode;
+        target.PlaylistEnabled = source.PlaylistEnabled;
+        target.Shuffle = source.Shuffle;
+        target.SwitchOnTimer = source.SwitchOnTimer;
+        target.SwitchIntervalSeconds = source.SwitchIntervalSeconds;
+        target.SwitchOnMediaEnded = source.SwitchOnMediaEnded;
+        target.Glass = source.Glass;
+        target.Blur = source.Blur;
+        target.Playlist ??= [];
+        target.Playlist.Clear();
+        if (source.Playlist is not null)
+            target.Playlist.AddRange(source.Playlist);
+    }
+}
+
+/// <summary>桌面控制窗可脱离主界面的外观。只包含桌面控制窗实际绘制的项。</summary>
+public sealed class DesktopCommandLook
+{
+    public double Scale { get; set; } = 1;
+    public double Radius { get; set; } = 14;
+    public double BorderThickness { get; set; } = 1;
+    public string BorderColor { get; set; } = "";
+    public string BackgroundColor { get; set; } = "";
+    public double BackgroundOpacity { get; set; } = 0.8;
+    public bool BackgroundColorCleared { get; set; }
+    public bool Glass { get; set; }
+    public double Blur { get; set; } = 20;
+
+    public static DesktopCommandLook Capture(BoardSettingsState settings) => new()
+    {
+        Scale = settings.ToolbarScale,
+        Radius = settings.ToolbarRadius,
+        BorderThickness = settings.ToolbarBorderThickness,
+        BorderColor = settings.ToolbarBorderColor,
+        BackgroundColor = settings.ToolbarBackgroundColor,
+        BackgroundOpacity = settings.ToolbarBackgroundOpacity,
+        BackgroundColorCleared = settings.ToolbarBackgroundColorCleared,
+        Glass = settings.ToolbarGlass,
+        Blur = settings.ToolbarBlur
+    };
+
+    public void CopyFrom(BoardSettingsState settings)
+    {
+        Scale = settings.ToolbarScale;
+        Radius = settings.ToolbarRadius;
+        BorderThickness = settings.ToolbarBorderThickness;
+        BorderColor = settings.ToolbarBorderColor;
+        BackgroundColor = settings.ToolbarBackgroundColor;
+        BackgroundOpacity = settings.ToolbarBackgroundOpacity;
+        BackgroundColorCleared = settings.ToolbarBackgroundColorCleared;
+        Glass = settings.ToolbarGlass;
+        Blur = settings.ToolbarBlur;
+    }
 }
 
 /// <summary>桌面磁贴在工作区里的自由位置。宽高仍用科目自己的尺寸，这里只记左上角。</summary>

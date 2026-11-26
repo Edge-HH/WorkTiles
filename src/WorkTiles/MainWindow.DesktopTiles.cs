@@ -311,7 +311,7 @@ public sealed partial class MainWindow
             }
             WatchDesktopSubject(subject);
             window.ApplyTheme(theme);
-            window.ApplyBackgroundSettings(_settings.TileBackground);
+            window.ApplyBackgroundSettings(_settings.EffectiveDesktopTileLook().Background);
             ApplyDesktopCorner(window);
             window.SetEditing(editing);
             window.TitleText = subject.Name;
@@ -369,6 +369,7 @@ public sealed partial class MainWindow
             DataContext = subject,
             LockBoardGeometry = true
         };
+        tile.LookSource = () => _settings.EffectiveDesktopTileLook();
         tile.ApplyAppearance(_settings);
         tile.DesktopDragStarted += () =>
         {
@@ -403,7 +404,7 @@ public sealed partial class MainWindow
         };
         window.HostDoubleClick += () => BeginDesktopEdit();
         window.Attach(tile, popup);
-        window.ApplyBackgroundSettings(_settings.TileBackground);
+        window.ApplyBackgroundSettings(_settings.EffectiveDesktopTileLook().Background);
         ApplyDesktopCorner(window);
         window.SetEditing(DesktopEditActive);
         ArrangeDesktopTiles();
@@ -530,32 +531,36 @@ public sealed partial class MainWindow
     private void ApplyDesktopCommandChrome()
     {
         if (_desktopCommands is null) return;
-        double scale = Math.Clamp(_settings.ToolbarScale, .6, 2);
+        DesktopCommandLook look = _settings.EffectiveDesktopCommandLook();
+        double scale = Math.Clamp(look.Scale, .6, 2);
+        double border = Math.Clamp(look.BorderThickness, 0, 20);
         double padding = 7 * scale;
         double button = 40 * scale;
-        double outer = button + padding * 2 + IslandBorderThickness * 2;
-        double pixelRadius = ToolbarChrome.CornerRadius(_settings.ToolbarRadius, outer, outer);
+        double outer = button + padding * 2 + border * 2;
+        double pixelRadius = ToolbarChrome.CornerRadius(look.Radius, outer, outer);
         double radius = MatchToolbarButtonRadius(pixelRadius, padding, button, button).TopLeft;
+        // 不用主界面控制窗的画笔：毛玻璃画笔会被原地更新，桌面自定义不能改到主界面。
         _desktopCommands.ApplyToolbarChrome(
-            CreateToolbarBackground(FloatingToolbar?.Background),
-            CreateToolbarBorder(_settings.ToolbarBorderColor),
-            IslandBorderThickness,
+            SurfaceBackground.Create(look.BackgroundColor, look.BackgroundOpacity, look.BackgroundColorCleared, look.Glass, look.Blur),
+            CreateToolbarBorder(look.BorderColor),
+            border,
             pixelRadius,
             radius,
             button,
             16 * scale,
-            _settings.ToolbarGlass,
-            _settings.ToolbarBackgroundColor,
-            _settings.ToolbarBackgroundOpacity,
-            _settings.ToolbarBackgroundColorCleared,
-            _settings.ToolbarBlur);
+            look.Glass,
+            look.BackgroundColor,
+            look.BackgroundOpacity,
+            look.BackgroundColorCleared,
+            look.Blur);
     }
 
     private void ApplyDesktopTileBackdrops()
     {
+        BackgroundSettings background = _settings.EffectiveDesktopTileLook().Background;
         foreach (DesktopTileWindow window in _desktopWindows.Values)
         {
-            window.ApplyBackgroundSettings(_settings.TileBackground);
+            window.ApplyBackgroundSettings(background);
             ApplyDesktopCorner(window);
         }
     }
@@ -563,7 +568,8 @@ public sealed partial class MainWindow
     private void ApplyDesktopCorner(DesktopTileWindow window)
     {
         double zoom = DesktopZoom;
-        int radius = (int)Math.Round(Math.Clamp(_settings.TileCornerRadius, 0, 40) * zoom * Math.Max(1, _desktopScale));
+        double corner = _settings.DesktopTileLookSynced ? _settings.TileCornerRadius : _settings.DesktopTileLook.CornerRadius;
+        int radius = (int)Math.Round(Math.Clamp(corner, 0, 40) * zoom * Math.Max(1, _desktopScale));
         window.SetRegionRadius(radius);
     }
 
