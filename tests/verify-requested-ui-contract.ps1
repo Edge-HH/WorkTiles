@@ -88,9 +88,16 @@ if ($xaml -notmatch 'x:Name="DockedAxisLockButton"' -or
     $xaml -notmatch 'Symbol="CenterAxis"' -or
     $state -notmatch 'DockedWidgetAxisLock' -or
     $layout -notmatch 'DockedWidgetAxisLock' -or
+    $layout -notmatch 'DockedAxisLockButton\.Visibility\s*=\s*split\s*&&\s*_isEditing' -or
     $widgetLayout -notmatch 'ScaleToContainer' -or
-    $widgetLayout -notmatch 'MoveDocked') {
-    $failures.Add('分屏时钟区缺少中轴线锁定开关，或窗口缩放没有按容器比例调整组件位置。')
+    $widgetLayout -notmatch 'MoveDocked' -or
+    $widgetLayout -notmatch 'CenterSnapReleaseDistance' -or
+    $widgetLayout -notmatch 'CanSnapX' -or
+    $widgetLayout -notmatch 'AspectResizeState' -or
+    $layout -notmatch 'BeginAspectResize' -or
+    $widgetLayout -notmatch 'ResizeAspect' -or
+    $layout -notmatch 'ResizeAspect') {
+    $failures.Add('分屏编辑态缺少中轴线锁定开关、平衡吸附，或组件缩放没有保持内容比例并紧贴外框。')
 }
 if ($xaml -notmatch 'Content="网格" Tag="AppearanceGrid"' -or
     $xaml -notmatch 'Content="网格" Tag="AppearanceGrid"[^\r\n]*<icons:FluentIcon Symbol="Grid"' -or

@@ -115,6 +115,32 @@ WidgetLayout.MoveVerticallyCentered(centered, 35, 1000, 800);
 Check(centered.X == 340 && centered.Y == 135, "受约束组件只能沿中轴线上下移动");
 WidgetLayout.ResizeCentered(centered, 80, 0, 2, 200, 1000, 800);
 Check(centered.Width == 400 && centered.Height == 200 && centered.X == 300, "受约束组件应等比缩放并保持中轴居中");
+var aspectResize = new RegionPlacement { X = 120, Y = 100, Width = 300, Height = 150 };
+WidgetLayout.ResizeAspect(aspectResize, 30, 0, 2, 160, 1000, 800, centerX: false);
+Check(aspectResize.X == 120 && Math.Abs(aspectResize.Width - 324) < .01 && Math.Abs(aspectResize.Height - 162) < .01,
+    "自由组件缩放应把指针位移投影到内容对角线并保持左上锚点");
+WidgetLayout.ResizeAspect(aspectResize, 0, -10, 2, 160, 1000, 800, centerX: false);
+Check(Math.Abs(aspectResize.Width - 320) < .01 && Math.Abs(aspectResize.Height - 160) < .01 &&
+    Math.Abs(aspectResize.Width / aspectResize.Height - 2) < .001,
+    "纵向拖动缩放手柄时外框仍紧贴内容比例");
+var centeredAspect = new RegionPlacement { X = 100, Y = 100, Width = 300, Height = 150 };
+WidgetLayout.ResizeAspect(centeredAspect, 30, 0, 2, 160, 1000, 800, centerX: true);
+Check(Math.Abs(centeredAspect.Width - 324) < .01 && Math.Abs(centeredAspect.Height - 162) < .01 &&
+    Math.Abs(centeredAspect.X - 338) < .01,
+    "锁定中轴线时缩放保持比例并围绕中轴线");
+var gestureResize = new RegionPlacement { X = 120, Y = 100, Width = 300, Height = 150 };
+var gestureResizeState = new WidgetLayout.AspectResizeState();
+WidgetLayout.BeginAspectResize(gestureResize, gestureResizeState);
+WidgetLayout.ResizeAspect(gestureResize, 2, 1, 2, 160, 1000, 800, centerX: false, state: gestureResizeState);
+WidgetLayout.ResizeAspect(gestureResize, 0, 8, 2, 160, 1000, 800, centerX: false, state: gestureResizeState);
+Check(Math.Abs(gestureResize.Width - 305.2) < .01 && Math.Abs(gestureResize.Height - 152.6) < .01,
+    "缩放手势应累计指针位移并对角线投影，不能因后续纵向抖动突然放大");
+var verticalResize = new RegionPlacement { X = 120, Y = 100, Width = 300, Height = 150 };
+var verticalResizeState = new WidgetLayout.AspectResizeState();
+WidgetLayout.BeginAspectResize(verticalResize, verticalResizeState);
+WidgetLayout.ResizeAspect(verticalResize, 1, 3, 2, 160, 1000, 800, centerX: false, state: verticalResizeState);
+Check(Math.Abs(verticalResize.Width - 302) < .01 && Math.Abs(verticalResize.Height - 151) < .01,
+    "纵向拖动也通过投影平滑等比缩放，不会按宽高比倍数突跳");
 var scaled = new RegionPlacement { X = 100, Y = 80, Width = 200, Height = 100, LayoutWidth = 1000, LayoutHeight = 800 };
 WidgetLayout.ScaleToContainer(scaled, 500, 400);
 Check(scaled.X == 50 && scaled.Y == 40 && scaled.Width == 100 && scaled.Height == 50, "窗口缩放时组件按容器比例缩放位置和大小");
@@ -123,9 +149,40 @@ Check(scaled.X == 100 && scaled.Y == 80 && scaled.Width == 200 && scaled.Height 
 var docked = new RegionPlacement { X = 120, Y = 100, Width = 200, Height = 100 };
 WidgetLayout.MoveDocked(docked, 10, 12, 1000, 800, true, out bool axisX, out bool axisY);
 Check(docked.X == 400 && docked.Y == 112 && axisX && !axisY, "锁定中轴线时组件只沿竖直中轴线上下移动");
-var freeDocked = new RegionPlacement { X = 395, Y = 100, Width = 200, Height = 100 };
-WidgetLayout.MoveDocked(freeDocked, 0, 0, 1000, 800, false, out bool snapX, out bool snapY);
+var freeDocked = new RegionPlacement { X = 390, Y = 100, Width = 200, Height = 100 };
+WidgetLayout.MoveDocked(freeDocked, 2, 0, 1000, 800, false, out bool snapX, out bool snapY);
 Check(freeDocked.X == 400 && snapX && !snapY, "关闭锁定后靠近中轴线仍会吸附");
+var releasedX = new RegionPlacement { X = 400, Y = 100, Width = 200, Height = 100 };
+var releasedXDrag = new WidgetLayout.DockedDragState();
+WidgetLayout.BeginDockedDrag(releasedX, 1000, 800, releasedXDrag);
+bool releasedSnapX = true;
+int releaseSteps = (int)Math.Round(WidgetLayout.CenterSnapReleaseDistance);
+for (int i = 0; i < releaseSteps; i++)
+    WidgetLayout.MoveDocked(releasedX, 1, 0, 1000, 800, false, releasedXDrag, out releasedSnapX, out _);
+Check(Math.Abs(releasedX.X - (400 + WidgetLayout.CenterSnapReleaseDistance)) < .001 && !releasedSnapX,
+    "向外移动与触发距离相同的距离后摆脱竖直中轴线吸附");
+WidgetLayout.MoveDocked(releasedX, 0, 1, 1000, 800, false, releasedXDrag, out _, out _);
+Check(Math.Abs(releasedX.X - (400 + WidgetLayout.CenterSnapReleaseDistance)) < .001,
+    "沿另一根轴移动时不会重新吸回已离开的中轴线");
+for (int i = 0; i < 10; i++)
+    WidgetLayout.MoveDocked(releasedX, 1, 0, 1000, 800, false, releasedXDrag, out _, out _);
+WidgetLayout.MoveDocked(releasedX, -12, 0, 1000, 800, false, releasedXDrag, out bool resnapX, out _);
+Check(releasedX.X == 400 && resnapX, "离开吸附范围后再靠近中线仍能正常吸附");
+var releasedY = new RegionPlacement { X = 100, Y = 350, Width = 200, Height = 100 };
+var releasedYDrag = new WidgetLayout.DockedDragState();
+WidgetLayout.BeginDockedDrag(releasedY, 1000, 800, releasedYDrag);
+bool releasedSnapY = true;
+for (int i = 0; i < releaseSteps; i++)
+    WidgetLayout.MoveDocked(releasedY, 0, 1, 1000, 800, false, releasedYDrag, out _, out releasedSnapY);
+Check(Math.Abs(releasedY.Y - (350 + WidgetLayout.CenterSnapReleaseDistance)) < .001 && !releasedSnapY,
+    "向外移动与触发距离相同的距离后摆脱水平中轴线吸附");
+var quickResnap = new RegionPlacement { X = 400, Y = 100, Width = 200, Height = 100 };
+var quickResnapDrag = new WidgetLayout.DockedDragState();
+WidgetLayout.BeginDockedDrag(quickResnap, 1000, 800, quickResnapDrag);
+for (int i = 0; i < releaseSteps; i++)
+    WidgetLayout.MoveDocked(quickResnap, 1, 0, 1000, 800, false, quickResnapDrag, out _, out _);
+WidgetLayout.MoveDocked(quickResnap, -2, 0, 1000, 800, false, quickResnapDrag, out bool quickSnapX, out _);
+Check(quickResnap.X == 400 && quickSnapX, "松开吸附后反向靠近内圈可立即重新吸附");
 var freeAspect = new RegionPlacement { X = 120, Y = 100, Width = 400, Height = 200 };
 WidgetLayout.FitAspect(freeAspect, 2, 200, 1000, 800, centerX: false);
 Check(freeAspect.X == 120 && freeAspect.Width == 400 && freeAspect.Height == 200, "关闭锁定后窗口缩放不会把组件拉回中轴线");

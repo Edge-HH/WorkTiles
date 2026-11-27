@@ -133,8 +133,8 @@ public sealed partial class MainWindow
                 SplitLayoutCommands.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
             if (DockedAxisLockButton is not null)
             {
-                // 中轴线锁定只在分屏模式的时钟区左下角出现；状态与设置保持同步。
-                DockedAxisLockButton.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
+                // 中轴线锁定按钮只在分屏模式的编辑状态出现；查看时组件不可拖动，不需要占用时钟区。
+                DockedAxisLockButton.Visibility = split && _isEditing ? Visibility.Visible : Visibility.Collapsed;
                 bool axisLock = _settings.DockedWidgetAxisLock;
                 if (DockedAxisLockButton.IsChecked != axisLock) DockedAxisLockButton.IsChecked = axisLock;
                 UpdateAxisLockHint();
@@ -229,9 +229,11 @@ public sealed partial class MainWindow
                     _ => new() { X = x, Y = 340, Width = 240, Height = 100 }
                 };
             }
-            // 窗口尺寸变化时按比例缩放自由布局组件，和停靠组件保持一致。
+            // 窗口尺寸变化时先按比例缩放，再按内容宽高比收紧外框，避免 Viewbox 内留下空白。
             WidgetLayout.ScaleToContainer(placement, DisplayRoot.ActualWidth, DisplayRoot.ActualHeight);
-            view.Width = Math.Max(80, placement.Width); view.Height = Math.Max(48, placement.Height);
+            WidgetLayout.FitAspect(placement, FreeWidgetAspect(key, view), WidgetLayout.MinimumScaledWidth,
+                DisplayRoot.ActualWidth, DisplayRoot.ActualHeight, centerX: false);
+            view.Width = Math.Max(1, placement.Width); view.Height = Math.Max(1, placement.Height);
             Canvas.SetLeft(view, Math.Max(0, placement.X)); Canvas.SetTop(view, Math.Max(0, placement.Y));
         }
     }
@@ -250,6 +252,21 @@ public sealed partial class MainWindow
         if (!_isLoaded || _layingOut || _settings.LayoutMode is not ("Split" or "Clock")) return;
         ApplyDockedClockLayout();
         UpdateLayoutHandles();
+    }
+
+    /// <summary>读取组件内容的自然宽高比；Viewbox 嵌套时一直取到真正的可视内容。</summary>
+    private static double ContentAspect(UIElement? content, double fallback)
+    {
+        while (content is Viewbox { Child: UIElement nested }) content = nested;
+        if (content is FrameworkElement element && element.DesiredSize.Width > 1 && element.DesiredSize.Height > 1)
+            return element.DesiredSize.Width / element.DesiredSize.Height;
+        return fallback;
+    }
+
+    private static double FreeWidgetAspect(string key, Viewbox view)
+    {
+        double fallback = key switch { "Clock" => DockedClockFallbackAspectRatio, "Weather" => 2.8, "Noise" => 3.2, _ => 1.5 };
+        return Math.Clamp(ContentAspect(view.Child, fallback), .2, 20);
     }
 
     private double DockedComponentsAspectRatio
@@ -345,10 +362,14 @@ public sealed partial class MainWindow
         foreach (var (key, view) in _freeWidgets)
         {
             RegionPlacement placement = _settings.Widgets[key];
+            double contentAspect = FreeWidgetAspect(key, view);
+            WidgetLayout.AspectResizeState resizeState = new();
             AddWidgetInteractionLayer(view, placement, key == "Clock" ? "时钟" : "组件",
                 (dx, dy) => WidgetLayout.Move(placement, dx, dy, DisplayRoot.ActualWidth, DisplayRoot.ActualHeight),
-                (dx, dy) => WidgetLayout.Resize(placement, dx, dy, DisplayRoot.ActualWidth, DisplayRoot.ActualHeight),
-                ScheduleSave);
+                (dx, dy) => WidgetLayout.ResizeAspect(placement, dx, dy, contentAspect, WidgetLayout.MinimumScaledWidth,
+                    DisplayRoot.ActualWidth, DisplayRoot.ActualHeight, centerX: false, state: resizeState),
+                ScheduleSave,
+                startResize: () => WidgetLayout.BeginAspectResize(placement, resizeState));
         }
     }
 
@@ -485,18 +506,19 @@ public sealed partial class MainWindow
         if (!_settings.Widgets.TryGetValue(key, out RegionPlacement? placement)) return;
         double width = ClockPanel.ActualWidth, height = ClockPanel.ActualHeight;
         bool lockAxis = _settings.DockedWidgetAxisLock;
+        WidgetLayout.DockedDragState dragState = new();
+        WidgetLayout.AspectResizeState resizeState = new();
         AddWidgetInteractionLayer(view, placement, label,
             (dx, dy) =>
             {
-                WidgetLayout.MoveDocked(placement, dx, dy, width, height, lockAxis, out bool snappedX, out bool snappedY);
+                WidgetLayout.MoveDocked(placement, dx, dy, width, height, lockAxis, dragState, out bool snappedX, out bool snappedY);
                 // 锁定中轴线时始终画出竖直轴；自由拖动时只在吸附到某条轴线时显示辅助线。
                 DrawClockAxisGuides(lockAxis || snappedX, snappedY, width, height);
             },
             (dx, dy) =>
             {
-                // 锁定时保持内容比例并围绕中轴线缩放；解锁后允许自由调整宽高。
-                if (lockAxis) WidgetLayout.ResizeCentered(placement, dx, dy, aspectRatio, minimumWidth, width, height);
-                else WidgetLayout.Resize(placement, dx, dy, width, height);
+                // 无论是否锁定都保持内容宽高比；锁定时围绕中轴线，解锁时保持左上锚点。
+                WidgetLayout.ResizeAspect(placement, dx, dy, aspectRatio, minimumWidth, width, height, centerX: lockAxis, state: resizeState);
             },
             () =>
             {
@@ -505,12 +527,14 @@ public sealed partial class MainWindow
                 ScheduleSave();
             },
             lockAxis ? $"拖动{label}上下移动（锁定中轴线）" : $"拖动{label}自由移动（靠近中轴线会吸附）",
-            lockAxis ? $"缩放{label}（保持比例）" : $"缩放{label}");
+            $"缩放{label}（保持内容比例）",
+            startDrag: () => WidgetLayout.BeginDockedDrag(placement, width, height, dragState),
+            startResize: () => WidgetLayout.BeginAspectResize(placement, resizeState));
     }
 
     private void AddWidgetInteractionLayer(Viewbox view, RegionPlacement placement, string label,
         Action<double, double> movePlacement, Action<double, double> resizePlacement, Action complete,
-        string? moveHint = null, string? resizeHint = null)
+        string? moveHint = null, string? resizeHint = null, Action? startDrag = null, Action? startResize = null)
     {
         Grid interactionLayer = new() { Width = placement.Width, Height = placement.Height, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)) };
         // 选中框和缩放手柄同步出现：指针进入组件后描一圈表示当前选中的组件，离开组件再一起收起。
@@ -547,13 +571,13 @@ public sealed partial class MainWindow
             movePlacement(args.HorizontalChange, args.VerticalChange);
             PositionInteraction();
         };
-        move.DragStarted += (_, _) => { dragging = true; SetSelected(true); };
+        move.DragStarted += (_, _) => { startDrag?.Invoke(); dragging = true; SetSelected(true); };
         resize.DragDelta += (_, args) =>
         {
             resizePlacement(args.HorizontalChange, args.VerticalChange);
             PositionInteraction();
         };
-        resize.DragStarted += (_, _) => { dragging = true; SetSelected(true); };
+        resize.DragStarted += (_, _) => { startResize?.Invoke(); dragging = true; SetSelected(true); };
         void CompleteDrag()
         {
             dragging = false;

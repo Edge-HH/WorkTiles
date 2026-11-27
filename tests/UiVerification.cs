@@ -1529,6 +1529,17 @@ public sealed partial class MainWindow
         _appWindow!.Resize(new Windows.Graphics.SizeInt32(2400, 1500));
         await NextLayoutAsync();
         await VerifyFullScreenHintAsync(output, check);
+        FinishEditing();
+        _settings.LayoutMode = "Split";
+        ApplyExtendedSettings();
+        ShowBoard();
+        await NextLayoutAsync();
+        check(DockedAxisLockButton.Visibility == Visibility.Collapsed,
+            "component center-axis lock stays hidden while viewing");
+        EnterEditing();
+        await NextLayoutAsync();
+        check(DockedAxisLockButton.Visibility == Visibility.Visible,
+            "component center-axis lock appears when editing a split layout");
         foreach (string mode in new[] { "Split", "Board", "Clock", "Free", "Split" })
         {
             _settings.LayoutMode = mode; ApplyExtendedSettings(); ShowBoard(); EnterEditing(); await NextLayoutAsync();
@@ -1536,7 +1547,7 @@ public sealed partial class MainWindow
             check(BoardWorkspace.Visibility == (mode == "Clock" ? Visibility.Collapsed : Visibility.Visible), mode + " board visibility");
             check(_freeWidgets.Count == (mode == "Free" ? 3 : 0), mode + " independent component hosts");
             check(DockedAxisLockButton.Visibility == (mode == "Split" ? Visibility.Visible : Visibility.Collapsed),
-                mode + " component center-axis lock only appears in split mode");
+                mode + " component center-axis lock only appears in editing split mode");
             check(_settings.DockedWidgetAxisLock && DockedAxisLockButton.IsChecked == true,
                 mode + " component center-axis lock is on by default");
             if (mode == "Split")
@@ -1544,6 +1555,14 @@ public sealed partial class MainWindow
                 DockedAxisLockButton.IsChecked = false;
                 await NextLayoutAsync();
                 check(!_settings.DockedWidgetAxisLock, "split clock axis lock can be switched off");
+                RegionPlacement unlockedClock = _settings.Widgets["SplitClock"];
+                double clockAspect = DockedClockAspectRatio;
+                WidgetLayout.ResizeAspect(unlockedClock, 30, 0, clockAspect, WidgetLayout.MinimumScaledWidth,
+                    ClockPanel.ActualWidth, ClockPanel.ActualHeight, centerX: false);
+                ApplyDockedClockLayout();
+                check(Math.Abs(unlockedClock.Width / unlockedClock.Height - clockAspect) < .01 &&
+                    Math.Abs(ClockContentView.Width / ClockContentView.Height - clockAspect) < .01,
+                    "unlocked docked widget resize keeps the outer frame tight to its content ratio");
                 DockedAxisLockButton.IsChecked = true;
                 await NextLayoutAsync();
                 check(_settings.DockedWidgetAxisLock, "split clock axis lock can be switched back on");
@@ -1646,12 +1665,21 @@ public sealed partial class MainWindow
             {
                 check(FreeLayoutHandles.Children.OfType<Grid>().Count() == 3, "each free widget has a full-surface move layer and hover resize box");
                 WidgetLayout.Move(_settings.Widgets["Clock"], 15, 30, DisplayRoot.ActualWidth, DisplayRoot.ActualHeight);
-                WidgetLayout.Resize(_settings.Widgets["Weather"], 15, 20, DisplayRoot.ActualWidth, DisplayRoot.ActualHeight);
+                double weatherAspect = FreeWidgetAspect("Weather", _freeWidgets["Weather"]);
+                WidgetLayout.ResizeAspect(_settings.Widgets["Weather"], 15, 20, weatherAspect, WidgetLayout.MinimumScaledWidth,
+                    DisplayRoot.ActualWidth, DisplayRoot.ActualHeight, centerX: false);
                 ApplyExtendedSettings(); await NextLayoutAsync(); SaveStateNow();
                 var persisted = _projectStore.Load().Settings;
                 check(persisted.Widgets["Clock"].X == _settings.Widgets["Clock"].X && persisted.Widgets["Weather"].Height == _settings.Widgets["Weather"].Height, "widget movement and resizing reach actual persisted settings");
                 double hostClockWidth = _freeWidgets["Clock"].Width, modelClockWidth = _settings.Widgets["Clock"].Width;
                 check(Math.Abs(hostClockWidth - modelClockWidth) < .01, $"widget host follows placement dimensions ({hostClockWidth:R} vs {modelClockWidth:R})");
+                foreach (var (key, view) in _freeWidgets)
+                {
+                    RegionPlacement widget = _settings.Widgets[key];
+                    double aspect = FreeWidgetAspect(key, view);
+                    check(Math.Abs(widget.Width / widget.Height - aspect) < .01 && Math.Abs(view.Width / view.Height - aspect) < .01,
+                        key + " resize frame hugs the component content ratio in free mode");
+                }
             }
             await SaveVisualAsync(RootShell, Path.Combine(output, "layout-" + mode + ".png"), (int)RootShell.ActualWidth, (int)RootShell.ActualHeight);
         }
