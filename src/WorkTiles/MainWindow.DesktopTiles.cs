@@ -215,6 +215,7 @@ public sealed partial class MainWindow
     private void NoteTileContentChanged(SubjectTileControl source)
     {
         _tileContentSource = source;
+        ScheduleDesktopContentFit();
         ScheduleSave();
     }
 
@@ -469,6 +470,7 @@ public sealed partial class MainWindow
                 placement.Name = subject.Name;
                 break;
             }
+            _settings.RenameDesktopTileSize(key, subject.Id, previous, subject.Name);
             ScheduleSave();
         }
         _desktopKnownNames[subject] = subject.Name;
@@ -509,6 +511,93 @@ public sealed partial class MainWindow
     }
 
     private double DesktopZoom => _settings.DesktopTilesZoom is >= 0.5 and <= 2 ? _settings.DesktopTilesZoom : 1;
+
+    /// <summary>同步时用作业板宽高；关闭后用本机记录。缺记录时记下当前作业板尺寸，之后主界面再改不会带到桌面。</summary>
+    private (double Width, double Height) DesktopTileDipSize(SubjectBoard subject)
+    {
+        // 拖动或缩放期间不改尺寸，避免每帧测量；松手后的重排会再按内容量一次。
+        if (DesktopTileAutoSizeActive && !_fittingDesktopContent
+            && _desktopDragSubject is null && _desktopResizeSubject is null)
+            TryApplyDesktopContentSize(subject);
+        double width = subject.TileWidth;
+        double height = subject.TileHeight;
+        if (!_settings.DesktopTileSizeSynced && CurrentProject is { } project)
+        {
+            string key = project.Id.ToString();
+            if (_settings.EnsureDesktopTileSize(key, subject.Id, subject.Name, width, height))
+                ScheduleSave();
+            (width, height) = _settings.DesktopTileSizeFor(key, subject.Id, subject.Name, width, height);
+        }
+        return ClampDesktopTileSize(width, height);
+    }
+
+    private static (double Width, double Height) ClampDesktopTileSize(double width, double height) =>
+    (
+        Math.Clamp(double.IsFinite(width) ? width : SubjectTileControl.MinimumTileWidth, SubjectTileControl.MinimumTileWidth, SubjectTileControl.MaximumTileWidth),
+        Math.Clamp(double.IsFinite(height) ? height : SubjectTileControl.MinimumTileHeight, SubjectTileControl.MinimumTileHeight, SubjectTileControl.MaximumTileHeight)
+    );
+
+    private bool _fittingDesktopContent;
+    private DispatcherTimer? _desktopContentFitTimer;
+
+    /// <summary>关闭与主界面磁贴同步大小后，桌面磁贴才按内容自动收放。</summary>
+    private bool DesktopTileAutoSizeActive =>
+        _settings.DesktopTilesEnabled && !_settings.DesktopTileSizeSynced && _settings.DesktopTileAutoSize;
+
+    private DispatcherTimer CreateDesktopContentFitTimer()
+    {
+        DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(180) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            FitDesktopTilesToContent();
+        };
+        return timer;
+    }
+
+    private void ScheduleDesktopContentFit()
+    {
+        if (!DesktopTileAutoSizeActive) return;
+        _desktopContentFitTimer ??= CreateDesktopContentFitTimer();
+        _desktopContentFitTimer.Stop();
+        _desktopContentFitTimer.Start();
+    }
+
+    /// <summary>按内容改桌面磁贴自己的宽高并重排。同步关闭时主界面尺寸不受影响。</summary>
+    private void FitDesktopTilesToContent()
+    {
+        if (!DesktopTileAutoSizeActive || _fittingDesktopContent) return;
+        _fittingDesktopContent = true;
+        try
+        {
+            bool changed = false;
+            foreach (SubjectBoard subject in ViewModel.Subjects.ToList())
+                if (TryApplyDesktopContentSize(subject)) changed = true;
+            if (!changed) return;
+            ArrangeDesktopTiles();
+            ScheduleSave();
+        }
+        finally { _fittingDesktopContent = false; }
+    }
+
+    /// <summary>按内容测量一块桌面磁贴，写入本机尺寸记录。不改作业板上的尺寸，返回尺寸是否有变化。</summary>
+    private bool TryApplyDesktopContentSize(SubjectBoard subject)
+    {
+        if (!DesktopTileAutoSizeActive || CurrentProject is not { } project) return false;
+        SubjectTileControl? tile = null;
+        if (_desktopWindows.TryGetValue(subject, out DesktopTileWindow? window))
+            tile = window.Tile;
+        tile ??= FindTile(subject);
+        if (tile is null) return false;
+        // 另一边的编辑可能还没同步到这块控件，先按模型刷新再量，避免量到旧内容。
+        tile.ReloadFromModel();
+        (double measuredWidth, double measuredHeight) = tile.MeasureContentSize(SubjectTileControl.MaximumTileWidth, true);
+        (double width, double height) = ClampDesktopTileSize(measuredWidth, measuredHeight);
+        string key = project.Id.ToString();
+        (double oldWidth, double oldHeight) = _settings.DesktopTileSizeFor(key, subject.Id, subject.Name, subject.TileWidth, subject.TileHeight);
+        _settings.RememberDesktopTileSize(key, subject.Id, subject.Name, width, height);
+        return Math.Abs(oldWidth - width) > 0.5 || Math.Abs(oldHeight - height) > 0.5;
+    }
 
     private double DesktopLayoutGap => double.IsFinite(_settings.AutoLayoutGap) ? Math.Max(0, _settings.AutoLayoutGap) : 0;
 
@@ -628,7 +717,10 @@ public sealed partial class MainWindow
         double zoom = DesktopZoom;
         List<DesktopTileSlot> slots = new(_desktopSubjects.Count);
         foreach (SubjectBoard item in _desktopSubjects)
-            slots.Add(new DesktopTileSlot(0, 0, Math.Max(1, item.TileWidth * zoom), Math.Max(1, item.TileHeight * zoom)));
+        {
+            (double width, double height) = DesktopTileDipSize(item);
+            slots.Add(new DesktopTileSlot(0, 0, Math.Max(1, width * zoom), Math.Max(1, height * zoom)));
+        }
         DesktopWorkArea work = new(_desktopWorkX / scale, _desktopWorkY / scale, _desktopWorkWidth / scale, _desktopWorkHeight / scale);
         DesktopInsertionGuide? guide = null;
         bool hasCursor = DesktopWindowNative.GetCursorPos(out DesktopWindowNative.DesktopPoint point);
@@ -719,14 +811,15 @@ public sealed partial class MainWindow
         double zoom = DesktopZoom;
         if (_settings.DesktopTilesAutoArrange)
         {
-            List<(double Width, double Height)> sizes = _desktopSubjects.Select(subject => (subject.TileWidth * zoom, subject.TileHeight * zoom)).ToList();
+            List<(double Width, double Height)> dips = _desktopSubjects.Select(DesktopTileDipSize).ToList();
+            List<(double Width, double Height)> sizes = dips.Select(size => (size.Width * zoom, size.Height * zoom)).ToList();
             IReadOnlyList<DesktopTileSlot> slots = DesktopTileLayout.Arrange(sizes, work, DesktopLayoutGap);
             for (int i = 0; i < slots.Count && i < _desktopSubjects.Count; i++)
             {
                 DesktopTileSlot slot = slots[i];
                 RectInt32 pixels = ToPixels(slot);
                 _desktopSlots.Add(pixels);
-                PlaceSubjectWindow(_desktopSubjects[i], pixels, _desktopSubjects[i].TileWidth, _desktopSubjects[i].TileHeight);
+                PlaceSubjectWindow(_desktopSubjects[i], pixels, dips[i].Width, dips[i].Height);
                 RememberArrangedSlot(_desktopSubjects[i], slot);
             }
         }
@@ -787,8 +880,9 @@ public sealed partial class MainWindow
         }
         foreach (SubjectBoard subject in _desktopSubjects)
         {
-            double width = subject.TileWidth * zoom;
-            double height = subject.TileHeight * zoom;
+            (double dipWidth, double dipHeight) = DesktopTileDipSize(subject);
+            double width = dipWidth * zoom;
+            double height = dipHeight * zoom;
             DesktopTilePlacement? saved = FindPlacement(pool, subject);
             if (saved is not null) { pool.Remove(saved); saved.Id = subject.Id; }
             else
@@ -817,7 +911,7 @@ public sealed partial class MainWindow
                 ScheduleSave();
             }
             occupied.Add((saved.X, saved.Y, width, height));
-            PlaceSubjectWindow(subject, pixels, subject.TileWidth, subject.TileHeight);
+            PlaceSubjectWindow(subject, pixels, dipWidth, dipHeight);
         }
     }
 
@@ -1102,10 +1196,30 @@ public sealed partial class MainWindow
         RectInt32 bounds = window.PixelBounds;
         double scale = _desktopScale > 0 ? _desktopScale : 1;
         double zoom = DesktopZoom;
-        subject.TileWidth = Math.Clamp(bounds.Width / scale / zoom, SubjectTileControl.MinimumTileWidth, SubjectTileControl.MaximumTileWidth);
-        subject.TileHeight = Math.Clamp(bounds.Height / scale / zoom, SubjectTileControl.MinimumTileHeight, SubjectTileControl.MaximumTileHeight);
-        window.Tile?.FitDisplaySize(subject.TileWidth, subject.TileHeight);
+        (double width, double height) = ClampDesktopTileSize(bounds.Width / scale / zoom, bounds.Height / scale / zoom);
         _desktopResizeSubject = null;
+        if (DesktopTileAutoSizeActive)
+        {
+            // 自动大小开着时手动拖边只是临时显示，松手后回到内容尺寸。
+            TryApplyDesktopContentSize(subject);
+            if (CurrentProject is { } project)
+                (width, height) = _settings.DesktopTileSizeFor(project.Id.ToString(), subject.Id, subject.Name, width, height);
+        }
+        else if (_settings.DesktopTileSizeSynced)
+        {
+            subject.TileWidth = width;
+            subject.TileHeight = height;
+            if (FindTile(subject) is { } board)
+            {
+                board.ApplyModelLayout();
+                Canvas.SetLeft(board, subject.X);
+                Canvas.SetTop(board, subject.Y);
+            }
+            UpdateBoardBounds();
+        }
+        else if (CurrentProject is { } project)
+            _settings.RememberDesktopTileSize(project.Id.ToString(), subject.Id, subject.Name, width, height);
+        window.Tile?.FitDisplaySize(width, height);
         if (!_settings.DesktopTilesAutoArrange) SaveFreePosition(subject, bounds);
         ScheduleSave();
         if (_settings.DesktopTilesAutoArrange) ArrangeDesktopTiles();

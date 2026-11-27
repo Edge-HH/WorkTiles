@@ -14,9 +14,28 @@ public sealed partial class MainWindow
     private void BuildDesktopTileSettings()
     {
         MirrorDesktopLooksIfSynced();
+        // 旧配置可能同时打开两项；自动大小只在关闭同步大小时生效，这里按互斥规则保留自动大小。
+        if (_settings.DesktopTileSizeSynced && _settings.DesktopTileAutoSize)
+            SetDesktopTileSizeSynced(false);
         StackPanel general = SettingsStack();
         general.Children.Add(Toggle("在桌面显示磁贴", _settings.DesktopTilesEnabled, value =>
             _settings.DesktopTilesEnabled = value, read: () => _settings.DesktopTilesEnabled));
+        ToggleSwitch syncSize = Toggle("与主界面磁贴同步大小", _settings.DesktopTileSizeSynced, value =>
+        {
+            // 同步大小和自动大小互斥：勾一个就取消另一个，不把开关禁成不可选。
+            if (value) _settings.DesktopTileAutoSize = false;
+            SetDesktopTileSizeSynced(value);
+        }, DesktopTileSizeSyncChanged, () => _settings.DesktopTileSizeSynced);
+        general.Children.Add(syncSize);
+        general.Children.Add(Note("开启后，拖动桌面磁贴或主界面磁贴的边缘都会同时改变另一边的宽高。关闭后两边各自记住尺寸，改一边不会带动另一边。右下角缩放仍然只影响桌面显示。"));
+        ToggleSwitch autoSize = Toggle("自动设置桌面磁贴大小", _settings.DesktopTileAutoSize, value =>
+        {
+            // 勾选自动大小时自动取消同步大小，让桌面磁贴按自己的内容收放。
+            if (value) SetDesktopTileSizeSynced(false);
+            _settings.DesktopTileAutoSize = value;
+        }, DesktopTileAutoSizeChanged, () => _settings.DesktopTileAutoSize);
+        general.Children.Add(autoSize);
+        general.Children.Add(Note("关闭与主界面磁贴同步大小后可用。开启后桌面磁贴按标题、作业、图片和笔迹收放宽高，主界面磁贴保持自己的尺寸；拖动边缘只能临时改大小，松手后回到内容尺寸。"));
         general.Children.Add(Note("把当前项目的科目显示在 Windows 桌面上。右下角控制窗可以编辑、添加、自动排列、缩放，或返回作业板。关掉自动排列后，磁贴停在拖放的位置。顺序和位置只保存在这台电脑上，不改变作业板上的坐标。"));
         RegisterSettingsPage("DesktopTiles", DesktopTilesSettingsPanel, general, "常规", "在桌面上显示当前项目的科目磁贴。");
 
@@ -167,6 +186,32 @@ public sealed partial class MainWindow
         _settings.DesktopTileLookSynced = synced;
     }
 
+    private void SetDesktopTileSizeSynced(bool synced)
+    {
+        // 关闭时从当前主界面抄一份，避免开关瞬间跳尺寸；之后两边各自改，互不影响。
+        if (!synced && _settings.DesktopTileSizeSynced)
+            _settings.CaptureDesktopTileSizes(CurrentProject?.Id.ToString(), ViewModel.Subjects.Select(subject => (subject.Id, subject.Name, subject.TileWidth, subject.TileHeight)));
+        _settings.DesktopTileSizeSynced = synced;
+    }
+
+    private void DesktopTileSizeSyncChanged()
+    {
+        RefreshSettingControls();
+        foreach (Action refresh in _refreshSettingAvailability) refresh();
+        if (DesktopTileAutoSizeActive) FitDesktopTilesToContent();
+        else ArrangeDesktopTiles();
+        ScheduleSave();
+    }
+
+    private void DesktopTileAutoSizeChanged()
+    {
+        RefreshSettingControls();
+        foreach (Action refresh in _refreshSettingAvailability) refresh();
+        if (DesktopTileAutoSizeActive) FitDesktopTilesToContent();
+        else ArrangeDesktopTiles();
+        ScheduleSave();
+    }
+
     private void SetDesktopCommandLookSynced(bool synced)
     {
         if (!synced && _settings.DesktopCommandLookSynced)
@@ -214,6 +259,7 @@ public sealed partial class MainWindow
     {
         if (DesktopTileLookLocked) return;
         ForEachDesktopTile(tile => tile.ApplyBodyDefaults(_settings));
+        ScheduleDesktopContentFit();
         ScheduleSave();
     }
 

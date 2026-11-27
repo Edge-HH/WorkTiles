@@ -157,6 +157,12 @@ public sealed class BoardSettingsState
     public bool DesktopCommandLookSynced { get; set; } = true;
     /// <summary>关闭同步后，桌面控制窗使用的大小、圆角、边框和背景。</summary>
     public DesktopCommandLook DesktopCommandLook { get; set; } = new();
+    /// <summary>桌面磁贴宽高跟随主界面科目磁贴。默认开启；旧配置缺这个字段时也保持跟随。</summary>
+    public bool DesktopTileSizeSynced { get; set; } = true;
+    /// <summary>关闭与主界面同步大小后，桌面磁贴按内容自动收放宽高。默认关闭；同步开启时不生效。</summary>
+    public bool DesktopTileAutoSize { get; set; }
+    /// <summary>关闭大小同步后，每个项目记住桌面磁贴自己的宽高。同步开启时不参与绘制。</summary>
+    public Dictionary<string, List<DesktopTileSize>> DesktopTileSizes { get; set; } = new();
 
     /// <summary>桌面磁贴实际使用的外观。同步开启时取主界面，关闭时取本机副本。</summary>
     public DesktopTileLook EffectiveDesktopTileLook() =>
@@ -165,6 +171,103 @@ public sealed class BoardSettingsState
     /// <summary>桌面控制窗实际使用的外观。同步开启时取主界面，关闭时取本机副本。</summary>
     public DesktopCommandLook EffectiveDesktopCommandLook() =>
         DesktopCommandLookSynced ? DesktopCommandLook.Capture(this) : DesktopCommandLook;
+
+    /// <summary>
+    /// 桌面磁贴实际使用的宽高。同步开启或还没有独立尺寸时用作业板尺寸；
+    /// 关闭后只读本机记录，主界面随后的改动不会从这里漏进来。
+    /// </summary>
+    public (double Width, double Height) DesktopTileSizeFor(string? projectId, Guid subjectId, string? name, double boardWidth, double boardHeight)
+    {
+        if (DesktopTileSizeSynced || string.IsNullOrEmpty(projectId)) return (boardWidth, boardHeight);
+        DesktopTileSize? saved = FindDesktopTileSize(projectId, subjectId, name);
+        return saved is null ? (boardWidth, boardHeight) : (saved.Width, saved.Height);
+    }
+
+    /// <summary>关闭同步后，缺记录的科目记下当前作业板尺寸。已有记录不覆盖，避免主界面改尺寸时把桌面带走。</summary>
+    public bool EnsureDesktopTileSize(string? projectId, Guid subjectId, string? name, double boardWidth, double boardHeight)
+    {
+        if (DesktopTileSizeSynced || string.IsNullOrEmpty(projectId)) return false;
+        List<DesktopTileSize> list = DesktopTileSizeList(projectId);
+        if (FindDesktopTileSize(list, subjectId, name) is not null) return false;
+        list.Add(new DesktopTileSize { Id = subjectId, Name = name ?? "", Width = boardWidth, Height = boardHeight });
+        return true;
+    }
+
+    /// <summary>把桌面磁贴自己的宽高写入本机记录。不改作业板上的尺寸。</summary>
+    public void RememberDesktopTileSize(string? projectId, Guid subjectId, string? name, double width, double height)
+    {
+        if (string.IsNullOrEmpty(projectId)) return;
+        List<DesktopTileSize> list = DesktopTileSizeList(projectId);
+        DesktopTileSize? saved = FindDesktopTileSize(list, subjectId, name);
+        if (saved is null)
+        {
+            list.Add(new DesktopTileSize { Id = subjectId, Name = name ?? "", Width = width, Height = height });
+            return;
+        }
+        saved.Id = subjectId;
+        saved.Name = name ?? saved.Name;
+        saved.Width = width;
+        saved.Height = height;
+    }
+
+    /// <summary>关闭同步时从当前主界面抄一份尺寸，并丢掉其他项目上一次关闭时留下的旧尺寸，避免再打开时跳回旧大小。</summary>
+    public void CaptureDesktopTileSizes(string? projectId, IEnumerable<(Guid Id, string Name, double Width, double Height)>? subjects)
+    {
+        DesktopTileSizes = new();
+        if (string.IsNullOrEmpty(projectId) || subjects is null) return;
+        foreach ((Guid Id, string Name, double Width, double Height) subject in subjects)
+            RememberDesktopTileSize(projectId, subject.Id, subject.Name, subject.Width, subject.Height);
+    }
+
+    public void RenameDesktopTileSize(string? projectId, Guid subjectId, string? previousName, string? name)
+    {
+        if (string.IsNullOrEmpty(projectId) || DesktopTileSizes is null) return;
+        if (!DesktopTileSizes.TryGetValue(projectId, out List<DesktopTileSize>? list) || list is null) return;
+        DesktopTileSize? saved = FindDesktopTileSize(list, subjectId, previousName);
+        if (saved is null) return;
+        saved.Id = subjectId;
+        saved.Name = name ?? "";
+    }
+
+    public void ForgetDesktopTileSize(string? projectId, Guid subjectId)
+    {
+        if (string.IsNullOrEmpty(projectId) || DesktopTileSizes is null) return;
+        if (!DesktopTileSizes.TryGetValue(projectId, out List<DesktopTileSize>? list) || list is null) return;
+        list.RemoveAll(item => item is not null && item.Id == subjectId);
+    }
+
+    private List<DesktopTileSize> DesktopTileSizeList(string projectId)
+    {
+        DesktopTileSizes ??= new();
+        if (!DesktopTileSizes.TryGetValue(projectId, out List<DesktopTileSize>? list) || list is null)
+        {
+            list = [];
+            DesktopTileSizes[projectId] = list;
+        }
+        return list;
+    }
+
+    private DesktopTileSize? FindDesktopTileSize(string projectId, Guid subjectId, string? name)
+    {
+        if (DesktopTileSizes is null || !DesktopTileSizes.TryGetValue(projectId, out List<DesktopTileSize>? list) || list is null)
+            return null;
+        return FindDesktopTileSize(list, subjectId, name);
+    }
+
+    /// <summary>按稳定 Id 找尺寸；旧数据 Id 为空时按名兜底。</summary>
+    private static DesktopTileSize? FindDesktopTileSize(List<DesktopTileSize> list, Guid subjectId, string? name) =>
+        list.FirstOrDefault(item => item is not null && item.Id == subjectId)
+        ?? list.FirstOrDefault(item => item is not null && item.Id == Guid.Empty && string.Equals(item.Name, name, StringComparison.Ordinal));
+
+    /// <summary>仍被设置引用的背景，含桌面磁贴单独外观。控制窗没有媒体路径。同步开着时副本可能与主界面相同，调用方按路径去重。</summary>
+    public IEnumerable<BackgroundSettings> ReferencedBackgrounds()
+    {
+        yield return TileBackground;
+        yield return SharedBackground;
+        yield return ClockBackground;
+        yield return BoardBackground;
+        if (DesktopTileLook?.Background is { } desktop) yield return desktop;
+    }
 
     /// <summary>再次启动行为只认四种取值；无法识别的旧配置或手改值回到“提示实例重复”。已保存的打开主界面、全屏和不操作仍然有效。</summary>
     public static string NormalizeSecondLaunchAction(string? value) =>
@@ -496,7 +599,17 @@ public sealed class DesktopCommandLook
     }
 }
 
-/// <summary>桌面磁贴在工作区里的自由位置。宽高仍用科目自己的尺寸，这里只记左上角。</summary>
+/// <summary>关闭大小同步后，桌面磁贴自己的宽高。单位与作业板磁贴相同，不含桌面缩放。</summary>
+public sealed class DesktopTileSize
+{
+    /// <summary>科目稳定 Id。旧数据为空时按名匹配兜底。</summary>
+    public Guid Id { get; set; }
+    public string Name { get; set; } = "";
+    public double Width { get; set; }
+    public double Height { get; set; }
+}
+
+/// <summary>桌面磁贴在工作区里的自由位置。宽高不记在这里：同步时用科目尺寸，关闭同步后用 DesktopTileSizes。</summary>
 public sealed class DesktopTilePlacement
 {
     /// <summary>科目稳定 Id。旧数据为空，按名匹配兜底；命中后回填 Id，之后按 Id 匹配。</summary>

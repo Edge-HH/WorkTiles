@@ -381,7 +381,7 @@ public sealed partial class MainWindow
         _editLockHeartbeat.Stop();
     }
 
-    /// <summary>保守清理 90 天前且不再被任何项目、背景设置或最近历史引用的自有媒体副本。</summary>
+    /// <summary>保守清理 90 天前且不再被任何项目、背景设置（含桌面磁贴单独背景）或最近历史引用的自有媒体副本。</summary>
     private void CleanupStaleMediaCopies()
     {
         if (!_storageReady) return;
@@ -394,8 +394,7 @@ public sealed partial class MainWindow
             foreach (ProjectDocument project in _library.Projects)
                 foreach (AttachmentState asset in ProjectStore.Attachments(project))
                     if (!string.IsNullOrWhiteSpace(asset.Path)) referenced.Add(Normalize(asset.Path));
-            foreach (BackgroundSettings style in new[]
-                { _settings.TileBackground, _settings.SharedBackground, _settings.ClockBackground, _settings.BoardBackground })
+            foreach (BackgroundSettings style in _settings.ReferencedBackgrounds())
             {
                 if (!string.IsNullOrWhiteSpace(style.ImagePath)) referenced.Add(Normalize(style.ImagePath));
                 foreach (string item in style.Playlist)

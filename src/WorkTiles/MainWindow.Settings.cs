@@ -1007,6 +1007,7 @@ public sealed partial class MainWindow
             tile.ApplyTitleSize(_settings.TileTitleSize);
         ForEachDesktopTile(tile => tile.ApplyTitleSize(_settings.EffectiveDesktopTileLook().TitleSize));
         _tileAppearancePreview?.ApplyTitleSize(_settings.TileTitleSize);
+        ScheduleDesktopContentFit();
         ScheduleSave();
     }
 
@@ -1049,6 +1050,7 @@ public sealed partial class MainWindow
             tile.ApplyBodyDefaults(_settings);
         ForEachDesktopTile(tile => tile.ApplyBodyDefaults(_settings));
         _tileAppearancePreview?.ApplyBodyDefaults(_settings, overrideFormatted: true);
+        ScheduleDesktopContentFit();
         ScheduleSave();
     }
 
@@ -1489,6 +1491,8 @@ public sealed partial class MainWindow
         }
         RefreshIslands();
         RefreshAppearancePreviews();
+        // 边框颜色不走 QueueToolbarChrome。同步开着时桌面控制窗边框色来自主界面，这里一起重画；关掉同步时仍用桌面自己的颜色。
+        ApplyDesktopCommandChrome();
         ScheduleSave();
     }
 

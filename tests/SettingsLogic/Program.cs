@@ -612,6 +612,37 @@ try
     Check(partial.Projects[0].Subjects[0].Entries[0].Content == "完成练习" && !partial.Settings.InfiniteBoard && partial.Settings.Theme == "Dark",
         "只含作业的备份还原后保留现有设置");
 
+    // 只在桌面磁贴上使用的图片也属于当前背景，不依赖最近历史。
+    string desktopData = Path.Combine(backupRoot, "desktop-source");
+    Directory.CreateDirectory(Path.Combine(desktopData, "backgrounds"));
+    string desktopOwned = Path.Combine(desktopData, "backgrounds", "desktop-tile.png");
+    string desktopPlaylistOwned = Path.Combine(desktopData, "backgrounds", "desktop-playlist.png");
+    File.WriteAllBytes(desktopOwned, [4, 5, 6]);
+    File.WriteAllBytes(desktopPlaylistOwned, [7, 8, 9]);
+    ProjectLibrary desktopLibrary = new ProjectStore(desktopData).Load();
+    desktopLibrary.Settings.DesktopTileLookSynced = false;
+    desktopLibrary.Settings.DesktopTileLook.Background.ImagePath = desktopOwned;
+    desktopLibrary.Settings.DesktopTileLook.Background.Playlist.Add(desktopPlaylistOwned);
+    string desktopArchive = Path.Combine(backupRoot, "desktop-look.wtb");
+    new BackupService(desktopData).Create(desktopArchive, BackupScopes.CurrentBackground | BackupScopes.Settings, desktopLibrary);
+    BackupInfo desktopInfo = new BackupService(desktopData).Read(desktopArchive);
+    Check(desktopInfo.MediaEntries.Count == 2
+        && desktopInfo.MediaEntries.Any(entry => entry.Contains("desktop-tile", StringComparison.OrdinalIgnoreCase))
+        && desktopInfo.MediaEntries.Any(entry => entry.Contains("desktop-playlist", StringComparison.OrdinalIgnoreCase)),
+        "只属于桌面磁贴的背景和播放列表打进当前背景");
+    string desktopTarget = Path.Combine(backupRoot, "desktop-target");
+    new BackupService(desktopTarget).Restore(desktopArchive);
+    ProjectLibrary desktopRestored = new ProjectStore(desktopTarget).Load();
+    string restoredDesktopImage = desktopRestored.Settings.DesktopTileLook.Background.ImagePath;
+    string restoredDesktopPlaylist = desktopRestored.Settings.DesktopTileLook.Background.Playlist.Single();
+    Check(File.Exists(restoredDesktopImage)
+        && restoredDesktopImage.StartsWith(Path.GetFullPath(desktopTarget), StringComparison.OrdinalIgnoreCase)
+        && File.ReadAllBytes(restoredDesktopImage).SequenceEqual(new byte[] { 4, 5, 6 })
+        && File.Exists(restoredDesktopPlaylist)
+        && restoredDesktopPlaylist.StartsWith(Path.GetFullPath(desktopTarget), StringComparison.OrdinalIgnoreCase)
+        && File.ReadAllBytes(restoredDesktopPlaylist).SequenceEqual(new byte[] { 7, 8, 9 }),
+        "桌面磁贴背景还原到本地资源目录并改写引用");
+
     bool refusedEmptyScope = false;
     try { exporter.Create(Path.Combine(backupRoot, "empty.wtb"), BackupScopes.None, library); }
     catch (InvalidDataException) { refusedEmptyScope = true; }
@@ -708,6 +739,31 @@ try
         { Path.Combine(Path.GetTempPath(), "old-install", "backgrounds", "abc123_name.png") };
     Check(new MediaLibrary(movedRoot).CleanupUnreferenced(DateTime.UtcNow.AddDays(-90), movedReferences) == 0 && File.Exists(movedMedia),
         "搬目录后同名引用仍能保护媒体副本");
+    string desktopCleanupRoot = Path.Combine(backupRoot, "desktop-media-cleanup");
+    string desktopCleanupDirectory = Path.Combine(desktopCleanupRoot, "backgrounds");
+    Directory.CreateDirectory(desktopCleanupDirectory);
+    string desktopImage = Path.Combine(desktopCleanupDirectory, "desktop-image.png");
+    string desktopPlaylistItem = Path.Combine(desktopCleanupDirectory, "desktop-playlist.png");
+    string desktopUnreferenced = Path.Combine(desktopCleanupDirectory, "desktop-unreferenced.png");
+    File.WriteAllText(desktopImage, "image");
+    File.WriteAllText(desktopPlaylistItem, "playlist");
+    File.WriteAllText(desktopUnreferenced, "gone");
+    foreach (string mediaPath in new[] { desktopImage, desktopPlaylistItem, desktopUnreferenced })
+        File.SetLastWriteTimeUtc(mediaPath, oldMediaTime);
+    BoardSettingsState desktopRefs = new() { DesktopTileLookSynced = false };
+    desktopRefs.DesktopTileLook.Background.ImagePath = desktopImage;
+    desktopRefs.DesktopTileLook.Background.Playlist.Add(desktopPlaylistItem);
+    HashSet<string> desktopReferenced = new(StringComparer.OrdinalIgnoreCase);
+    foreach (BackgroundSettings style in desktopRefs.ReferencedBackgrounds())
+    {
+        if (!string.IsNullOrWhiteSpace(style.ImagePath)) desktopReferenced.Add(Path.GetFullPath(style.ImagePath));
+        foreach (string item in style.Playlist)
+            if (!string.IsNullOrWhiteSpace(item)) desktopReferenced.Add(Path.GetFullPath(item));
+    }
+    int removedDesktop = new MediaLibrary(desktopCleanupRoot).CleanupUnreferenced(DateTime.UtcNow.AddDays(-90), desktopReferenced);
+    Check(removedDesktop == 1 && File.Exists(desktopImage) && File.Exists(desktopPlaylistItem) && !File.Exists(desktopUnreferenced),
+        "桌面磁贴背景和播放列表能保住过期媒体副本");
+
     // 历史损坏时必须放弃清理，不能把空历史当成“无引用”。
     File.WriteAllText(Path.Combine(movedDirectory, "recent-images.json"), "{broken");
     bool strictHistoryFailed = false;
@@ -751,6 +807,8 @@ Check(dataRoundTrip.Lock.Enabled && dataRoundTrip.Lock.RequireAuthForEditing && 
     "锁定开关与验证范围往返持久化");
 Check(!dataDefaults.DesktopTilesEnabled && dataDefaults.DesktopTileOrder.Count == 0, "旧配置默认不在桌面显示磁贴");
 Check(dataDefaults.DesktopTileLookSynced && dataDefaults.DesktopCommandLookSynced, "旧配置默认与主界面同步桌面磁贴和控制窗外观");
+Check(dataDefaults.DesktopTileSizeSynced && dataDefaults.DesktopTileSizes.Count == 0, "旧配置默认与主界面同步桌面磁贴大小");
+Check(!dataDefaults.DesktopTileAutoSize, "桌面磁贴默认不按内容自动改大小");
 var desktopLook = new BoardSettingsState
 {
     TileCornerRadius = 12,
@@ -786,6 +844,39 @@ Check(!SettingsSchema.IsSynced("DesktopTileLook") && !SettingsSchema.IsSynced("D
     && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopTileLookSynced")
     && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopCommandLook"),
     "桌面外观是本机设置，不进班级同步");
+Guid desktopSizeId = Guid.NewGuid();
+var desktopSizes = new BoardSettingsState();
+desktopSizes.RememberDesktopTileSize("other", desktopSizeId, "语文", 800, 600);
+desktopSizes.CaptureDesktopTileSizes("project", [(desktopSizeId, "语文", 430, 320)]);
+desktopSizes.DesktopTileSizeSynced = false;
+Check(!desktopSizes.DesktopTileSizes.ContainsKey("other")
+    && desktopSizes.DesktopTileSizeFor("project", desktopSizeId, "语文", 500, 400) == (430, 320),
+    "关闭同步时从主界面抄下当前尺寸，并丢掉其他项目的旧尺寸");
+desktopSizes.RememberDesktopTileSize("project", desktopSizeId, "语文", 500, 280);
+Check(desktopSizes.DesktopTileSizeFor("project", desktopSizeId, "语文", 430, 320) == (500, 280),
+    "关闭同步后桌面改尺寸不读主界面");
+Check(!desktopSizes.EnsureDesktopTileSize("project", desktopSizeId, "语文", 100, 100)
+    && desktopSizes.DesktopTileSizeFor("project", desktopSizeId, "语文", 430, 320).Width == 500,
+    "已有桌面尺寸不会被主界面改动覆盖");
+Guid addedId = Guid.NewGuid();
+Check(desktopSizes.EnsureDesktopTileSize("project", addedId, "数学", 360, 240)
+    && desktopSizes.DesktopTileSizeFor("project", addedId, "数学", 900, 600) == (360, 240),
+    "新科目第一次记下当前主界面尺寸，之后不再跟随");
+desktopSizes.RenameDesktopTileSize("project", desktopSizeId, "语文", "代数");
+Check(desktopSizes.DesktopTileSizes["project"].Single(item => item.Id == desktopSizeId).Name == "代数",
+    "改名后桌面尺寸记录跟着改名");
+desktopSizes.DesktopTileSizeSynced = true;
+Check(desktopSizes.DesktopTileSizeFor("project", desktopSizeId, "代数", 360, 200) == (360, 200),
+    "同步开启时桌面大小跟随主界面，忽略本机记录");
+var desktopSizeRestored = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(desktopSizes))!;
+Check(desktopSizeRestored.DesktopTileSizeSynced
+    && desktopSizeRestored.DesktopTileSizes["project"].Single(item => item.Id == desktopSizeId).Width == 500
+    && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopTileSizeSynced")
+    && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopTileSizes")
+    && SettingsSchema.DeviceLocalKeys.ContainsKey("DesktopTileAutoSize")
+    && !SettingsSchema.IsSynced("DesktopTileSizeSynced")
+    && !SettingsSchema.IsSynced("DesktopTileAutoSize"),
+    "桌面磁贴独立尺寸往返持久化，且不进班级同步");
 Check(dataDefaults.DesktopTilesAutoArrange && dataDefaults.DesktopTilesZoom == 1 && dataDefaults.DesktopTilePlacements.Count == 0,
     "桌面磁贴默认自动排列、原始比例，自由位置为空");
 BoardSettingsState desktopRoundTrip = JsonSerializer.Deserialize<BoardSettingsState>(JsonSerializer.Serialize(new BoardSettingsState

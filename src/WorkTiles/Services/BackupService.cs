@@ -78,7 +78,7 @@ public sealed class BackupService(string dataDirectory)
             else AddFile(full);
         }
         IEnumerable<BackgroundSettings> Styles() =>
-            [settingsSource.Settings.TileBackground, settingsSource.Settings.SharedBackground, settingsSource.Settings.ClockBackground, settingsSource.Settings.BoardBackground];
+            settingsSource.Settings.ReferencedBackgrounds();
         IEnumerable<string> CurrentPaths()
         {
             foreach (BackgroundSettings style in Styles())
@@ -290,7 +290,7 @@ public sealed class BackupService(string dataDirectory)
 
     private static void RewriteMediaPaths(BoardSettingsState settings, Func<string?, string?> map)
     {
-        foreach (BackgroundSettings style in new[] { settings.TileBackground, settings.SharedBackground, settings.ClockBackground, settings.BoardBackground })
+        foreach (BackgroundSettings style in settings.ReferencedBackgrounds())
         {
             style.ImagePath = map(style.ImagePath) ?? "";
             style.Playlist = style.Playlist.Select(item => map(item) ?? item).ToList();

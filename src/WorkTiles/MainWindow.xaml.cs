@@ -728,6 +728,7 @@ public sealed partial class MainWindow : Window
     {
         if (FindTile(subject) is { } tile) { tile.Detach(); BoardCanvas.Children.Remove(tile); }
         ViewModel.Subjects.Remove(subject);
+        if (CurrentProject is { } project) _settings.ForgetDesktopTileSize(project.Id.ToString(), subject.Id);
         if (RichTextToolbarHost is not null) RichTextToolbarHost.Content = null;
         RefreshIslands();
         UpdateBoardBounds();
@@ -1742,6 +1743,7 @@ public sealed partial class MainWindow : Window
             _settings.DesktopTileOrder ??= new();
             _settings.DesktopTileOrderIds ??= new();
             _settings.DesktopTilePlacements ??= new();
+            _settings.DesktopTileSizes ??= new();
             if (_settings.DesktopTilesZoom is < 0.5 or > 2 || double.IsNaN(_settings.DesktopTilesZoom))
                 _settings.DesktopTilesZoom = 1;
             if (_settings.LocalExam.Days is null) _settings.LocalExam.Days = [];

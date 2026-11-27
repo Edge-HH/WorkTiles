@@ -294,7 +294,7 @@ public sealed class SubjectTileControl : Grid
         foreach (HomeworkAutofillInput input in _entryAutofills) input.Hide();
     }
 
-    internal (double Width, double Height) MeasureContentSize(double maxWidth = double.PositiveInfinity)
+    internal (double Width, double Height) MeasureContentSize(double maxWidth = double.PositiveInfinity, bool allowGrow = false)
     {
         // 用实际富文本和附件控件测量，保留换行、字体和图片高度；不把滚动视口当成内容高度。
         _entriesPanel.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
@@ -303,12 +303,19 @@ public sealed class SubjectTileControl : Grid
         foreach (var child in _entriesPanel.Children)
         {
             if (child is Grid row && FindHomeworkEditor(row) is { } editor)
+            {
                 contentWidth = Math.Max(contentWidth, RichTextContentMetrics.Width(editor) + 134);
+                if (allowGrow) contentWidth = Math.Max(contentWidth, NaturalLineWidth(editor) + 134);
+            }
             else if (child is FrameworkElement attachment)
                 contentWidth = Math.Max(contentWidth, attachment.DesiredSize.Width + 34);
         }
         // maxWidth 由自动排列的列宽决定：需要一行多放时收窄磁贴，让文字换行而不是溢出。
-        double limit = Math.Min(Width, Math.Max(MinimumTileWidth, maxWidth));
+        // 自动收放不能被当前宽度卡住，否则内容变多时磁贴只会变高、不会变宽。
+        double cap = double.IsFinite(maxWidth) ? maxWidth : MaximumTileWidth;
+        double limit = allowGrow
+            ? Math.Clamp(cap, MinimumTileWidth, MaximumTileWidth)
+            : Math.Min(Width, Math.Max(MinimumTileWidth, cap));
         double width = Math.Max(MinimumTileWidth, Math.Min(limit, contentWidth));
         double inkRight = 0, inkBottom = 0;
         foreach (var stroke in _subject.InkStrokes)
@@ -318,12 +325,37 @@ public sealed class SubjectTileControl : Grid
             inkBottom = Math.Max(inkBottom, point.Y + stroke.Thickness * stroke.TipScaleY / 2);
         }
         width = Math.Max(width, inkRight);
+        if (allowGrow) width = Math.Min(width, MaximumTileWidth);
         _entriesPanel.Measure(new Size(Math.Max(1, width - 34), double.PositiveInfinity));
         _nameEditor.Measure(new Size(Math.Max(1, width - 110), double.PositiveInfinity));
         double height = Math.Max(MinimumTileHeight, Math.Max(inkBottom,
             _entriesPanel.DesiredSize.Height + _nameEditor.DesiredSize.Height + 38));
+        if (allowGrow) height = Math.Min(height, MaximumTileHeight);
         InvalidateMeasure();
         return (width, height);
+    }
+
+    private TextBlock? _lineMeasure;
+
+    /// <summary>按不换行测量正文里最长的一行，供桌面磁贴按内容变宽。当前排版宽度只反映已经折行的结果。</summary>
+    private double NaturalLineWidth(RichEditBox editor)
+    {
+        string text = editor.Tag is HomeworkEntry homework ? homework.Content : "";
+        if (string.IsNullOrEmpty(text)) return 0;
+        _lineMeasure ??= new TextBlock { TextWrapping = TextWrapping.NoWrap };
+        _lineMeasure.FontFamily = editor.FontFamily;
+        _lineMeasure.FontSize = editor.FontSize;
+        _lineMeasure.FontWeight = editor.FontWeight;
+        _lineMeasure.FontStyle = editor.FontStyle;
+        double max = 0;
+        foreach (string line in text.Split('\n', '\r'))
+        {
+            if (line.Length == 0) continue;
+            _lineMeasure.Text = line;
+            _lineMeasure.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            max = Math.Max(max, _lineMeasure.DesiredSize.Width);
+        }
+        return max + editor.Padding.Left + editor.Padding.Right + 4;
     }
 
     public void ApplyAppearance(BoardSettingsState settings, bool applyBodyDefaults = true)
