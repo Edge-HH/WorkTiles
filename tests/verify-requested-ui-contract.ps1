@@ -84,6 +84,14 @@ if ($xaml -notmatch 'x:Name="ClockComponentsView"' -or
     $widgetLayout -notmatch 'ResizeCentered') {
     $failures.Add('分屏和仅时钟模式缺少锁定中轴线的时钟与整排组件编辑。')
 }
+if ($xaml -notmatch 'x:Name="DockedAxisLockButton"' -or
+    $xaml -notmatch 'Symbol="CenterAxis"' -or
+    $state -notmatch 'DockedWidgetAxisLock' -or
+    $layout -notmatch 'DockedWidgetAxisLock' -or
+    $widgetLayout -notmatch 'ScaleToContainer' -or
+    $widgetLayout -notmatch 'MoveDocked') {
+    $failures.Add('分屏时钟区缺少中轴线锁定开关，或窗口缩放没有按容器比例调整组件位置。')
+}
 if ($xaml -notmatch 'Content="网格" Tag="AppearanceGrid"' -or
     $xaml -notmatch 'Content="网格" Tag="AppearanceGrid"[^\r\n]*<icons:FluentIcon Symbol="Grid"' -or
     $settings -notmatch '编辑时显示常规网格' -or

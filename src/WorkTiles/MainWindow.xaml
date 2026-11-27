@@ -112,6 +112,22 @@
                         </Canvas>
                         <!-- 仅时钟模式的全屏笔迹层：覆盖整块时钟区域，画笔打开时可以把笔迹写在任何位置。 -->
                         <icons:ClockInkLayer x:Name="ClockInkLayer" Visibility="Collapsed" />
+                        <!-- 中轴线辅助线：关闭锁定后拖拽组件靠近纵横中轴线时显示。 -->
+                        <Canvas x:Name="ClockAxisGuideCanvas" IsHitTestVisible="False" />
+                        <!-- 分屏模式下时钟区左下角的中轴线锁定开关：开启后组件只沿中轴线拖动，关闭后仍会吸附。 -->
+                        <ToggleButton x:Name="DockedAxisLockButton"
+                                      Width="26" Height="26" MinWidth="26" MinHeight="26" Padding="0"
+                                      CornerRadius="4"
+                                      HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10"
+                                      Style="{StaticResource BoardSnapToggleButtonStyle}"
+                                      Background="{ThemeResource BoardButtonClearBrush}"
+                                      BorderThickness="0"
+                                      IsChecked="True" Visibility="Collapsed"
+                                      AutomationProperties.Name="锁定组件中轴线"
+                                      Checked="DockedAxisLockButton_Changed"
+                                      Unchecked="DockedAxisLockButton_Changed">
+                            <icons:FluentIcon x:Name="DockedAxisLockIcon" Symbol="CenterAxis" FontSize="14" />
+                        </ToggleButton>
                     </Grid>
                 </Border>
 

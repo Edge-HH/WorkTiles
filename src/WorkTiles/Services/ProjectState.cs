@@ -27,6 +27,8 @@ public sealed class BoardSettingsState
     // 按布局模式和稳定组件标识保存位置，避免受约束布局覆盖自由布局坐标。
     public Dictionary<string, RegionPlacement> Widgets { get; set; } = new();
     public HashSet<string> CustomizedDockedWidgets { get; set; } = [];
+    /// <summary>分屏/仅时钟模式下，组件拖拽是否锁定在竖直中轴线上。默认开启；关闭后仍会在靠近纵横中轴线时吸附。</summary>
+    public bool DockedWidgetAxisLock { get; set; } = true;
     public bool InfiniteBoard { get; set; }
     public double GridSize { get; set; } = 48;
     public double AutoLayoutGap { get; set; } = 0;
@@ -510,6 +512,13 @@ public sealed class RegionPlacement
     public double Y { get; set; }
     public double Width { get; set; }
     public double Height { get; set; }
+    /// <summary>
+    /// 上一次应用这个位置时的容器宽度。窗口或分屏区域尺寸变化后，按新旧容器的比例同步缩放
+    /// 位置和大小，组件才能停在原来的相对位置，而不是被挤到上边或保持旧坐标。
+    /// 旧数据为 0，首次应用时先记录当前容器尺寸，随后开始等比缩放。
+    /// </summary>
+    public double LayoutWidth { get; set; }
+    public double LayoutHeight { get; set; }
 }
 
 /// <summary>缺失字体的原始名称与 UTF-16 范围，显示回退不能抹掉用户的字体选择。</summary>

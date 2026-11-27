@@ -54,6 +54,7 @@ public sealed partial class MainWindow
     private readonly Dictionary<string, Viewbox> _freeWidgets = [];
     private Thumb? _splitter;
     private bool _layingOut;
+    private bool _applyingDockedLayout;
     private bool _splitDragging;
     private double _splitDragRatio;
     private bool _splitDragFramePending;
@@ -130,6 +131,14 @@ public sealed partial class MainWindow
             // 分屏方向与前后顺序由顶部菜单栏控制，不再随窗口宽窄自动切换。
             if (SplitLayoutCommands is not null)
                 SplitLayoutCommands.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
+            if (DockedAxisLockButton is not null)
+            {
+                // 中轴线锁定只在分屏模式的时钟区左下角出现；状态与设置保持同步。
+                DockedAxisLockButton.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
+                bool axisLock = _settings.DockedWidgetAxisLock;
+                if (DockedAxisLockButton.IsChecked != axisLock) DockedAxisLockButton.IsChecked = axisLock;
+                UpdateAxisLockHint();
+            }
             if (split)
             {
                 double ratio = Math.Clamp(_settings.SplitRatio, .05, .95);
@@ -220,6 +229,8 @@ public sealed partial class MainWindow
                     _ => new() { X = x, Y = 340, Width = 240, Height = 100 }
                 };
             }
+            // 窗口尺寸变化时按比例缩放自由布局组件，和停靠组件保持一致。
+            WidgetLayout.ScaleToContainer(placement, DisplayRoot.ActualWidth, DisplayRoot.ActualHeight);
             view.Width = Math.Max(80, placement.Width); view.Height = Math.Max(48, placement.Height);
             Canvas.SetLeft(view, Math.Max(0, placement.X)); Canvas.SetTop(view, Math.Max(0, placement.Y));
         }
@@ -268,37 +279,41 @@ public sealed partial class MainWindow
     private void ApplyDockedClockLayout()
     {
         double width = ClockPanel.ActualWidth, height = ClockPanel.ActualHeight;
-        if (!_isLoaded || width < 1 || height < 1) return;
-
-        bool splitMode = _settings.LayoutMode == "Split";
-        string prefix = splitMode ? "Split" : "ClockMode";
-        string clockKey = prefix + "Clock", componentsKey = prefix + "Components";
-        double clockAspectRatio = DockedClockAspectRatio;
-        if (!_settings.Widgets.TryGetValue(clockKey, out RegionPlacement? clock) || !_settings.CustomizedDockedWidgets.Contains(clockKey))
+        if (!_isLoaded || width < 1 || height < 1 || _applyingDockedLayout) return;
+        _applyingDockedLayout = true;
+        try
         {
-            double clockWidth = Math.Min(splitMode ? 720 : 760, width * (splitMode ? .84 : .68));
-            double clockHeight = clockWidth / clockAspectRatio;
-            double componentsHeight = Math.Min(splitMode ? 520 : 560, width * .72) / DockedComponentsAspectRatio;
-            double groupHeight = clockHeight + componentsHeight + 18;
-            double groupTop = Math.Max(0, (height - groupHeight) / 2 - (splitMode ? height * .08 : 0));
-            _settings.Widgets[clockKey] = clock = new RegionPlacement { Y = groupTop, Width = clockWidth, Height = clockHeight };
+            bool splitMode = _settings.LayoutMode == "Split";
+            string prefix = splitMode ? "Split" : "ClockMode";
+            string clockKey = prefix + "Clock", componentsKey = prefix + "Components";
+            double clockAspectRatio = DockedClockAspectRatio;
+            if (!_settings.Widgets.TryGetValue(clockKey, out RegionPlacement? clock))
+            {
+                double clockWidth = Math.Min(splitMode ? 720 : 760, width * (splitMode ? .84 : .68));
+                double clockHeight = clockWidth / clockAspectRatio;
+                double componentsHeight = Math.Min(splitMode ? 520 : 560, width * .72) / DockedComponentsAspectRatio;
+                double groupHeight = clockHeight + componentsHeight + 18;
+                double groupTop = Math.Max(0, (height - groupHeight) / 2 - (splitMode ? height * .08 : 0));
+                _settings.Widgets[clockKey] = clock = new RegionPlacement { Y = groupTop, Width = clockWidth, Height = clockHeight };
+            }
+            if (!_settings.Widgets.TryGetValue(componentsKey, out RegionPlacement? components))
+            {
+                double componentsWidth = Math.Min(splitMode ? 520 : 560, width * .72);
+                double componentsHeight = componentsWidth / DockedComponentsAspectRatio;
+                double componentsY = Math.Min(Math.Max(0, height - componentsHeight), clock.Y + clock.Height + 18);
+                _settings.Widgets[componentsKey] = components = new RegionPlacement { Y = componentsY, Width = componentsWidth, Height = componentsHeight };
+            }
+            // 先按新旧容器的比例整体缩放，再只修正内容宽高比：窗口缩小时组件留在原来的相对位置，不会被挤到上边。
+            WidgetLayout.ScaleToContainer(clock, width, height);
+            WidgetLayout.ScaleToContainer(components, width, height);
+            bool lockAxis = _settings.DockedWidgetAxisLock;
+            // 锁定时保持原来的最小可读尺寸；关闭锁定后允许用户把组件缩得更小。
+            WidgetLayout.FitAspect(clock, clockAspectRatio, lockAxis ? 220 : WidgetLayout.MinimumScaledWidth, width, height, lockAxis);
+            WidgetLayout.FitAspect(components, DockedComponentsAspectRatio, lockAxis ? 240 : WidgetLayout.MinimumScaledWidth, width, height, lockAxis);
+            ApplyCenteredPlacement(ClockContentView, clock);
+            ApplyCenteredPlacement(ClockComponentsView, components);
         }
-        else if (Math.Abs(clock.Width / Math.Max(1, clock.Height) - clockAspectRatio) > .01)
-        {
-            // 旧版本用固定宽高比保存了多余的右侧空白；保留视觉高度，只收紧宽度并重新回到中轴线。
-            clock.Width = clock.Height * clockAspectRatio;
-        }
-        if (!_settings.Widgets.TryGetValue(componentsKey, out RegionPlacement? components) || !_settings.CustomizedDockedWidgets.Contains(componentsKey))
-        {
-            double componentsWidth = Math.Min(splitMode ? 520 : 560, width * .72);
-            double componentsHeight = componentsWidth / DockedComponentsAspectRatio;
-            double componentsY = Math.Min(Math.Max(0, height - componentsHeight), clock.Y + clock.Height + 18);
-            _settings.Widgets[componentsKey] = components = new RegionPlacement { Y = componentsY, Width = componentsWidth, Height = componentsHeight };
-        }
-        WidgetLayout.ResizeCentered(clock, 0, 0, clockAspectRatio, 220, width, height);
-        WidgetLayout.ResizeCentered(components, 0, 0, DockedComponentsAspectRatio, 240, width, height);
-        ApplyCenteredPlacement(ClockContentView, clock);
-        ApplyCenteredPlacement(ClockComponentsView, components);
+        finally { _applyingDockedLayout = false; }
     }
 
     private static void ApplyCenteredPlacement(FrameworkElement element, RegionPlacement placement)
@@ -313,6 +328,7 @@ public sealed partial class MainWindow
     {
         if (FreeLayoutHandles is null || _splitDragging) return;
         FreeLayoutHandles.Children.Clear();
+        ClearClockAxisGuides();
         bool split = _settings.LayoutMode == "Split";
         // 单区模式同样保留分隔滑条：仅时钟贴右侧、仅作业贴左侧，用户随时能拖回分屏。
         bool singleZone = _settings.LayoutMode is "Clock" or "Board";
@@ -468,14 +484,33 @@ public sealed partial class MainWindow
     {
         if (!_settings.Widgets.TryGetValue(key, out RegionPlacement? placement)) return;
         double width = ClockPanel.ActualWidth, height = ClockPanel.ActualHeight;
+        bool lockAxis = _settings.DockedWidgetAxisLock;
         AddWidgetInteractionLayer(view, placement, label,
-            (_, dy) => WidgetLayout.MoveVerticallyCentered(placement, dy, width, height),
-            (dx, dy) => WidgetLayout.ResizeCentered(placement, dx, dy, aspectRatio, minimumWidth, width, height),
-            () => { _settings.CustomizedDockedWidgets.Add(key); ScheduleSave(); });
+            (dx, dy) =>
+            {
+                WidgetLayout.MoveDocked(placement, dx, dy, width, height, lockAxis, out bool snappedX, out bool snappedY);
+                // 锁定中轴线时始终画出竖直轴；自由拖动时只在吸附到某条轴线时显示辅助线。
+                DrawClockAxisGuides(lockAxis || snappedX, snappedY, width, height);
+            },
+            (dx, dy) =>
+            {
+                // 锁定时保持内容比例并围绕中轴线缩放；解锁后允许自由调整宽高。
+                if (lockAxis) WidgetLayout.ResizeCentered(placement, dx, dy, aspectRatio, minimumWidth, width, height);
+                else WidgetLayout.Resize(placement, dx, dy, width, height);
+            },
+            () =>
+            {
+                _settings.CustomizedDockedWidgets.Add(key);
+                ClearClockAxisGuides();
+                ScheduleSave();
+            },
+            lockAxis ? $"拖动{label}上下移动（锁定中轴线）" : $"拖动{label}自由移动（靠近中轴线会吸附）",
+            lockAxis ? $"缩放{label}（保持比例）" : $"缩放{label}");
     }
 
     private void AddWidgetInteractionLayer(Viewbox view, RegionPlacement placement, string label,
-        Action<double, double> movePlacement, Action<double, double> resizePlacement, Action complete)
+        Action<double, double> movePlacement, Action<double, double> resizePlacement, Action complete,
+        string? moveHint = null, string? resizeHint = null)
     {
         Grid interactionLayer = new() { Width = placement.Width, Height = placement.Height, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0)) };
         // 选中框和缩放手柄同步出现：指针进入组件后描一圈表示当前选中的组件，离开组件再一起收起。
@@ -505,8 +540,8 @@ public sealed partial class MainWindow
             Canvas.SetLeft(interactionLayer, placement.X); Canvas.SetTop(interactionLayer, placement.Y);
             ApplyCenteredPlacement(view, placement);
         }
-        ToolTipService.SetToolTip(move, $"拖动{label}上下移动（锁定中轴线）");
-        ToolTipService.SetToolTip(resize, $"缩放{label}");
+        ToolTipService.SetToolTip(move, moveHint ?? $"拖动{label}移动");
+        ToolTipService.SetToolTip(resize, resizeHint ?? $"缩放{label}");
         move.DragDelta += (_, args) =>
         {
             movePlacement(args.HorizontalChange, args.VerticalChange);
@@ -530,4 +565,49 @@ public sealed partial class MainWindow
         Canvas.SetZIndex(interactionLayer, 50);
         PositionInteraction(); FreeLayoutHandles.Children.Add(interactionLayer);
     }
+
+    /// <summary>分屏时钟区左下角的中轴线锁定开关：开启后组件只沿竖直中轴线拖动。</summary>
+    private void DockedAxisLockButton_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_isLoaded || DockedAxisLockButton is null) return;
+        bool enabled = DockedAxisLockButton.IsChecked == true;
+        _settings.DockedWidgetAxisLock = enabled;
+        ApplyAxisLockAccent();
+        UpdateAxisLockHint();
+        if (_layingOut) return;
+        ApplyDockedClockLayout();
+        UpdateLayoutHandles();
+        ScheduleSave();
+    }
+
+    /// <summary>中轴线按钮选中时用系统强调色底，未选中时图标回到主题文字色。</summary>
+    private void ApplyAxisLockAccent()
+    {
+        if (DockedAxisLockButton is null) return;
+        SystemAccent.ApplyCheckedFill(DockedAxisLockButton, refreshState: true);
+        if (DockedAxisLockIcon is null) return;
+        if (DockedAxisLockButton.IsChecked == true)
+            DockedAxisLockIcon.Foreground = SystemAccent.CheckedIconBrush(BoardTheme.IsLight);
+        else
+            DockedAxisLockIcon.ClearValue(IconElement.ForegroundProperty);
+    }
+
+    private void UpdateAxisLockHint()
+    {
+        if (DockedAxisLockButton is null) return;
+        bool locked = DockedAxisLockButton.IsChecked == true;
+        ToolTipService.SetToolTip(DockedAxisLockButton, locked
+            ? "组件中轴线已锁定：拖动时只沿中轴线上下移动，点按切换为自由拖动"
+            : "组件可自由拖动：靠近纵横中轴线时会自动吸附，点按重新锁定中轴线");
+        AutomationProperties.SetName(DockedAxisLockButton, locked ? "解锁组件中轴线" : "锁定组件中轴线");
+    }
+
+    private void DrawClockAxisGuides(bool vertical, bool horizontal, double width, double height)
+    {
+        if (ClockAxisGuideCanvas is null) return;
+        AlignmentGuides.Draw(ClockAxisGuideCanvas,
+            new SnapResult(0, 0, vertical ? width / 2 : null, horizontal ? height / 2 : null), width, height);
+    }
+
+    private void ClearClockAxisGuides() => ClockAxisGuideCanvas?.Children.Clear();
 }

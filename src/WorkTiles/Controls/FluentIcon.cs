@@ -66,6 +66,8 @@ public static class FluentGlyphs
     public const string SplitHorizontal = "\uEA54"; // ic_fluent_layout_column_two_split_left_20_regular
     public const string SplitVertical = "\uEA75"; // ic_fluent_layout_row_two_split_top_20_regular
     public const string Swap = "\uE15F"; // ic_fluent_arrow_swap_20_regular
+    // 分屏时钟区的中轴线锁定：一条竖线穿过两个组件框，表示组件沿同一中轴线排列。
+    public const string CenterAxis = "\uE035"; // ic_fluent_align_center_vertical_20_regular
     public static string Resolve(string symbol) => symbol switch
     {
         nameof(Board) => Board,
@@ -115,6 +117,7 @@ public static class FluentGlyphs
         nameof(SplitHorizontal) => SplitHorizontal,
         nameof(SplitVertical) => SplitVertical,
         nameof(Swap) => Swap,
+        nameof(CenterAxis) => CenterAxis,
         nameof(Save) => Save,
         nameof(ArrowDownload) => ArrowDownload,
         nameof(ArrowSync) => ArrowSync,

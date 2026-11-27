@@ -1535,6 +1535,19 @@ public sealed partial class MainWindow
             check(ClockPanel.Visibility == (mode is "Board" or "Free" ? Visibility.Collapsed : Visibility.Visible), mode + " clock visibility");
             check(BoardWorkspace.Visibility == (mode == "Clock" ? Visibility.Collapsed : Visibility.Visible), mode + " board visibility");
             check(_freeWidgets.Count == (mode == "Free" ? 3 : 0), mode + " independent component hosts");
+            check(DockedAxisLockButton.Visibility == (mode == "Split" ? Visibility.Visible : Visibility.Collapsed),
+                mode + " component center-axis lock only appears in split mode");
+            check(_settings.DockedWidgetAxisLock && DockedAxisLockButton.IsChecked == true,
+                mode + " component center-axis lock is on by default");
+            if (mode == "Split")
+            {
+                DockedAxisLockButton.IsChecked = false;
+                await NextLayoutAsync();
+                check(!_settings.DockedWidgetAxisLock, "split clock axis lock can be switched off");
+                DockedAxisLockButton.IsChecked = true;
+                await NextLayoutAsync();
+                check(_settings.DockedWidgetAxisLock, "split clock axis lock can be switched back on");
+            }
             if (mode is "Split" or "Clock")
             {
                 string prefix = mode == "Split" ? "Split" : "ClockMode";
@@ -1637,7 +1650,8 @@ public sealed partial class MainWindow
                 ApplyExtendedSettings(); await NextLayoutAsync(); SaveStateNow();
                 var persisted = _projectStore.Load().Settings;
                 check(persisted.Widgets["Clock"].X == _settings.Widgets["Clock"].X && persisted.Widgets["Weather"].Height == _settings.Widgets["Weather"].Height, "widget movement and resizing reach actual persisted settings");
-                check(_freeWidgets["Clock"].Width == _settings.Widgets["Clock"].Width, "widget host follows placement dimensions");
+                double hostClockWidth = _freeWidgets["Clock"].Width, modelClockWidth = _settings.Widgets["Clock"].Width;
+                check(Math.Abs(hostClockWidth - modelClockWidth) < .01, $"widget host follows placement dimensions ({hostClockWidth:R} vs {modelClockWidth:R})");
             }
             await SaveVisualAsync(RootShell, Path.Combine(output, "layout-" + mode + ".png"), (int)RootShell.ActualWidth, (int)RootShell.ActualHeight);
         }

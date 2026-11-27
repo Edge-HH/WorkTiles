@@ -1088,6 +1088,7 @@ public sealed partial class MainWindow : Window
         SystemAccent.Apply(BoardTheme.IsLight);
         // 强调色画笔刚涂完，吸附按钮要引用同一支，主题和系统强调色变化后才会跟着变。
         ApplyGridSnapAccent();
+        ApplyAxisLockAccent();
         RefreshSplitLayoutCommands();
         if (!_isLoaded) return;
         ApplyExtendedSettings();

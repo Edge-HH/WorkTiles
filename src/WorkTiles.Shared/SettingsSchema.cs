@@ -90,6 +90,7 @@ public static class SettingsSchema
         new("Widgets", "Layout", "组件位置", SettingKind.Widgets, new JsonObject(), Hidden: true),
         new("CustomizedDockedWidgets", "Layout", "手动调整过的停靠组件", SettingKind.Internal, new JsonArray(), Hidden: true),
         new("DockedWidgetLayoutVersion", "Layout", "停靠布局版本", SettingKind.Internal, 0, Hidden: true),
+        new("DockedWidgetAxisLock", "Layout", "组件锁定中轴线", SettingKind.Bool, true, Hidden: true),
 
         // 外观 → 磁贴
         new("TileTitleSize", "AppearanceTile", "标题大小", SettingKind.Number, 29, 16, 72, 1, Unit: "px"),
